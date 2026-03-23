@@ -72,23 +72,70 @@ app.get('/auth/login', (req, res) => {
 
 app.get('/callback', async (req, res) => {
   const { code } = req.query;
-  if (!code) return res.status(400).send('No auth code');
+  if (!code) return res.status(400).send('No auth code received from Upstox.');
   try {
-    const redirect = appConfig.redirectUri || `${req.protocol}://${req.get('host')}/callback`;
+    // Always use the saved redirectUri if available
+    // Railway runs behind a proxy so req.protocol may be 'http' — force https
+    const host = req.get('host');
+    const autoRedirect = `https://${host}/callback`;
+    const redirect = appConfig.redirectUri || autoRedirect;
+
+    console.log('[FINR] Token exchange starting...');
+    console.log('[FINR] client_id:', appConfig.apiKey);
+    console.log('[FINR] redirect_uri:', redirect);
+
     const r = await axios.post('https://api.upstox.com/v2/login/authorization/token',
-      new URLSearchParams({ code, client_id: appConfig.apiKey, client_secret: appConfig.apiSecret, redirect_uri: redirect, grant_type: 'authorization_code' }),
+      new URLSearchParams({
+        code,
+        client_id: appConfig.apiKey,
+        client_secret: appConfig.apiSecret,
+        redirect_uri: redirect,
+        grant_type: 'authorization_code'
+      }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
     );
+
     accessToken = r.data.access_token;
     appConfig.tokenExpiry = Date.now() + 86400000;
     saveConfig();
     connectionStatus = 'authenticated';
     broadcastStatus();
     await initLiveData();
-    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#060c1a;color:#00d4aa;font-family:'Courier New',monospace;display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:20px}.icon{font-size:64px;animation:pulse 1s ease-in-out infinite}@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}h1{font-size:28px;letter-spacing:2px}p{color:#7aa9bb;font-size:14px}.badge{background:rgba(0,212,170,.15);border:1px solid #00d4aa;padding:8px 24px;border-radius:20px;font-size:13px}</style></head><body><div class="icon">✅</div><h1>FINR CONNECTED</h1><p>Token saved. Return to the app.</p><div class="badge">Live data starting...</div><script>setTimeout(()=>window.close(),3000)</script></body></html>`);
+    console.log('[FINR] ✅ Token saved successfully');
+
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8">
+    <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#30d158;font-family:monospace;display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:20px}h1{font-size:28px;letter-spacing:2px;color:#f2f2f7}p{color:#636366;font-size:14px}.badge{background:rgba(48,209,88,.12);border:1px solid rgba(48,209,88,.3);padding:8px 24px;border-radius:20px;font-size:13px;color:#30d158}</style>
+    </head><body>
+    <div style="font-size:64px">✅</div>
+    <h1>FINR CONNECTED</h1>
+    <p>Token saved successfully. Return to the app.</p>
+    <div class="badge">Live data starting...</div>
+    <script>setTimeout(()=>window.close(),3000)</script>
+    </body></html>`);
+
   } catch (err) {
-    console.error('[FINR] Token error:', err.response?.data || err.message);
-    res.status(500).send('Auth failed. Check API key/secret and redirect URI in Settings.');
+    const errData = err.response?.data;
+    const errMsg = JSON.stringify(errData) || err.message;
+    console.error('[FINR] ❌ Token exchange failed:', errMsg);
+
+    // Show helpful error page with actual error details
+    res.status(500).send(`<!DOCTYPE html><html><head><meta charset="utf-8">
+    <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#ff453a;font-family:monospace;display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:16px;padding:20px}h1{font-size:22px;color:#f2f2f7}.box{background:#1c1c1e;border:1px solid rgba(255,69,58,.3);padding:16px 20px;border-radius:12px;max-width:500px;width:100%;font-size:12px;line-height:1.8;color:#aeaeb2}.label{font-size:10px;color:#636366;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}</style>
+    </head><body>
+    <div style="font-size:48px">❌</div>
+    <h1>Auth Failed</h1>
+    <div class="box">
+      <div class="label">Error from Upstox:</div>
+      <div style="color:#ff453a">${errMsg}</div>
+      <br>
+      <div class="label">What to check:</div>
+      <div>1. API Secret — copy it fresh from Upstox portal</div>
+      <div>2. Redirect URL in Upstox portal must match exactly:</div>
+      <div style="color:#ffd60a;margin-top:4px">https://${req.get('host')}/callback</div>
+      <br>
+      <div>3. Go to FINR Settings → re-enter all fields → Save → try again</div>
+    </div>
+    </body></html>`);
   }
 });
 
