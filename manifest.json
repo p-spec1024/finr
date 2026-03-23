@@ -1,0 +1,19 @@
+{
+  "name": "FINR — Smart Stock Intelligence",
+  "short_name": "FINR",
+  "description": "Real-time NSE stock signals for Indian retail investors",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060c1a",
+  "theme_color": "#060c1a",
+  "orientation": "any",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Live Stocks", "url": "/?tab=stocks", "description": "View live stock prices" },
+    { "name": "Portfolio", "url": "/?tab=portfolio", "description": "Check your portfolio" }
+  ]
+}
