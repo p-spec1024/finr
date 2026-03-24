@@ -15,6 +15,8 @@ const cors       = require('cors');
 const fs         = require('fs');
 const path       = require('path');
 const cron       = require('node-cron');
+const { getMarketContext }                                       = require('./lib/marketContext');
+const { calcRSI, calcEMA, calcMACD, calcBollinger, calcSupport, calcResistance } = require('./lib/technicals');
 
 const app    = express();
 const server = http.createServer(app);
@@ -517,8 +519,6 @@ app.get('/api/fii-dii', (req, res) => {
 });
 
 app.get('/api/market-context', (req, res) => {
-  const { getMarketContext }    = require('./lib/marketContext');
-const { calcRSI, calcEMA, calcMACD, calcBollinger, calcSupport, calcResistance } = require('./lib/technicals');
   res.json({ events: getMarketContext(), generated: new Date().toISOString() });
 });
 
