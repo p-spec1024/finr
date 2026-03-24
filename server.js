@@ -283,7 +283,7 @@ recommendation must be exactly TAKE, AVOID, or WAIT.
 confidence must be exactly HIGH, MEDIUM, or LOW.`;
 
     const r = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${appConfig.geminiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${appConfig.geminiKey}`,
       { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 1000 } },
       { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
     );
@@ -341,12 +341,12 @@ app.get('/api/gemini-status', async (req, res) => {
   if (!appConfig.geminiKey) return res.json({ ok: false, reason: 'No API key configured' });
   try {
     const r = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${appConfig.geminiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${appConfig.geminiKey}`,
       { contents: [{ parts: [{ text: 'Reply with just: OK' }] }], generationConfig: { maxOutputTokens: 10 } },
       { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
     );
     const text = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    res.json({ ok: true, response: text.trim(), model: 'gemini-1.5-flash' });
+    res.json({ ok: true, response: text.trim(), model: 'gemini-3-flash' });
   } catch(e) {
     res.json({ ok: false, reason: e.response?.data?.error?.message || e.message });
   }
