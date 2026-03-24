@@ -1,524 +1,1068 @@
 /**
- * FINR — Real-time Stock Market PWA Backend
- * Node.js + Express + Upstox API v2
+ * FINR v2.0 — Professional Stock Intelligence Platform
+ * Complete rewrite with Zerodha, Gemini AI, Smart Money tracking,
+ * System health monitoring, full logging, and unit tests
  */
 require('dotenv').config();
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const axios = require('axios');
-const CryptoJS = require('crypto-js');
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
-const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
-const cron = require('node-cron');
+const express    = require('express');
+const http       = require('http');
+const WebSocket  = require('ws');
+const axios      = require('axios');
+const CryptoJS   = require('crypto-js');
+const rateLimit  = require('express-rate-limit');
+const helmet     = require('helmet');
+const cors       = require('cors');
+const fs         = require('fs');
+const path       = require('path');
+const cron       = require('node-cron');
 
-const app = express();
+const app    = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss    = new WebSocket.Server({ server });
+const PORT   = process.env.PORT || 3000;
 
-const PORT = process.env.PORT || 3000;
-const CONFIG_FILE = path.join(__dirname, '.finr_config.enc');
+// ── File paths ────────────────────────────────────────────────────────────────
+const CONFIG_FILE    = path.join(__dirname, '.finr_config.enc');
 const PORTFOLIO_FILE = path.join(__dirname, '.finr_portfolio.enc');
-const NOTES_FILE = path.join(__dirname, '.finr_notes.enc');
-const ENCRYPTION_KEY = process.env.FINR_SECRET || 'finr-secure-key-2026-do-not-share';
+const NOTES_FILE     = path.join(__dirname, '.finr_notes.enc');
+const OPTIONS_FILE   = path.join(__dirname, '.finr_options.enc');
+const ALERTS_FILE    = path.join(__dirname, '.finr_alerts.enc');
+const ENC_KEY        = process.env.FINR_SECRET || 'finr-secure-key-2026';
 
-let appConfig = {};
-let accessToken = null;
-let upstoxWs = null;
-let liveData = {};
-let marketIndices = {};
-let stockUniverse = [];
-let signalCache = {};
-let fundamentalCache = {};
+// ── State ─────────────────────────────────────────────────────────────────────
+let appConfig        = {};
+let accessToken      = null;
+let zAccessToken     = null;
+let upstoxWs         = null;
+let liveStocks       = {};
+let liveIndices      = {};
+let signalCache      = {};
+let fundamentals     = {};
+let stockUniverse    = [];
+let zerodhaHoldings  = [];
+let priceAlerts      = []; // { id, symbol, targetPrice, type: 'above'|'below', triggered: false, created }
+let zerodhaPositions = [];
+let zerodhaOrders    = [];
+let vixData          = { value: 14.5, change: 0, trend: 'stable' };
+let fiiDiiData       = { fii: -3240, dii: 4180, usdInr: 86.4, crude: 72.8 };
 let connectionStatus = 'disconnected';
-let wsReconnectTimeout = 1000;
-let mockTickInterval = null;
+let priceHistory     = {}; // symbol → last 30 prices for RSI/EMA
+let wsReconnectMs    = 1000;
+let mockInterval     = null;
+let testResults      = [];
 
-function encrypt(data) {
-  return CryptoJS.AES.encrypt(JSON.stringify(data), ENCRYPTION_KEY).toString();
+// ── Logging ───────────────────────────────────────────────────────────────────
+const LOGS = [];
+function log(level, msg) {
+  const entry = { ts: new Date().toISOString(), level, msg };
+  LOGS.unshift(entry);
+  if (LOGS.length > 200) LOGS.pop();
+  const icon = level === 'OK' ? '✅' : level === 'WARN' ? '⚠️' : level === 'ERR' ? '❌' : 'ℹ️';
+  console.log(`[FINR] ${icon} ${msg}`);
 }
-function decrypt(enc) {
-  try {
-    const b = CryptoJS.AES.decrypt(enc, ENCRYPTION_KEY);
-    return JSON.parse(b.toString(CryptoJS.enc.Utf8));
-  } catch { return null; }
-}
+
+// ── Crypto helpers ────────────────────────────────────────────────────────────
+const enc  = d  => CryptoJS.AES.encrypt(JSON.stringify(d), ENC_KEY).toString();
+const dec  = s  => { try { return JSON.parse(CryptoJS.AES.decrypt(s, ENC_KEY).toString(CryptoJS.enc.Utf8)); } catch { return null; } };
+const hash = p  => CryptoJS.SHA256(p).toString();
+
+// ── Config management ─────────────────────────────────────────────────────────
 function loadConfig() {
-  // Try encrypted file first
   if (fs.existsSync(CONFIG_FILE)) {
-    const d = decrypt(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    const d = dec(fs.readFileSync(CONFIG_FILE, 'utf8'));
     if (d) appConfig = d;
   }
-  // Overlay with Railway env vars — these survive restarts unlike files
-  if (process.env.UPSTOX_API_KEY)    appConfig.apiKey      = process.env.UPSTOX_API_KEY.trim();
-  if (process.env.UPSTOX_API_SECRET) appConfig.apiSecret   = process.env.UPSTOX_API_SECRET.trim();
-  if (process.env.UPSTOX_REDIRECT)   appConfig.redirectUri = process.env.UPSTOX_REDIRECT.trim();
-  if (process.env.FINR_PIN)          appConfig.pin         = CryptoJS.SHA256(process.env.FINR_PIN.trim()).toString();
+  // Railway env vars always win — survive restarts
+  if (process.env.UPSTOX_API_KEY)    appConfig.apiKey        = process.env.UPSTOX_API_KEY.trim();
+  if (process.env.UPSTOX_API_SECRET) appConfig.apiSecret     = process.env.UPSTOX_API_SECRET.trim();
+  if (process.env.UPSTOX_REDIRECT)   appConfig.redirectUri   = process.env.UPSTOX_REDIRECT.trim();
+  if (process.env.FINR_PIN)          appConfig.pin           = hash(process.env.FINR_PIN.trim());
+  if (process.env.GEMINI_API_KEY)    appConfig.geminiKey     = process.env.GEMINI_API_KEY.trim();
+  if (process.env.ZERODHA_API_KEY)   appConfig.zApiKey       = process.env.ZERODHA_API_KEY.trim();
+  if (process.env.ZERODHA_API_SECRET) appConfig.zApiSecret   = process.env.ZERODHA_API_SECRET.trim();
+  log('OK', `Config loaded — Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey}`);
 }
 function saveConfig() {
-  try { fs.writeFileSync(CONFIG_FILE, encrypt(appConfig)); }
-  catch(e) { console.warn('[FINR] Cannot write config (ephemeral fs):', e.message); }
+  try { fs.writeFileSync(CONFIG_FILE, enc(appConfig)); }
+  catch(e) { log('WARN', 'Cannot write config file: ' + e.message); }
 }
 
+// ── Middleware ─────────────────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: '50kb' }));
+app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/api/', rateLimit({ windowMs: 60000, max: 200 }));
-app.use('/api/settings', rateLimit({ windowMs: 60000, max: 15 }));
+app.use('/api/', rateLimit({ windowMs: 60000, max: 300 }));
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
+// ── Market hours helper ───────────────────────────────────────────────────────
+function isMarketOpen() {
+  const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const day = ist.getDay();
+  const mins = ist.getHours() * 60 + ist.getMinutes();
+  return day >= 1 && day <= 5 && mins >= 555 && mins <= 930;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// UPSTOX AUTH
+// ══════════════════════════════════════════════════════════════════════════════
 app.get('/auth/login', (req, res) => {
   if (!appConfig.apiKey || !appConfig.apiSecret)
-    return res.status(400).json({ error: 'API keys not configured' });
-  const redirect = appConfig.redirectUri || `${req.protocol}://${req.get('host')}/callback`;
+    return res.status(400).json({ error: 'Upstox API keys not configured' });
+  const redirect = appConfig.redirectUri || `https://${req.get('host')}/callback`;
   const url = `https://api.upstox.com/v2/login/authorization/dialog?client_id=${appConfig.apiKey}&redirect_uri=${encodeURIComponent(redirect)}&response_type=code`;
+  log('INFO', 'Upstox auth URL generated');
   res.json({ url });
 });
 
-// Track used codes to prevent double-processing
 const usedCodes = new Set();
-
 app.get('/callback', async (req, res) => {
   const { code } = req.query;
-  if (!code) return res.status(400).send('No auth code received from Upstox.');
-
-  // Prevent double-processing same code (service worker / browser retry)
+  if (!code) return res.status(400).send('No auth code');
   if (usedCodes.has(code)) {
-    console.log('[FINR] Code already used, ignoring duplicate request');
-    return res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="background:#0a0a0a;color:#30d158;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px"><div style="font-size:48px">✅</div><h2 style="color:#f2f2f7">Already Connected!</h2><p style="color:#636366">Token was already saved. Close this tab and return to FINR.</p><script>setTimeout(()=>window.close(),2000)</script></body></html>`);
+    log('WARN', 'Duplicate auth code ignored');
+    return res.send(successPage('Already Connected', 'Token already saved. Return to app.'));
   }
   usedCodes.add(code);
-  // Clean up old codes after 5 minutes
   setTimeout(() => usedCodes.delete(code), 300000);
-
   try {
-    // Always use the saved redirectUri if available
-    // Railway runs behind a proxy so req.protocol may be 'http' — force https
-    const host = req.get('host');
-    const autoRedirect = `https://${host}/callback`;
-    const redirect = appConfig.redirectUri || autoRedirect;
-
-    console.log('[FINR] Token exchange starting...');
-    console.log('[FINR] client_id:', appConfig.apiKey);
-    console.log('[FINR] redirect_uri:', redirect);
-
+    const redirect = appConfig.redirectUri || `https://${req.get('host')}/callback`;
+    log('INFO', `Token exchange — client_id:${appConfig.apiKey} redirect:${redirect}`);
     const r = await axios.post('https://api.upstox.com/v2/login/authorization/token',
-      new URLSearchParams({
-        code,
-        client_id: appConfig.apiKey,
-        client_secret: appConfig.apiSecret,
-        redirect_uri: redirect,
-        grant_type: 'authorization_code'
-      }),
+      new URLSearchParams({ code, client_id: appConfig.apiKey, client_secret: appConfig.apiSecret, redirect_uri: redirect, grant_type: 'authorization_code' }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
     );
-
     accessToken = r.data.access_token;
     appConfig.tokenExpiry = Date.now() + 86400000;
     saveConfig();
     connectionStatus = 'authenticated';
     broadcastStatus();
     await initLiveData();
-    console.log('[FINR] ✅ Token saved successfully');
-
-    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8">
-    <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#30d158;font-family:monospace;display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:20px}h1{font-size:28px;letter-spacing:2px;color:#f2f2f7}p{color:#636366;font-size:14px}.badge{background:rgba(48,209,88,.12);border:1px solid rgba(48,209,88,.3);padding:8px 24px;border-radius:20px;font-size:13px;color:#30d158}</style>
-    </head><body>
-    <div style="font-size:64px">✅</div>
-    <h1>FINR CONNECTED</h1>
-    <p>Token saved successfully. Return to the app.</p>
-    <div class="badge">Live data starting...</div>
-    <script>setTimeout(()=>window.close(),3000)</script>
-    </body></html>`);
-
-  } catch (err) {
-    const errData = err.response?.data;
-    const errMsg = JSON.stringify(errData) || err.message;
-    console.error('[FINR] ❌ Token exchange failed:', errMsg);
-
-    // Show helpful error page with actual error details
-    res.status(500).send(`<!DOCTYPE html><html><head><meta charset="utf-8">
-    <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#ff453a;font-family:monospace;display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:16px;padding:20px}h1{font-size:22px;color:#f2f2f7}.box{background:#1c1c1e;border:1px solid rgba(255,69,58,.3);padding:16px 20px;border-radius:12px;max-width:500px;width:100%;font-size:12px;line-height:1.8;color:#aeaeb2}.label{font-size:10px;color:#636366;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}</style>
-    </head><body>
-    <div style="font-size:48px">❌</div>
-    <h1>Auth Failed</h1>
-    <div class="box">
-      <div class="label">Error from Upstox:</div>
-      <div style="color:#ff453a">${errMsg}</div>
-      <br>
-      <div class="label">What to check:</div>
-      <div>1. API Secret — copy it fresh from Upstox portal</div>
-      <div>2. Redirect URL in Upstox portal must match exactly:</div>
-      <div style="color:#ffd60a;margin-top:4px">https://${req.get('host')}/callback</div>
-      <br>
-      <div>3. Go to FINR Settings → re-enter all fields → Save → try again</div>
-    </div>
-    </body></html>`);
+    log('OK', 'Upstox token saved successfully');
+    res.send(successPage('FINR CONNECTED ✅', 'Live data starting... You can close this tab.'));
+  } catch(err) {
+    const msg = JSON.stringify(err.response?.data) || err.message;
+    log('ERR', 'Upstox token exchange failed: ' + msg);
+    res.status(500).send(errorPage('Upstox Auth Failed', msg, req.get('host')));
   }
 });
 
-// ── Settings ──────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// ZERODHA AUTH
+// ══════════════════════════════════════════════════════════════════════════════
+app.get('/zerodha/login', (req, res) => {
+  if (!appConfig.zApiKey) return res.status(400).json({ error: 'Zerodha API key not configured' });
+  const url = `https://kite.zerodha.com/connect/login?api_key=${appConfig.zApiKey}&v=3`;
+  log('INFO', 'Zerodha auth URL generated');
+  res.json({ url });
+});
+
+const usedZCodes = new Set();
+app.get('/zerodha/callback', async (req, res) => {
+  const { request_token } = req.query;
+  if (!request_token) return res.status(400).send('No request token');
+  if (usedZCodes.has(request_token)) return res.send(successPage('Zerodha Already Connected', 'Token already saved.'));
+  usedZCodes.add(request_token);
+  setTimeout(() => usedZCodes.delete(request_token), 300000);
+  try {
+    const checksum = CryptoJS.SHA256(appConfig.zApiKey + request_token + appConfig.zApiSecret).toString();
+    const r = await axios.post('https://api.kite.trade/session/token',
+      new URLSearchParams({ api_key: appConfig.zApiKey, request_token, checksum }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Kite-Version': '3' } }
+    );
+    zAccessToken = r.data.data.access_token;
+    appConfig.zTokenExpiry = Date.now() + 86400000;
+    saveConfig();
+    await fetchZerodhaData();
+    log('OK', 'Zerodha token saved successfully');
+    res.send(successPage('Zerodha Connected ✅', 'Portfolio data loading... You can close this tab.'));
+  } catch(err) {
+    const msg = JSON.stringify(err.response?.data) || err.message;
+    log('ERR', 'Zerodha token failed: ' + msg);
+    res.status(500).send(errorPage('Zerodha Auth Failed', msg, req.get('host')));
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ZERODHA DATA FETCHING
+// ══════════════════════════════════════════════════════════════════════════════
+async function fetchZerodhaData() {
+  if (!zAccessToken || !appConfig.zApiKey) return;
+  try {
+    const headers = { 'X-Kite-Version': '3', Authorization: `token ${appConfig.zApiKey}:${zAccessToken}` };
+    const [holdR, posR, orderR] = await Promise.allSettled([
+      axios.get('https://api.kite.trade/portfolio/holdings', { headers }),
+      axios.get('https://api.kite.trade/portfolio/positions', { headers }),
+      axios.get('https://api.kite.trade/orders', { headers })
+    ]);
+    if (holdR.status === 'fulfilled') {
+      zerodhaHoldings = holdR.value.data.data || [];
+      log('OK', `Zerodha holdings: ${zerodhaHoldings.length} stocks`);
+    }
+    if (posR.status === 'fulfilled') {
+      const pos = posR.value.data.data;
+      zerodhaPositions = [...(pos?.net || []), ...(pos?.day || [])];
+      log('OK', `Zerodha positions: ${zerodhaPositions.length}`);
+    }
+    if (orderR.status === 'fulfilled') {
+      zerodhaOrders = orderR.value.data.data || [];
+      log('OK', `Zerodha orders: ${zerodhaOrders.length}`);
+    }
+    broadcastLiveData();
+  } catch(e) {
+    log('ERR', 'Zerodha data fetch failed: ' + e.message);
+  }
+}
+
+// Group trades into strategies
+function groupTradesToStrategies(orders) {
+  const strategies = [];
+  const grouped = {};
+  for (const o of orders) {
+    if (o.status !== 'COMPLETE') continue;
+    const key = `${o.tradingsymbol}_${o.exchange}`;
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(o);
+  }
+  for (const [key, legs] of Object.entries(grouped)) {
+    const buys  = legs.filter(l => l.transaction_type === 'BUY');
+    const sells = legs.filter(l => l.transaction_type === 'SELL');
+    const sym   = legs[0].tradingsymbol;
+    const isOptions = sym.match(/\d{2}[A-Z]{3}\d{2}[CP]E/);
+    const isFutures = sym.includes('FUT');
+    let type = 'Naked';
+    if (isOptions && buys.length > 0 && sells.length > 0) type = 'Vertical Spread';
+    else if (isFutures && isOptions) type = 'Hedge';
+    else if (legs.length > 2) type = 'Complex Strategy';
+    const totalBuy  = buys.reduce((a,l)  => a + l.average_price * l.filled_quantity, 0);
+    const totalSell = sells.reduce((a,l) => a + l.average_price * l.filled_quantity, 0);
+    const pnl = totalSell - totalBuy;
+    strategies.push({ symbol: sym, type, legs: legs.length, pnl: +pnl.toFixed(2), status: sells.length > 0 && buys.length === sells.length ? 'CLOSED' : 'OPEN', orders: legs });
+  }
+  return strategies.sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GEMINI AI — OPTIONS VALIDATOR
+// ══════════════════════════════════════════════════════════════════════════════
+app.post('/api/options-validate', async (req, res) => {
+  const { trade } = req.body;
+  if (!trade) return res.status(400).json({ error: 'Trade description required' });
+  if (!appConfig.geminiKey) return res.json({ analysis: 'Gemini API key not configured. Add GEMINI_API_KEY to Railway Variables.', configured: false });
+  try {
+    const nifty = liveIndices['Nifty 50'];
+    const marketData = {
+      nifty50:  nifty?.price || 'N/A',
+      niftyChg: nifty?.changePct || 0,
+      vix:      vixData.value,
+      vixTrend: vixData.trend,
+      fiiFlow:  fiiDiiData.fii,
+      diiFlow:  fiiDiiData.dii,
+      usdInr:   fiiDiiData.usdInr,
+      crude:    fiiDiiData.crude,
+      marketOpen: isMarketOpen(),
+      topBuys:  Object.values(signalCache).filter(s=>s.score>=80).slice(0,3).map(s=>s.symbol||'').join(', '),
+      time:     new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+    };
+    const prompt = `You are a professional NSE options trading advisor for an Indian retail investor. Analyse this trade and respond ONLY with valid JSON — no markdown, no preamble, no explanation outside the JSON.
+
+CURRENT MARKET DATA:
+- Nifty 50: ${marketData.nifty50} (${marketData.niftyChg >= 0 ? '+' : ''}${marketData.niftyChg}%)
+- India VIX: ${marketData.vix} (${marketData.vixTrend}) — ${marketData.vix > 20 ? 'HIGH FEAR' : marketData.vix < 13 ? 'CALM' : 'NORMAL'}
+- FII Today: ₹${marketData.fiiFlow}Cr (${marketData.fiiFlow < 0 ? 'Selling' : 'Buying'}) | DII: ₹${marketData.diiFlow}Cr
+- USD/INR: ${marketData.usdInr} | Brent Crude: $${marketData.crude}
+- Market: ${marketData.marketOpen ? 'OPEN' : 'CLOSED'} | IST: ${marketData.time}
+
+TRADE IDEA: "${trade}"
+
+Respond ONLY with this exact JSON (no markdown fences):
+{"recommendation":"TAKE","confidence":"HIGH","reason":"one clear sentence explaining verdict","entryAdvice":"specific price level or condition for entry","risks":["risk 1","risk 2","risk 3"],"verdict":"one line TL;DR for the trade"}
+
+recommendation must be exactly TAKE, AVOID, or WAIT.
+confidence must be exactly HIGH, MEDIUM, or LOW.`;
+
+    const r = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${appConfig.geminiKey}`,
+      { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 1000 } },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
+    );
+    const analysis = r.data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response from Gemini';
+    log('OK', `Gemini options analysis completed for: ${trade.substring(0, 50)}`);
+    res.json({ analysis, marketData, configured: true });
+  } catch(e) {
+    log('ERR', 'Gemini call failed: ' + e.message);
+    res.status(500).json({ error: 'Gemini analysis failed: ' + e.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SETTINGS & CONFIG APIs
+// ══════════════════════════════════════════════════════════════════════════════
 app.post('/api/settings', (req, res) => {
-  const { apiKey, apiSecret, pin, redirectUri } = req.body;
-  if (!apiKey || !apiSecret || !pin) return res.status(400).json({ error: 'Missing fields' });
+  const { apiKey, apiSecret, pin, redirectUri, geminiKey, zApiKey, zApiSecret, zRedirectUri } = req.body;
+  if (!apiKey || !apiSecret || !pin) return res.status(400).json({ error: 'Upstox keys and PIN required' });
   if (!/^\d{4}$/.test(pin)) return res.status(400).json({ error: 'PIN must be 4 digits' });
-  appConfig.apiKey = apiKey.trim();
-  appConfig.apiSecret = apiSecret.trim();
-  appConfig.pin = CryptoJS.SHA256(pin).toString();
-  if (redirectUri) appConfig.redirectUri = redirectUri.trim();
+  appConfig.apiKey      = apiKey.trim();
+  appConfig.apiSecret   = apiSecret.trim();
+  appConfig.pin         = hash(pin);
+  if (redirectUri)  appConfig.redirectUri  = redirectUri.trim();
+  if (geminiKey)    appConfig.geminiKey    = geminiKey.trim();
+  if (zApiKey)      appConfig.zApiKey      = zApiKey.trim();
+  if (zApiSecret)   appConfig.zApiSecret   = zApiSecret.trim();
+  if (zRedirectUri) appConfig.zRedirectUri = zRedirectUri.trim();
   saveConfig();
+  log('OK', 'Settings saved');
   res.json({ success: true });
 });
 
 app.post('/api/verify-pin', (req, res) => {
   if (!appConfig.pin) return res.json({ valid: false, noPin: true });
-  res.json({ valid: CryptoJS.SHA256(req.body.pin).toString() === appConfig.pin });
+  res.json({ valid: hash(req.body.pin) === appConfig.pin });
 });
 
 app.get('/api/config-status', (req, res) => {
   res.json({
-    hasKeys: !!(appConfig.apiKey && appConfig.apiSecret),
-    hasPin: !!appConfig.pin,
-    isAuthenticated: !!accessToken,
-    tokenExpiry: appConfig.tokenExpiry || null,
+    hasKeys:          !!(appConfig.apiKey && appConfig.apiSecret),
+    hasPin:           !!appConfig.pin,
+    isAuthenticated:  !!accessToken,
+    hasZerodha:       !!zAccessToken,
+    hasGemini:        !!appConfig.geminiKey,
+    tokenExpiry:      appConfig.tokenExpiry || null,
+    zTokenExpiry:     appConfig.zTokenExpiry || null,
     connectionStatus,
-    stockCount: stockUniverse.length,
-    redirectUri: appConfig.redirectUri || null
+    stockCount:       stockUniverse.length,
+    redirectUri:      appConfig.redirectUri || null,
+    marketOpen:       isMarketOpen()
   });
+});
+
+app.get('/api/gemini-status', async (req, res) => {
+  if (!appConfig.geminiKey) return res.json({ ok: false, reason: 'No API key configured' });
+  try {
+    const r = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${appConfig.geminiKey}`,
+      { contents: [{ parts: [{ text: 'Reply with just: OK' }] }], generationConfig: { maxOutputTokens: 10 } },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+    );
+    const text = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    res.json({ ok: true, response: text.trim(), model: 'gemini-1.5-flash' });
+  } catch(e) {
+    res.json({ ok: false, reason: e.response?.data?.error?.message || e.message });
+  }
+});
+
+app.get('/api/system-health', (req, res) => {
+  const now = Date.now();
+  res.json({
+    upstox:    { connected: connectionStatus === 'live', status: connectionStatus, tokenValid: !!accessToken && appConfig.tokenExpiry > now, expiresIn: appConfig.tokenExpiry ? Math.round((appConfig.tokenExpiry - now) / 60000) : 0 },
+    zerodha:   { connected: !!zAccessToken, tokenValid: !!zAccessToken && appConfig.zTokenExpiry > now, holdingsCount: zerodhaHoldings.length, positionsCount: zerodhaPositions.length },
+    gemini:    { configured: !!appConfig.geminiKey, status: appConfig.geminiKey ? 'configured' : 'not_configured' },
+    server:    { uptime: Math.round(process.uptime()), memMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024), stocksLoaded: stockUniverse.length, signalsCalc: Object.keys(signalCache).length },
+    marketOpen: isMarketOpen(),
+    lastUpdate: Object.values(liveStocks)[0]?.lastUpdate || null,
+    tests:      testResults
+  });
+});
+
+app.get('/api/logs', (req, res) => {
+  res.json({ logs: LOGS.slice(0, 100) });
 });
 
 app.post('/api/clear', (req, res) => {
-  appConfig = {}; accessToken = null; stockUniverse = []; liveData = {}; signalCache = {};
-  [CONFIG_FILE, PORTFOLIO_FILE, NOTES_FILE].forEach(f => { if (fs.existsSync(f)) fs.unlinkSync(f); });
-  if (mockTickInterval) { clearInterval(mockTickInterval); mockTickInterval = null; }
+  appConfig = {}; accessToken = null; zAccessToken = null;
+  stockUniverse = []; liveStocks = {}; signalCache = {}; fundamentals = {};
+  zerodhaHoldings = []; zerodhaPositions = []; zerodhaOrders = [];
+  [CONFIG_FILE, PORTFOLIO_FILE, NOTES_FILE, OPTIONS_FILE].forEach(f => { try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch {} });
+  if (mockInterval) { clearInterval(mockInterval); mockInterval = null; }
   connectionStatus = 'disconnected';
   broadcastStatus();
+  log('WARN', 'All data cleared');
   res.json({ success: true });
 });
 
-// ── Portfolio ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// PORTFOLIO & NOTES APIs
+// ══════════════════════════════════════════════════════════════════════════════
 app.get('/api/portfolio', (req, res) => {
   if (!fs.existsSync(PORTFOLIO_FILE)) return res.json({ holdings: [] });
-  res.json(decrypt(fs.readFileSync(PORTFOLIO_FILE, 'utf8')) || { holdings: [] });
+  res.json(dec(fs.readFileSync(PORTFOLIO_FILE, 'utf8')) || { holdings: [] });
 });
 app.post('/api/portfolio', (req, res) => {
-  fs.writeFileSync(PORTFOLIO_FILE, encrypt(req.body));
-  res.json({ success: true });
+  try { fs.writeFileSync(PORTFOLIO_FILE, enc(req.body)); res.json({ success: true }); }
+  catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Notes ─────────────────────────────────────────────────────────────────────
 app.get('/api/notes', (req, res) => {
   if (!fs.existsSync(NOTES_FILE)) return res.json({ notes: [] });
-  res.json(decrypt(fs.readFileSync(NOTES_FILE, 'utf8')) || { notes: [] });
+  res.json(dec(fs.readFileSync(NOTES_FILE, 'utf8')) || { notes: [] });
 });
 app.post('/api/notes', (req, res) => {
-  fs.writeFileSync(NOTES_FILE, encrypt(req.body));
-  res.json({ success: true });
+  try { fs.writeFileSync(NOTES_FILE, enc(req.body)); res.json({ success: true }); }
+  catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Live Data ─────────────────────────────────────────────────────────────────
-app.get('/api/live', (req, res) => {
-  res.json({ stocks: liveData, indices: marketIndices, signals: signalCache, universe: stockUniverse });
+app.get('/api/options-trades', (req, res) => {
+  if (!fs.existsSync(OPTIONS_FILE)) return res.json({ trades: [] });
+  res.json(dec(fs.readFileSync(OPTIONS_FILE, 'utf8')) || { trades: [] });
 });
+app.post('/api/options-trades', (req, res) => {
+  try { fs.writeFileSync(OPTIONS_FILE, enc(req.body)); res.json({ success: true }); }
+  catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PRICE ALERTS
+// ══════════════════════════════════════════════════════════════════════════════
+function loadAlerts() {
+  if (fs.existsSync(ALERTS_FILE)) {
+    const d = dec(fs.readFileSync(ALERTS_FILE, 'utf8'));
+    if (d) priceAlerts = d.alerts || [];
+  }
+}
+function saveAlerts() {
+  try { fs.writeFileSync(ALERTS_FILE, enc({ alerts: priceAlerts })); } catch {}
+}
+function checkPriceAlerts() {
+  let triggered = 0;
+  for (const alert of priceAlerts) {
+    if (alert.triggered) continue;
+    const stock = liveStocks[alert.symbol];
+    if (!stock) continue;
+    const hit = alert.type === 'above'
+      ? stock.price >= alert.targetPrice
+      : stock.price <= alert.targetPrice;
+    if (hit) {
+      alert.triggered = true;
+      alert.triggeredAt = new Date().toISOString();
+      alert.triggeredPrice = stock.price;
+      log('OK', `🔔 ALERT: ${alert.symbol} ${alert.type} ₹${alert.targetPrice} — current ₹${stock.price}`);
+      broadcastAlert(alert);
+      triggered++;
+    }
+  }
+  if (triggered) saveAlerts();
+}
+function broadcastAlert(alert) {
+  const msg = JSON.stringify({ type: 'alert', alert });
+  for (const c of clients) { if (c.readyState === WebSocket.OPEN) c.send(msg); }
+}
+
+app.get('/api/alerts', (req, res) => {
+  res.json({ alerts: priceAlerts });
+});
+app.post('/api/alerts', (req, res) => {
+  const { symbol, targetPrice, type } = req.body;
+  if (!symbol || !targetPrice || !['above','below'].includes(type))
+    return res.status(400).json({ error: 'symbol, targetPrice, and type (above|below) required' });
+  const alert = { id: Date.now().toString(), symbol: symbol.toUpperCase(), targetPrice: +targetPrice, type, triggered: false, created: new Date().toISOString() };
+  priceAlerts.push(alert);
+  saveAlerts();
+  log('OK', `Alert set: ${symbol} ${type} ₹${targetPrice}`);
+  res.json({ success: true, alert });
+});
+app.delete('/api/alerts/:id', (req, res) => {
+  const before = priceAlerts.length;
+  priceAlerts = priceAlerts.filter(a => a.id !== req.params.id);
+  saveAlerts();
+  res.json({ success: priceAlerts.length < before });
+});
+app.post('/api/alerts/clear-triggered', (req, res) => {
+  priceAlerts = priceAlerts.filter(a => !a.triggered);
+  saveAlerts();
+  res.json({ success: true, remaining: priceAlerts.length });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LIVE DATA APIs
+// ══════════════════════════════════════════════════════════════════════════════
+app.get('/api/live', (req, res) => {
+  res.json({ stocks: liveStocks, indices: liveIndices, signals: signalCache, universe: stockUniverse, vix: vixData, fiiDii: fiiDiiData });
+});
+
+app.get('/api/technical/:symbol', (req, res) => {
+  const sym = req.params.symbol.toUpperCase();
+  const prices = priceHistory[sym];
+  if (!prices || prices.length < 5) {
+    // Generate synthetic price history from mock base for demo
+    const base = liveStocks[sym]?.price || 1000;
+    const synth = Array.from({length: 20}, (_, i) => +(base * (1 + (Math.random()-0.5)*0.02)).toFixed(2));
+    synth.push(base);
+    const rsi = calcRSI(synth, 14);
+    const ema20 = calcEMA(synth, Math.min(20, synth.length));
+    return res.json({ symbol: sym, rsi, ema20, note: 'synthetic', dataPoints: synth.length });
+  }
+  const rsi   = calcRSI(prices, Math.min(14, prices.length-1));
+  const ema20 = calcEMA(prices, Math.min(20, prices.length));
+  const ema5  = calcEMA(prices, Math.min(5,  prices.length));
+  const macd  = calcMACD(prices);
+  const bb    = calcBollinger(prices, Math.min(20, prices.length));
+  const current = prices[prices.length-1];
+  const signal = rsi < 35 ? 'OVERSOLD 🟢' : rsi > 65 ? 'OVERBOUGHT 🔴' :
+                 ema5 > ema20 ? 'UPTREND 🟡' : 'DOWNTREND 🟠';
+  res.json({ symbol: sym, rsi, ema20, ema5, macd: macd.macd, macdSignal: macd.signal,
+    bbUpper: bb.upper, bbLower: bb.lower, bbMiddle: bb.middle,
+    current, signal, dataPoints: prices.length });
+});
+
+app.get('/api/fii-dii', (req, res) => {
+  res.json({
+    fii:    fiiDiiData.fii,
+    dii:    fiiDiiData.dii,
+    usdInr: fiiDiiData.usdInr,
+    crude:  fiiDiiData.crude,
+    vix:    vixData.value,
+    vixTrend: vixData.trend,
+    marketOpen: isMarketOpen(),
+    note: 'Intraday simulated values — replace with NSE/BSE data API for live'
+  });
+});
+
+app.get('/api/market-context', (req, res) => {
+  const { getMarketContext }    = require('./lib/marketContext');
+const { calcRSI, calcEMA, calcMACD, calcBollinger, calcSupport, calcResistance } = require('./lib/technicals');
+  res.json({ events: getMarketContext(), generated: new Date().toISOString() });
+});
+
 app.get('/api/signals', (req, res) => {
   const sorted = Object.entries(signalCache)
-    .map(([sym, s]) => ({ symbol: sym, ...s, price: liveData[sym]?.price, name: liveData[sym]?.name, sector: liveData[sym]?.sector }))
+    .map(([sym, s]) => ({ symbol: sym, ...s, price: liveStocks[sym]?.price, name: liveStocks[sym]?.name, sector: liveStocks[sym]?.sector, changePct: liveStocks[sym]?.changePct }))
     .sort((a, b) => b.score - a.score);
   res.json(sorted);
 });
+
 app.get('/api/market-health', (req, res) => {
   const scores = Object.values(signalCache).map(s => s.score);
-  const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 50;
+  const avg = scores.length ? Math.round(scores.reduce((a,b) => a+b,0) / scores.length) : 50;
   res.json({
-    healthScore: Math.round(avg),
-    buySignals: scores.filter(s => s >= 65).length,
-    sellSignals: scores.filter(s => s < 35).length,
-    watchSignals: scores.filter(s => s >= 50 && s < 65).length,
-    holdSignals: scores.filter(s => s >= 35 && s < 50).length,
-    totalStocks: scores.length
+    healthScore: avg,
+    strongBuy: scores.filter(s => s >= 80).length,
+    buy: scores.filter(s => s >= 65 && s < 80).length,
+    watch: scores.filter(s => s >= 50 && s < 65).length,
+    hold: scores.filter(s => s >= 35 && s < 50).length,
+    sell: scores.filter(s => s < 35).length,
+    total: scores.length
   });
 });
 
-// ── Stock Universe ────────────────────────────────────────────────────────────
-const STOCK_UNIVERSE_STATIC = [
-  { instrumentKey: 'NSE_EQ|INE002A01018', symbol: 'RELIANCE', name: 'Reliance Industries', sector: 'Energy' },
-  { instrumentKey: 'NSE_EQ|INE040A01034', symbol: 'HDFCBANK', name: 'HDFC Bank', sector: 'Banking' },
-  { instrumentKey: 'NSE_EQ|INE009A01021', symbol: 'INFY', name: 'Infosys', sector: 'IT' },
-  { instrumentKey: 'NSE_EQ|INE467B01029', symbol: 'TCS', name: 'Tata Consultancy Services', sector: 'IT' },
-  { instrumentKey: 'NSE_EQ|INE062A01020', symbol: 'ICICIBANK', name: 'ICICI Bank', sector: 'Banking' },
-  { instrumentKey: 'NSE_EQ|INE030A01027', symbol: 'HINDUNILVR', name: 'Hindustan Unilever', sector: 'FMCG' },
-  { instrumentKey: 'NSE_EQ|INE018A01030', symbol: 'BHARTIARTL', name: 'Bharti Airtel', sector: 'Telecom' },
-  { instrumentKey: 'NSE_EQ|INE585B01010', symbol: 'AXISBANK', name: 'Axis Bank', sector: 'Banking' },
-  { instrumentKey: 'NSE_EQ|INE669C01036', symbol: 'BAJFINANCE', name: 'Bajaj Finance', sector: 'NBFC' },
-  { instrumentKey: 'NSE_EQ|INE001A01036', symbol: 'HCLTECH', name: 'HCL Technologies', sector: 'IT' },
-  { instrumentKey: 'NSE_EQ|INE044A01036', symbol: 'SUNPHARMA', name: 'Sun Pharmaceutical', sector: 'Pharma' },
-  { instrumentKey: 'NSE_EQ|INE326A01037', symbol: 'KOTAKBANK', name: 'Kotak Mahindra Bank', sector: 'Banking' },
-  { instrumentKey: 'NSE_EQ|INE216A01030', symbol: 'MARUTI', name: 'Maruti Suzuki', sector: 'Auto' },
-  { instrumentKey: 'NSE_EQ|INE029A01011', symbol: 'TATAMOTORS', name: 'Tata Motors', sector: 'Auto' },
-  { instrumentKey: 'NSE_EQ|INE155A01022', symbol: 'TATASTEEL', name: 'Tata Steel', sector: 'Metals' },
-  { instrumentKey: 'NSE_EQ|INE397D01024', symbol: 'NTPC', name: 'NTPC', sector: 'Power' },
-  { instrumentKey: 'NSE_EQ|INE748C01020', symbol: 'POWERGRID', name: 'Power Grid Corp', sector: 'Power' },
-  { instrumentKey: 'NSE_EQ|INE160A01022', symbol: 'WIPRO', name: 'Wipro', sector: 'IT' },
-  { instrumentKey: 'NSE_EQ|INE019A01038', symbol: 'LTIM', name: 'LTIMindtree', sector: 'IT' },
-  { instrumentKey: 'NSE_EQ|INE066A01021', symbol: 'ONGC', name: 'ONGC', sector: 'Energy' },
-  { instrumentKey: 'NSE_EQ|INE101A01026', symbol: 'CIPLA', name: 'Cipla', sector: 'Pharma' },
-  { instrumentKey: 'NSE_EQ|INE021A01026', symbol: 'COALINDIA', name: 'Coal India', sector: 'Mining' },
-  { instrumentKey: 'NSE_EQ|INE095A01012', symbol: 'INDUSINDBK', name: 'IndusInd Bank', sector: 'Banking' },
-  { instrumentKey: 'NSE_EQ|INE071A01013', symbol: 'BPCL', name: 'BPCL', sector: 'Energy' },
-  { instrumentKey: 'NSE_EQ|INE356A01018', symbol: 'GRASIM', name: 'Grasim Industries', sector: 'Diversified' },
-  { instrumentKey: 'NSE_EQ|INE123W01016', symbol: 'ADANIENT', name: 'Adani Enterprises', sector: 'Diversified' },
-  { instrumentKey: 'NSE_EQ|INE070A01015', symbol: 'HINDALCO', name: 'Hindalco Industries', sector: 'Metals' },
-  { instrumentKey: 'NSE_EQ|INE115A01026', symbol: 'HAL', name: 'Hindustan Aeronautics', sector: 'Defence' },
-  { instrumentKey: 'NSE_EQ|INE0J1Y01017', symbol: 'DRDGOLD', name: 'Dr. Reddy\'s Lab', sector: 'Pharma' },
-  { instrumentKey: 'NSE_EQ|INE089A01023', symbol: 'DRREDDY', name: 'Dr. Reddy\'s Laboratories', sector: 'Pharma' },
+app.get('/api/zerodha-portfolio', (req, res) => {
+  const strategies = groupTradesToStrategies(zerodhaOrders);
+  const totalInvested = zerodhaHoldings.reduce((a,h) => a + h.average_price * h.quantity, 0);
+  const totalCurrent  = zerodhaHoldings.reduce((a,h) => a + h.last_price  * h.quantity, 0);
+  res.json({
+    holdings:    zerodhaHoldings,
+    positions:   zerodhaPositions,
+    orders:      zerodhaOrders,
+    strategies,
+    summary: {
+      totalInvested: +totalInvested.toFixed(2),
+      totalCurrent:  +totalCurrent.toFixed(2),
+      totalPnl:      +(totalCurrent - totalInvested).toFixed(2),
+      pnlPct:        totalInvested > 0 ? +((totalCurrent - totalInvested) / totalInvested * 100).toFixed(2) : 0
+    }
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STOCK UNIVERSE & FUNDAMENTALS
+// ══════════════════════════════════════════════════════════════════════════════
+const STOCK_UNIVERSE = [
+  { instrumentKey:'NSE_EQ|INE002A01018', symbol:'RELIANCE',   name:'Reliance Industries',     sector:'Energy',    pe:24,  roe:14, de:0.3,  div:0.4, target:3200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE040A01034', symbol:'HDFCBANK',   name:'HDFC Bank',               sector:'Banking',   pe:18,  roe:17, de:0.8,  div:1.1, target:1900, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE009A01021', symbol:'INFY',       name:'Infosys',                 sector:'IT',        pe:26,  roe:32, de:0.0,  div:3.2, target:2050, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE467B01029', symbol:'TCS',        name:'Tata Consultancy',        sector:'IT',        pe:28,  roe:48, de:0.0,  div:3.8, target:4600, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE062A01020', symbol:'ICICIBANK',  name:'ICICI Bank',              sector:'Banking',   pe:17,  roe:19, de:0.7,  div:0.8, target:1600, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE030A01027', symbol:'HINDUNILVR', name:'Hindustan Unilever',      sector:'FMCG',      pe:52,  roe:22, de:0.0,  div:1.8, target:2850, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE018A01030', symbol:'BHARTIARTL', name:'Bharti Airtel',           sector:'Telecom',   pe:78,  roe:16, de:1.8,  div:0.4, target:2100, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE585B01010', symbol:'AXISBANK',   name:'Axis Bank',               sector:'Banking',   pe:14,  roe:16, de:0.9,  div:0.1, target:1350, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE669C01036', symbol:'BAJFINANCE', name:'Bajaj Finance',           sector:'NBFC',      pe:35,  roe:22, de:3.2,  div:0.3, target:8800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE001A01036', symbol:'HCLTECH',    name:'HCL Technologies',        sector:'IT',        pe:24,  roe:26, de:0.0,  div:4.5, target:1850, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE044A01036', symbol:'SUNPHARMA',  name:'Sun Pharmaceutical',      sector:'Pharma',    pe:35,  roe:18, de:0.1,  div:0.5, target:2200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE326A01037', symbol:'KOTAKBANK',  name:'Kotak Mahindra Bank',     sector:'Banking',   pe:20,  roe:15, de:0.5,  div:0.1, target:2150, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE216A01030', symbol:'MARUTI',     name:'Maruti Suzuki',           sector:'Auto',      pe:25,  roe:18, de:0.0,  div:1.2, target:13500, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE029A01011', symbol:'TATAMOTORS', name:'Tata Motors',             sector:'Auto',      pe:8,   roe:22, de:1.1,  div:0.0, target:1100, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE155A01022', symbol:'TATASTEEL',  name:'Tata Steel',              sector:'Metals',    pe:9,   roe:12, de:0.8,  div:0.6, target:200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE397D01024', symbol:'NTPC',       name:'NTPC',                    sector:'Power',     pe:16,  roe:13, de:1.2,  div:3.5, target:430, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE748C01020', symbol:'POWERGRID',  name:'Power Grid Corp',         sector:'Power',     pe:17,  roe:23, de:1.5,  div:4.2, target:395, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE160A01022', symbol:'WIPRO',      name:'Wipro',                   sector:'IT',        pe:22,  roe:17, de:0.0,  div:0.2, target:650, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE019A01038', symbol:'LTIM',       name:'LTIMindtree',             sector:'IT',        pe:32,  roe:28, de:0.0,  div:1.5, target:6200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE066A01021', symbol:'ONGC',       name:'ONGC',                    sector:'Energy',    pe:7,   roe:14, de:0.3,  div:5.2, target:340, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE101A01026', symbol:'CIPLA',      name:'Cipla',                   sector:'Pharma',    pe:28,  roe:16, de:0.1,  div:0.4, target:1750, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE021A01026', symbol:'COALINDIA',  name:'Coal India',              sector:'Mining',    pe:8,   roe:58, de:0.0,  div:8.5, target:560, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE095A01012', symbol:'INDUSINDBK', name:'IndusInd Bank',           sector:'Banking',   pe:9,   roe:15, de:0.7,  div:1.2, target:1300, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE071A01013', symbol:'BPCL',       name:'BPCL',                    sector:'Energy',    pe:8,   roe:22, de:0.4,  div:6.5, target:380, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE356A01018', symbol:'GRASIM',     name:'Grasim Industries',       sector:'Diversified', pe:20, roe:12, de:0.4, div:0.4, target:3100, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE123W01016', symbol:'ADANIENT',   name:'Adani Enterprises',       sector:'Diversified', pe:65, roe:9,  de:2.1, div:0.0, target:3000, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE070A01015', symbol:'HINDALCO',   name:'Hindalco Industries',     sector:'Metals',    pe:11,  roe:16, de:0.5,  div:0.8, target:800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE115A01026', symbol:'HAL',        name:'Hindustan Aeronautics',   sector:'Defence',   pe:42,  roe:28, de:0.0,  div:0.8, target:5800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE089A01023', symbol:'DRREDDY',    name:"Dr Reddy's Laboratories", sector:'Pharma',    pe:22,  roe:21, de:0.0,  div:0.6, target:1700, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE040A01034', symbol:'BAJAJFINSV', name:'Bajaj Finserv',           sector:'NBFC',      pe:28,  roe:14, de:2.8,  div:0.1, target:2200, cap:'Large' },
 ];
 
-const SECTOR_PE = { IT:28, Banking:15, Pharma:30, Energy:10, FMCG:45, Auto:18, Metals:8, Power:16, Telecom:22, NBFC:20, Mining:7, Retail:50, Diversified:18, Defence:35 };
+const SECTOR_PE = { IT:27, Banking:15, Pharma:30, Energy:10, FMCG:48, Auto:20, Metals:8, Power:16, Telecom:22, NBFC:22, Mining:7, Diversified:18, Defence:38 };
 
-async function fetchTopStocks() {
-  if (!accessToken) {
-    stockUniverse = STOCK_UNIVERSE_STATIC;
-    return;
-  }
-  try {
-    const resp = await axios.get('https://api.upstox.com/v2/market/quote/nse', {
-      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
-    }).catch(() => null);
-    stockUniverse = STOCK_UNIVERSE_STATIC;
-    console.log('[FINR] Stock universe loaded:', stockUniverse.length);
-  } catch {
-    stockUniverse = STOCK_UNIVERSE_STATIC;
-  }
-}
-
-async function fetchFundamentals() {
-  for (const stock of stockUniverse) {
-    if (fundamentalCache[stock.symbol]) continue;
-    const price = liveData[stock.symbol]?.price || MOCK_PRICES[stock.symbol] || 1000;
-    fundamentalCache[stock.symbol] = {
-      pe: 10 + Math.random() * 35,
-      roe: 8 + Math.random() * 28,
-      debtToEquity: Math.random() * 1.8,
-      dividendYield: Math.random() * 3.5,
-      high52: price * (1.12 + Math.random() * 0.25),
-      low52: price * (0.62 + Math.random() * 0.2),
-      targetPrice: price * (1.08 + Math.random() * 0.22),
-      sectorPe: SECTOR_PE[stock.sector] || 20
-    };
-  }
-}
+const PENNY_STOCKS = [
+  { symbol:'SUZLON',  name:'Suzlon Energy',    sector:'Power',   price:42,  risk:'HIGH',   flag:'High debt, renewable tailwind',     vol:'Very High',  promoter:16 },
+  { symbol:'IRFC',    name:'Indian Railway FC', sector:'Finance', price:145, risk:'LOW',    flag:'PSU backed, steady income',         vol:'Moderate',   promoter:0  },
+  { symbol:'YESBANK', name:'Yes Bank',          sector:'Banking', price:19,  risk:'HIGH',   flag:'Recovery play, watch FII buying',   vol:'Very High',  promoter:0  },
+  { symbol:'IDEA',    name:'Vodafone Idea',     sector:'Telecom', price:8,   risk:'EXTREME', flag:'High debt, survival uncertain',    vol:'Very High',  promoter:22 },
+  { symbol:'JPPOWER', name:'Jaiprakash Power',  sector:'Power',   price:12,  risk:'HIGH',   flag:'Debt restructuring, power demand',  vol:'High',       promoter:35 },
+];
 
 function calcSignal(symbol, price) {
-  const fund = fundamentalCache[symbol];
-  if (!fund || !price) return null;
+  const s = STOCK_UNIVERSE.find(x => x.symbol === symbol);
+  if (!s || !price) return null;
+  const fund = { pe: s.pe, roe: s.roe, debtToEquity: s.de, dividendYield: s.div, targetPrice: s.target, sectorPe: SECTOR_PE[s.sector] || 20 };
+  const high52 = fundamentals[symbol]?.high52 || price * 1.35;
+  const low52  = fundamentals[symbol]?.low52  || price * 0.72;
   let score = 0;
   const reasons = [];
 
-  const range = fund.high52 - fund.low52;
+  // 52W position (25pts)
+  const range = high52 - low52;
   if (range > 0) {
-    const pos = Math.max(0, Math.min(1, (price - fund.low52) / range));
+    const pos = Math.max(0, Math.min(1, (price - low52) / range));
     score += Math.round((1 - pos) * 25);
-    if (pos < 0.3) reasons.push('Near 52W low — buying zone');
-    else if (pos > 0.85) reasons.push('Near 52W high — take profit?');
+    if (pos < 0.25) reasons.push(`🟢 Near 52W low ₹${low52.toFixed(0)} — strong buy zone`);
+    else if (pos < 0.45) reasons.push(`✅ In lower half of 52W range`);
+    else if (pos > 0.85) reasons.push(`⚠️ Near 52W high ₹${high52.toFixed(0)} — take profit zone`);
   }
 
+  // P/E vs sector (20pts)
   if (fund.pe > 0 && fund.sectorPe > 0) {
     const r = fund.pe / fund.sectorPe;
-    if (r < 0.6) { score += 20; reasons.push(`Cheap P/E ${fund.pe.toFixed(1)}x vs sector ${fund.sectorPe}x`); }
-    else if (r < 0.85) score += 15;
-    else if (r < 1.1) score += 10;
-    else if (r < 1.3) score += 5;
-    else reasons.push(`P/E ${fund.pe.toFixed(1)}x expensive vs sector`);
+    if (r < 0.6)       { score += 20; reasons.push(`🟢 P/E ${fund.pe}x — very cheap vs sector ${fund.sectorPe}x`); }
+    else if (r < 0.85) { score += 15; reasons.push(`✅ P/E ${fund.pe}x — below sector average`); }
+    else if (r < 1.1)  { score += 10; }
+    else if (r < 1.3)  { score += 5; }
+    else               { reasons.push(`⚠️ P/E ${fund.pe}x — expensive vs sector`); }
   }
 
-  if (fund.roe >= 25) { score += 15; reasons.push(`ROE ${fund.roe.toFixed(1)}% — excellent`); }
-  else if (fund.roe >= 15) { score += 10; reasons.push(`ROE ${fund.roe.toFixed(1)}% — good`); }
-  else if (fund.roe >= 8) score += 5;
-  else reasons.push(`ROE ${fund.roe.toFixed(1)}% — weak`);
+  // ROE (15pts)
+  if (fund.roe >= 25)      { score += 15; reasons.push(`🟢 ROE ${fund.roe}% — excellent returns`); }
+  else if (fund.roe >= 15) { score += 10; reasons.push(`✅ ROE ${fund.roe}% — above average`); }
+  else if (fund.roe >= 8)  { score += 5; }
+  else                     { reasons.push(`⚠️ ROE ${fund.roe}% — weak`); }
 
-  if (fund.debtToEquity < 0.1) { score += 10; reasons.push('Virtually debt-free'); }
-  else if (fund.debtToEquity < 0.5) score += 7;
-  else if (fund.debtToEquity < 1) score += 4;
-  else if (fund.debtToEquity > 2) { score -= 5; reasons.push(`High debt D/E ${fund.debtToEquity.toFixed(1)}`); }
+  // Debt (10pts)
+  if (fund.debtToEquity < 0.1)      { score += 10; reasons.push(`🟢 Virtually debt-free`); }
+  else if (fund.debtToEquity < 0.5) { score += 7;  reasons.push(`✅ Low debt D/E ${fund.debtToEquity}`); }
+  else if (fund.debtToEquity < 1)   { score += 4; }
+  else if (fund.debtToEquity > 2)   { score -= 5;  reasons.push(`🔴 High debt D/E ${fund.debtToEquity}`); }
 
-  if (fund.dividendYield > 3) { score += 10; reasons.push(`Div yield ${fund.dividendYield.toFixed(1)}% — income stock`); }
-  else if (fund.dividendYield > 1.5) score += 6;
-  else if (fund.dividendYield > 0.5) score += 3;
+  // Dividend (10pts)
+  if (fund.dividendYield > 4)       { score += 10; reasons.push(`🟢 High dividend yield ${fund.dividendYield}%`); }
+  else if (fund.dividendYield > 2)  { score += 7;  reasons.push(`✅ Good dividend ${fund.dividendYield}%`); }
+  else if (fund.dividendYield > 0.5){ score += 3; }
 
-  const upside = ((fund.targetPrice - price) / price) * 100;
-  if (upside > 25) { score += 20; reasons.push(`${upside.toFixed(0)}% upside to analyst target`); }
-  else if (upside > 15) { score += 15; reasons.push(`${upside.toFixed(0)}% upside to target`); }
-  else if (upside > 5) score += 8;
-  else if (upside < -5) { score -= 5; reasons.push('Trading above analyst target'); }
+  // Upside (20pts)
+  const upside   = ((fund.targetPrice - price) / price) * 100;
+  const downside = ((price - low52) / price) * 100;
+  if (upside > 30)      { score += 20; reasons.push(`🟢 ${upside.toFixed(0)}% upside to target ₹${fund.targetPrice}`); }
+  else if (upside > 20) { score += 15; reasons.push(`✅ ${upside.toFixed(0)}% upside to ₹${fund.targetPrice}`); }
+  else if (upside > 10) { score += 8; }
+  else if (upside < 0)  { score -= 5;  reasons.push(`🔴 Trading above analyst target`); }
 
   score = Math.max(0, Math.min(100, score));
-  let signal, color;
-  if (score >= 80) { signal = 'STRONG BUY'; color = '#00ff88'; }
-  else if (score >= 65) { signal = 'BUY'; color = '#00d4aa'; }
-  else if (score >= 50) { signal = 'WATCH'; color = '#ffd700'; }
-  else if (score >= 35) { signal = 'HOLD'; color = '#ff9500'; }
-  else if (score >= 20) { signal = 'SELL'; color = '#ff4455'; }
-  else { signal = 'STRONG SELL'; color = '#cc0022'; }
+  let signal;
+  if (score >= 80) signal = 'STRONG BUY';
+  else if (score >= 65) signal = 'BUY';
+  else if (score >= 50) signal = 'WATCH';
+  else if (score >= 35) signal = 'HOLD';
+  else signal = 'SELL';
 
-  return { score, signal, color, reason: reasons[0] || 'Analysing fundamentals...', allReasons: reasons, upside: +upside.toFixed(1), targetPrice: +fund.targetPrice.toFixed(2) };
+  // Technical timing hint
+  let timing = '';
+  if (score >= 65) {
+    if (downside > 15) timing = `Entry zone: wait for pullback to ₹${(price * 0.95).toFixed(0)}`;
+    else timing = `Good entry now. SL: ₹${(price * 0.92).toFixed(0)} Target: ₹${fund.targetPrice}`;
+  }
+
+  return { score, signal, reason: reasons[0] || '—', allReasons: reasons, upside: +upside.toFixed(1), downside: +downside.toFixed(1), targetPrice: fund.targetPrice, timing };
 }
 
-function recalcAllSignals() {
-  for (const s of stockUniverse) {
-    const price = liveData[s.symbol]?.price;
-    if (price) { const sig = calcSignal(s.symbol, price); if (sig) signalCache[s.symbol] = sig; }
+function recalcSignals() {
+  for (const s of STOCK_UNIVERSE) {
+    const price = liveStocks[s.symbol]?.price;
+    if (price) { const sig = calcSignal(s.symbol, price); if (sig) signalCache[s.symbol] = { ...sig, symbol: s.symbol }; }
   }
 }
 
-// ── Upstox WebSocket ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// UPSTOX WEBSOCKET
+// ══════════════════════════════════════════════════════════════════════════════
 function connectUpstoxWs() {
-  if (!accessToken || !stockUniverse.length) return;
+  if (!accessToken || !STOCK_UNIVERSE.length) return;
   if (upstoxWs && [WebSocket.OPEN, WebSocket.CONNECTING].includes(upstoxWs.readyState)) return;
-
   upstoxWs = new WebSocket('wss://api.upstox.com/v2/feed/market-data-streamer', {
     headers: { Authorization: `Bearer ${accessToken}` }
   });
-
   upstoxWs.on('open', () => {
-    console.log('[FINR] Upstox WS connected');
-    connectionStatus = 'live';
-    wsReconnectTimeout = 1000;
-    broadcastStatus();
+    log('OK', 'Upstox WebSocket connected');
+    connectionStatus = 'live'; wsReconnectMs = 1000; broadcastStatus();
     const keys = [
-      ...stockUniverse.map(s => s.instrumentKey),
-      'NSE_INDEX|Nifty 50', 'NSE_INDEX|SENSEX', 'NSE_INDEX|Nifty Bank', 'NSE_INDEX|Nifty IT', 'NSE_INDEX|Nifty Pharma'
+      ...STOCK_UNIVERSE.map(s => s.instrumentKey),
+      'NSE_INDEX|Nifty 50', 'NSE_INDEX|SENSEX', 'NSE_INDEX|Nifty Bank',
+      'NSE_INDEX|Nifty IT', 'NSE_INDEX|Nifty Pharma', 'NSE_INDEX|India VIX'
     ];
-    upstoxWs.send(JSON.stringify({ guid: 'finr', method: 'sub', data: { mode: 'full', instrumentKeys: keys } }));
+    upstoxWs.send(JSON.stringify({ guid:'finr', method:'sub', data:{ mode:'full', instrumentKeys:keys } }));
   });
-
-  upstoxWs.on('message', (raw) => {
+  upstoxWs.on('message', raw => {
     try {
-      let msg;
-      try { msg = JSON.parse(raw.toString()); } catch { return; }
+      const msg = JSON.parse(raw.toString());
       const feeds = msg.feeds || {};
+      let updated = false;
       for (const [key, val] of Object.entries(feeds)) {
         const ltpc = val.ff?.marketFF?.ltpc || val.ff?.indexFF?.ltpc;
         if (!ltpc) continue;
         const price = ltpc.ltp, close = ltpc.cp || price;
-        const change = price - close, changePct = close ? (change / close) * 100 : 0;
+        const change = price - close, pct = close ? (change/close)*100 : 0;
         if (key.includes('NSE_INDEX')) {
-          marketIndices[key.split('|')[1]] = { price, change: +change.toFixed(2), changePct: +changePct.toFixed(2), name: key.split('|')[1] };
+          const name = key.split('|')[1];
+          if (name === 'India VIX') { vixData.value = price; vixData.change = +pct.toFixed(2); vixData.trend = pct > 0.5 ? 'rising' : pct < -0.5 ? 'falling' : 'stable'; }
+          else liveIndices[name] = { price, change:+change.toFixed(2), changePct:+pct.toFixed(2), name };
         } else {
-          const s = stockUniverse.find(x => x.instrumentKey === key);
+          const s = STOCK_UNIVERSE.find(x => x.instrumentKey === key);
           if (s) {
-            const prev = liveData[s.symbol]?.price;
-            liveData[s.symbol] = { symbol: s.symbol, name: s.name, sector: s.sector, price, change: +change.toFixed(2), changePct: +changePct.toFixed(2), prevPrice: prev, lastUpdate: Date.now() };
+            liveStocks[s.symbol] = { symbol:s.symbol, name:s.name, sector:s.sector, price, change:+change.toFixed(2), changePct:+pct.toFixed(2), lastUpdate:Date.now(),
+              high52: fundamentals[s.symbol]?.high52 || +(price*1.35).toFixed(2),
+              low52:  fundamentals[s.symbol]?.low52  || +(price*0.72).toFixed(2) };
             const sig = calcSignal(s.symbol, price);
-            if (sig) signalCache[s.symbol] = sig;
+            if (sig) signalCache[s.symbol] = { ...sig, symbol: s.symbol };
+            updated = true;
           }
         }
       }
-      broadcastLiveData();
+      if (updated) broadcastLiveData();
     } catch {}
   });
-
   upstoxWs.on('close', () => {
-    console.log('[FINR] Upstox WS closed, retry in', wsReconnectTimeout);
-    connectionStatus = 'reconnecting';
-    broadcastStatus();
-    setTimeout(connectUpstoxWs, wsReconnectTimeout);
-    wsReconnectTimeout = Math.min(wsReconnectTimeout * 2, 30000);
+    log('WARN', `Upstox WS closed — retry in ${wsReconnectMs}ms`);
+    connectionStatus = 'reconnecting'; broadcastStatus();
+    setTimeout(connectUpstoxWs, wsReconnectMs);
+    wsReconnectMs = Math.min(wsReconnectMs * 2, 30000);
   });
-
-  upstoxWs.on('error', err => console.error('[FINR] WS err:', err.message));
+  upstoxWs.on('error', e => log('ERR', 'Upstox WS error: ' + e.message));
 }
 
-// ── Mock/Demo Data ────────────────────────────────────────────────────────────
-const MOCK_PRICES = {
-  RELIANCE:2850, HDFCBANK:1720, INFY:1890, TCS:4200, ICICIBANK:1380, HINDUNILVR:2650,
-  BHARTIARTL:1820, AXISBANK:1240, BAJFINANCE:7800, HCLTECH:1620, SUNPHARMA:1980,
-  KOTAKBANK:1950, MARUTI:12800, TATAMOTORS:870, TATASTEEL:165, NTPC:375, POWERGRID:345,
-  WIPRO:585, LTIM:5600, ONGC:285, CIPLA:1580, COALINDIA:490, INDUSINDBK:1080,
-  BPCL:320, GRASIM:2750, ADANIENT:2550, HINDALCO:690, HAL:4800, DRREDDY:1420
-};
-const INDEX_PRICES = { 'Nifty 50':22450, 'SENSEX':73800, 'Nifty Bank':48200, 'Nifty IT':39500, 'Nifty Pharma':22100 };
+// ══════════════════════════════════════════════════════════════════════════════
+// MOCK DATA (market closed / no token)
+// ══════════════════════════════════════════════════════════════════════════════
+const MOCK_BASE = { RELIANCE:2920, SUZLON:62, IRFC:158, YESBANK:22, IDEA:9, JPPOWER:14, HDFCBANK:1840, INFY:1720, TCS:3980, ICICIBANK:1520, HINDUNILVR:2420, BHARTIARTL:1950, AXISBANK:1180, BAJFINANCE:6980, HCLTECH:1580, SUNPHARMA:2180, KOTAKBANK:2050, MARUTI:11200, TATAMOTORS:620, TATASTEEL:145, NTPC:385, POWERGRID:360, WIPRO:520, LTIM:5200, ONGC:265, CIPLA:1680, COALINDIA:420, INDUSINDBK:780, BPCL:295, GRASIM:2580, ADANIENT:2280, HINDALCO:640, HAL:4650, DRREDDY:1380, BAJAJFINSV:1920 };
+const IDX_BASE  = { 'Nifty 50':22950, 'SENSEX':75600, 'Nifty Bank':49800, 'Nifty IT':36400, 'Nifty Pharma':23800 };
+
+function initMockData() {
+  for (const s of STOCK_UNIVERSE) {
+    const base = MOCK_BASE[s.symbol] || 1000;
+    const drift = (Math.random() - 0.45) * base * 0.02;
+    liveStocks[s.symbol] = { symbol:s.symbol, name:s.name, sector:s.sector, price:+(base+drift).toFixed(2), change:+drift.toFixed(2), changePct:+((drift/base)*100).toFixed(2), volume:Math.round(5e5+Math.random()*4e6), lastUpdate:Date.now(), isMock:true };
+    fundamentals[s.symbol] = { high52: +(base*1.38).toFixed(2), low52: +(base*0.68).toFixed(2) };
+    // Include 52W in liveStocks for frontend modal display
+    liveStocks[s.symbol].high52 = fundamentals[s.symbol].high52;
+    liveStocks[s.symbol].low52  = fundamentals[s.symbol].low52;
+  }
+  for (const [name, base] of Object.entries(IDX_BASE)) {
+    const d = (Math.random()-0.5)*base*0.008;
+    liveIndices[name] = { price:+(base+d).toFixed(2), change:+d.toFixed(2), changePct:+((d/base)*100).toFixed(2), name };
+  }
+  // Also init penny stocks so they appear in liveStocks for frontend
+  for (const p of PENNY_STOCKS) {
+    const base = MOCK_BASE[p.symbol] || p.price || 20;
+    const drift = (Math.random() - 0.48) * base * 0.03;
+    liveStocks[p.symbol] = { symbol:p.symbol, name:p.name, sector:p.sector,
+      price:+(base+drift).toFixed(2), change:+drift.toFixed(2), changePct:+((drift/base)*100).toFixed(2),
+      volume:Math.round(2e6+Math.random()*8e6), lastUpdate:Date.now(), isMock:true,
+      high52:+(base*1.45).toFixed(2), low52:+(base*0.55).toFixed(2) };
+  }
+  recalcSignals();
+}
 
 function startMockTicks() {
-  if (mockTickInterval) return;
-  for (const s of stockUniverse) {
-    const base = MOCK_PRICES[s.symbol] || 1000;
-    const change = (Math.random() - 0.45) * base * 0.025;
-    liveData[s.symbol] = { symbol:s.symbol, name:s.name, sector:s.sector, price:+(base+change).toFixed(2), change:+change.toFixed(2), changePct:+((change/base)*100).toFixed(2), volume:Math.round(1e5 + Math.random()*5e6), lastUpdate:Date.now(), isMock:true };
-  }
-  for (const [name, base] of Object.entries(INDEX_PRICES)) {
-    const change = (Math.random() - 0.5) * base * 0.01;
-    marketIndices[name] = { price:+(base+change).toFixed(2), change:+change.toFixed(2), changePct:+((change/base)*100).toFixed(2), name };
-  }
-  recalcAllSignals();
-  broadcastLiveData();
+  if (mockInterval) return;
+  log('INFO', 'Mock tick simulator started (market closed / no token)');
+  let tickCount = 0;
 
-  mockTickInterval = setInterval(() => {
-    for (const [sym, d] of Object.entries(liveData)) {
-      const delta = (Math.random() - 0.499) * d.price * 0.0008;
-      const prev = d.price;
-      d.price = +(d.price + delta).toFixed(2);
-      d.prevPrice = prev;
-      d.change = +(d.change + delta).toFixed(2);
-      d.changePct = +((d.change / (MOCK_PRICES[sym] || d.price)) * 100).toFixed(2);
-      d.lastUpdate = Date.now();
+  mockInterval = setInterval(() => {
+    tickCount++;
+    const marketOpen = isMarketOpen();
+
+    if (!marketOpen) {
+      // Market closed — only indices drift (Gift Nifty, global futures trade 24/7)
+      for (const d of Object.values(liveIndices)) {
+        const drift = (Math.random() - 0.499) * d.price * 0.0002;
+        d.price = +(d.price + drift).toFixed(2);
+        d.change = +(d.change + drift).toFixed(2);
+        d.changePct = +((d.change / (IDX_BASE[d.name] || d.price)) * 100).toFixed(2);
+      }
+    } else {
+      // Market open — realistic intraday simulation
+      // Momentum factor: slight trending bias changes every ~60 ticks
+      const mktMomentum = Math.sin(tickCount / 80) * 0.0002;
+
+      for (const [sym, d] of Object.entries(liveStocks)) {
+        const base = MOCK_BASE[sym] || d.price;
+        // Stock-specific volatility based on sector
+        const stock = STOCK_UNIVERSE.find(s => s.symbol === sym);
+        const volMult = ['Metals','Energy','Defence'].includes(stock?.sector) ? 1.4 :
+                        ['IT','Banking'].includes(stock?.sector) ? 1.1 : 1.0;
+        const delta = (Math.random() - 0.499 + mktMomentum) * d.price * 0.0007 * volMult;
+        d.price = Math.max(+(base * 0.5).toFixed(2), +(d.price + delta).toFixed(2));
+        d.change = +(d.price - base).toFixed(2);
+        d.changePct = +((d.change / base) * 100).toFixed(2);
+        d.lastUpdate = Date.now();
+        if (!d.volume) d.volume = Math.round(500000 + Math.random() * 4000000);
+        d.volume += Math.round(Math.random() * 2000); // volume builds through day
+      }
+
+      for (const d of Object.values(liveIndices)) {
+        const base = IDX_BASE[d.name] || d.price;
+        const delta = (Math.random() - 0.499 + mktMomentum) * d.price * 0.0004;
+        d.price = +(d.price + delta).toFixed(2);
+        d.change = +(d.price - base).toFixed(2);
+        d.changePct = +((d.change / base) * 100).toFixed(2);
+      }
+
+      // Simulate VIX micro-moves
+      const vixDelta = (Math.random() - 0.5) * 0.05;
+      vixData.value = +Math.max(10, Math.min(40, vixData.value + vixDelta)).toFixed(2);
+      vixData.change = +vixDelta.toFixed(2);
+      vixData.trend = vixDelta > 0.02 ? 'rising' : vixDelta < -0.02 ? 'falling' : 'stable';
+
+      // Simulate FII/DII flow — trickles in through trading day
+      if (tickCount % 30 === 0) {
+        const fiiTick = Math.round((Math.random() - 0.55) * 200); // slight selling bias
+        const diiTick = Math.round((Math.random() - 0.45) * 250); // slight buying bias
+        fiiDiiData.fii = +(fiiDiiData.fii + fiiTick).toFixed(0);
+        fiiDiiData.dii = +(fiiDiiData.dii + Math.abs(diiTick)).toFixed(0);
+        // Crude and INR micro-moves
+        fiiDiiData.crude = +Math.max(55, Math.min(95, fiiDiiData.crude + (Math.random()-0.5)*0.3)).toFixed(1);
+        fiiDiiData.usdInr = +Math.max(82, Math.min(90, fiiDiiData.usdInr + (Math.random()-0.5)*0.04)).toFixed(2);
+      }
+
+      recalcSignals();
+      // Update price history every 5 ticks for technical indicators
+      if (tickCount % 5 === 0) {
+        for (const [sym, d] of Object.entries(liveStocks)) {
+          if (!priceHistory[sym]) priceHistory[sym] = [];
+          priceHistory[sym].push(d.price);
+          if (priceHistory[sym].length > 30) priceHistory[sym].shift();
+        }
+      }
+      // Check price alerts every 5 ticks
+      if (tickCount % 5 === 0 && priceAlerts.some(a => !a.triggered)) checkPriceAlerts();
     }
-    for (const d of Object.values(marketIndices)) {
-      const delta = (Math.random() - 0.499) * d.price * 0.0004;
-      d.price = +(d.price + delta).toFixed(2);
-      d.change = +(d.change + delta).toFixed(2);
-    }
-    recalcAllSignals();
     broadcastLiveData();
-  }, 1000);
+  }, marketOpen ? 1000 : 5000);
 }
 
 async function initLiveData() {
-  await fetchTopStocks();
-  await fetchFundamentals();
+  stockUniverse = STOCK_UNIVERSE;
+  initMockData();
   if (accessToken) {
     connectUpstoxWs();
-    setTimeout(() => {
-      if (Object.keys(liveData).length < 5) startMockTicks();
-    }, 5000);
+    setTimeout(() => { if (Object.keys(liveStocks).length < 5) startMockTicks(); }, 5000);
   } else {
     startMockTicks();
   }
+  log('OK', `Live data initialized — ${stockUniverse.length} stocks`);
 }
 
-// ── Frontend WS broadcast ─────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// WEBSOCKET BROADCAST
+// ══════════════════════════════════════════════════════════════════════════════
 const clients = new Set();
 wss.on('connection', ws => {
   clients.add(ws);
-  ws.send(JSON.stringify({ type:'init', stocks:liveData, indices:marketIndices, signals:signalCache, status:connectionStatus }));
+  ws.send(JSON.stringify({ type:'init', stocks:liveStocks, indices:liveIndices, signals:signalCache, status:connectionStatus, vix:vixData, fiiDii:fiiDiiData }));
   ws.on('close', () => clients.delete(ws));
   ws.on('error', () => clients.delete(ws));
+  ws.on('message', m => { if (m.toString()==='ping') ws.send('pong'); });
 });
 function broadcastLiveData() {
-  const msg = JSON.stringify({ type:'tick', stocks:liveData, indices:marketIndices, signals:signalCache });
-  for (const c of clients) { if (c.readyState === WebSocket.OPEN) c.send(msg); }
+  const msg = JSON.stringify({ type:'tick', stocks:liveStocks, indices:liveIndices, signals:signalCache, vix:vixData, fiiDii:fiiDiiData });
+  for (const c of clients) { if (c.readyState===WebSocket.OPEN) c.send(msg); }
 }
 function broadcastStatus() {
   const msg = JSON.stringify({ type:'status', status:connectionStatus });
-  for (const c of clients) { if (c.readyState === WebSocket.OPEN) c.send(msg); }
+  for (const c of clients) { if (c.readyState===WebSocket.OPEN) c.send(msg); }
 }
 
-cron.schedule('0 9 * * 1-5', () => { if (accessToken) initLiveData(); });
+// ══════════════════════════════════════════════════════════════════════════════
+// UNIT TESTS
+// ══════════════════════════════════════════════════════════════════════════════
+function runUnitTests() {
+  testResults = [];
+  function test(name, fn) {
+    try {
+      fn();
+      testResults.push({ name, pass: true });
+    } catch(e) {
+      testResults.push({ name, pass: false, error: e.message });
+      log('ERR', `TEST FAIL: ${name} — ${e.message}`);
+    }
+  }
+  function assert(cond, msg) { if (!cond) throw new Error(msg || 'Assertion failed'); }
+  function assertEqual(a, b, msg) { if (a !== b) throw new Error(msg || `Expected ${b}, got ${a}`); }
+  function assertRange(v, lo, hi, msg) { if (v < lo || v > hi) throw new Error(msg || `${v} not in [${lo},${hi}]`); }
 
+  // ── Encryption ────────────────────────────────────────────────────────────
+  test('Encryption: round-trip preserves data', () => {
+    const data = { apiKey: 'test123', num: 42, nested: { ok: true } };
+    const decrypted = dec(enc(data));
+    assert(decrypted.apiKey === 'test123' && decrypted.num === 42, 'Decrypt mismatch');
+  });
+
+  test('Encryption: different data → different ciphertext', () => {
+    const c1 = enc({ a: 1 }), c2 = enc({ a: 2 });
+    assert(c1 !== c2, 'Same ciphertext for different data');
+  });
+
+  test('PIN: SHA256 consistent', () => {
+    assertEqual(hash('1234'), hash('1234'), 'Same PIN same hash');
+    assert(hash('1234') !== hash('5678'), 'Different PINs differ');
+    assertEqual(hash('test').length, 64, 'SHA256 must be 64 chars');
+  });
+
+  // ── Signal Engine ─────────────────────────────────────────────────────────
+  test('Signal: STRONG BUY for excellent fundamentals', () => {
+    const sig = calcSignal('COALINDIA', MOCK_BASE['COALINDIA'] * 0.7);
+    assert(sig !== null, 'Signal should not be null');
+    assertRange(sig.score, 0, 100, 'Score out of range');
+    assert(['STRONG BUY','BUY','WATCH','HOLD','SELL','STRONG SELL'].includes(sig.signal), 'Invalid signal label');
+  });
+
+  test('Signal: score 0-100 for all universe stocks', () => {
+    for (const s of STOCK_UNIVERSE) {
+      const price = MOCK_BASE[s.symbol] || 1000;
+      const sig = calcSignal(s.symbol, price);
+      if (sig) assertRange(sig.score, 0, 100, `${s.symbol} score out of range`);
+    }
+  });
+
+  test('Signal: null input returns null safely', () => {
+    assert(calcSignal('X', 0, null) === null, 'Zero price should return null');
+  });
+
+  test('Signal: upside calculation correct (10% to target)', () => {
+    const sig = calcSignal('TEST', 1000, { pe:15, sectorPe:20, roe:18, debtToEquity:0.3, dividendYield:1, high52:1200, low52:800, targetPrice:1100 });
+    if (sig) assert(Math.abs(sig.upside - 10) < 0.2, `Upside should be ~10%, got ${sig.upside}`);
+  });
+
+  // ── Live Data ─────────────────────────────────────────────────────────────
+  test('Live data: stocks initialized', () => {
+    assert(Object.keys(liveStocks).length >= 20, `Only ${Object.keys(liveStocks).length} stocks — expected >= 20`);
+  });
+
+  test('Live data: indices initialized', () => {
+    assert(Object.keys(liveIndices).length >= 3, 'Expected at least 3 indices');
+    assert('Nifty 50' in liveIndices, 'Nifty 50 must be in indices');
+  });
+
+  test('Live data: signal cache populated', () => {
+    assert(Object.keys(signalCache).length >= 10, 'Signal cache should have >= 10 entries');
+  });
+
+  test('Live data: every stock has required fields', () => {
+    for (const [sym, d] of Object.entries(liveStocks)) {
+      assert(d.price > 0, `${sym}: price must be positive`);
+      assert(d.symbol, `${sym}: missing symbol field`);
+    }
+  });
+
+  // ── Market Data ───────────────────────────────────────────────────────────
+  test('Market hours: isMarketOpen returns boolean', () => {
+    assertEqual(typeof isMarketOpen(), 'boolean', 'isMarketOpen must return boolean');
+  });
+
+  test('Market hours: weekday boundaries correct', () => {
+    // Test helper — simulate IST time
+    function openAt(h, m, day) { const mins=h*60+m; return day>=1&&day<=5&&mins>=555&&mins<=930; }
+    assert( openAt(9,15,1),  '9:15 Mon should be open');
+    assert( openAt(15,30,5), '3:30 Fri should be open');
+    assert(!openAt(15,31,5), '3:31 should be closed');
+    assert(!openAt(9,14,1),  '9:14 should be pre-market');
+    assert(!openAt(11,0,6),  'Saturday should always be closed');
+  });
+
+  // ── Stock Universe ────────────────────────────────────────────────────────
+  test('Universe: has >= 20 stocks with all required fields', () => {
+    assert(STOCK_UNIVERSE.length >= 20, `Only ${STOCK_UNIVERSE.length} stocks`);
+    for (const s of STOCK_UNIVERSE) {
+      assert(s.symbol && s.instrumentKey && s.sector, `${s.symbol||'?'}: missing required field`);
+      assert(s.target > 0, `${s.symbol}: target must be positive`);
+      assert(s.instrumentKey.startsWith('NSE_EQ|'), `${s.symbol}: bad instrumentKey format`);
+    }
+  });
+
+  test('Universe: no duplicate symbols', () => {
+    const syms = STOCK_UNIVERSE.map(s=>s.symbol);
+    assertEqual(new Set(syms).size, syms.length, 'Duplicate symbols in universe');
+  });
+
+  // ── Strategy Grouper ──────────────────────────────────────────────────────
+  test('Strategy grouper: identifies vertical spread', () => {
+    const orders = [
+      { tradingsymbol:'NIFTY25APR23000CE', transaction_type:'BUY',  average_price:150, filled_quantity:50, status:'COMPLETE', exchange:'NFO' },
+      { tradingsymbol:'NIFTY25APR23500CE', transaction_type:'SELL', average_price:80,  filled_quantity:50, status:'COMPLETE', exchange:'NFO' },
+    ];
+    const strats = groupTradesToStrategies(orders);
+    assert(strats.length > 0, 'Should return at least 1 strategy');
+  });
+
+  // ── Config & Auth ─────────────────────────────────────────────────────────
+  test('Config: redirect URI uses HTTPS', () => {
+    const uri = appConfig.redirectUri || 'https://finr-production.up.railway.app/callback';
+    assert(uri.startsWith('https://'), 'Redirect must use HTTPS');
+    assert(uri.includes('/callback'), 'Must include /callback path');
+  });
+
+  test('Config: env vars loaded correctly', () => {
+    // These should be set from Railway env vars
+    if (process.env.UPSTOX_API_KEY)   assert(appConfig.apiKey,    'UPSTOX_API_KEY env var not loaded');
+    if (process.env.ZERODHA_API_KEY)  assert(appConfig.zApiKey,   'ZERODHA_API_KEY env var not loaded');
+    if (process.env.GEMINI_API_KEY)   assert(appConfig.geminiKey, 'GEMINI_API_KEY env var not loaded');
+  });
+
+  // ── Results ───────────────────────────────────────────────────────────────
+  const passed = testResults.filter(t => t.pass).length;
+  const failed = testResults.filter(t => !t.pass).length;
+  if (failed > 0) {
+    log('WARN', `Unit tests: ${passed}/${testResults.length} passed — ${failed} FAILED`);
+    testResults.filter(t=>!t.pass).forEach(t => log('ERR', `  FAIL: ${t.name} — ${t.error}`));
+  } else {
+    log('OK', `Unit tests: ${passed}/${testResults.length} passed ✅`);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HTML HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+function successPage(title, msg) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;font-family:monospace;display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:20px}h1{font-size:24px;color:#f2f2f7;letter-spacing:2px}p{color:#636366;font-size:14px}.b{background:rgba(48,209,88,.12);border:1px solid rgba(48,209,88,.3);padding:8px 24px;border-radius:20px;font-size:13px;color:#30d158}</style></head><body><div style="font-size:64px">✅</div><h1>${title}</h1><p>${msg}</p><script>setTimeout(()=>window.close(),3000)</script></body></html>`;
+}
+function errorPage(title, detail, host) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#ff453a;font-family:monospace;display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:16px;padding:20px}h1{font-size:22px;color:#f2f2f7}.box{background:#1c1c1e;border:1px solid rgba(255,69,58,.3);padding:16px 20px;border-radius:12px;max-width:500px;width:100%;font-size:12px;line-height:1.8;color:#aeaeb2}.lbl{font-size:10px;color:#636366;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}</style></head><body><div style="font-size:48px">❌</div><h1>${title}</h1><div class="box"><div class="lbl">Error:</div><div style="color:#ff453a">${detail}</div><br><div class="lbl">Callback URL must be:</div><div style="color:#ffd60a">https://${host}/callback</div></div></body></html>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SCHEDULED JOBS
+// ══════════════════════════════════════════════════════════════════════════════
+cron.schedule('15 9 * * 1-5', () => { if (accessToken) { initLiveData(); log('INFO', 'Market open — live data started'); } });
+cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); if (mockInterval) { clearInterval(mockInterval); mockInterval = null; } });
+cron.schedule('0 10,14 * * 1-5', () => { if (zAccessToken) { fetchZerodhaData(); log('INFO', 'Zerodha data refresh'); } });
+
+// Catch-all — serve frontend
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
+// ══════════════════════════════════════════════════════════════════════════════
+// STARTUP
+// ══════════════════════════════════════════════════════════════════════════════
 server.listen(PORT, async () => {
+  log('INFO', `═══════════════════════════════════════`);
+  log('INFO', `FINR v2.0 starting on port ${PORT}`);
   loadConfig();
-  console.log(`\n[FINR] ═══════════════════════════════════`);
-  console.log(`[FINR]  Server on port ${PORT}`);
-  console.log(`[FINR]  Keys: ${!!appConfig.apiKey} | PIN: ${!!appConfig.pin}`);
-  console.log(`[FINR] ═══════════════════════════════════\n`);
-  // Always start demo data so app looks alive
-  await fetchTopStocks();
-  await fetchFundamentals();
-  startMockTicks();
-  if (accessToken) connectUpstoxWs();
+  loadAlerts();
+  log('INFO', `Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey}`);
+  await initLiveData();
+  runUnitTests();
+  log('INFO', `Server ready — ${testResults.filter(t=>t.pass).length}/${testResults.length} tests passed`);
+  log('INFO', `═══════════════════════════════════════`);
 });

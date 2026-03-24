@@ -139,4 +139,3 @@ FINR is for **educational and informational purposes only**. Not SEBI registered
 ---
 
 Made with ❤️ for long-term Indian retail investors 🇮🇳
-"# force redeploy" 

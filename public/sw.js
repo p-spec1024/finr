@@ -1,30 +1,17 @@
-// FINR Service Worker — never intercept auth callbacks
-const CACHE = 'finr-v2';
-
-self.addEventListener('install', e => {
-  e.waitUntil(self.skipWaiting());
-});
-
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
-
-  // NEVER intercept these — let them go straight to server
-  if (url.pathname.startsWith('/callback') ||
-      url.pathname.startsWith('/auth/') ||
-      url.pathname.startsWith('/api/')) {
-    return; // pass through, no caching
+const CACHE_NAME='finr-v2';
+const STATIC=['/','/?from=home-screen','/manifest.json'];
+self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(STATIC)));self.skipWaiting();});
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});
+self.addEventListener('fetch',e=>{
+  // Never intercept auth/api/callback
+  const url=new URL(e.request.url);
+  if(url.pathname.startsWith('/callback')||url.pathname.startsWith('/api/')||url.pathname.startsWith('/auth/')||url.pathname.startsWith('/zerodha/')){
+    e.respondWith(fetch(e.request));return;
   }
-
-  // For everything else, network first
-  e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
-  );
+  // Network-first for HTML
+  if(e.request.headers.get('accept')?.includes('text/html')){
+    e.respondWith(fetch(e.request).catch(()=>caches.match('/')));return;
+  }
+  // Cache-first for static assets
+  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));
 });

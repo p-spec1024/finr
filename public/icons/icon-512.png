@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#060c1a" rx="92"/>
+  <rect x="40.96" y="40.96" width="430.08" height="430.08" fill="#0d1526" rx="77"/>
+  <text x="256" y="245.76" font-family="Arial,sans-serif" font-size="143" font-weight="bold" fill="#00d4aa" text-anchor="middle" dominant-baseline="middle">FINR</text>
+  <text x="256" y="368.64" font-family="Arial,sans-serif" font-size="77" fill="#00d4aa" text-anchor="middle">◆</text>
+</svg>
