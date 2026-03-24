@@ -79,9 +79,22 @@ app.get('/auth/login', (req, res) => {
   res.json({ url });
 });
 
+// Track used codes to prevent double-processing
+const usedCodes = new Set();
+
 app.get('/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) return res.status(400).send('No auth code received from Upstox.');
+
+  // Prevent double-processing same code (service worker / browser retry)
+  if (usedCodes.has(code)) {
+    console.log('[FINR] Code already used, ignoring duplicate request');
+    return res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="background:#0a0a0a;color:#30d158;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px"><div style="font-size:48px">✅</div><h2 style="color:#f2f2f7">Already Connected!</h2><p style="color:#636366">Token was already saved. Close this tab and return to FINR.</p><script>setTimeout(()=>window.close(),2000)</script></body></html>`);
+  }
+  usedCodes.add(code);
+  // Clean up old codes after 5 minutes
+  setTimeout(() => usedCodes.delete(code), 300000);
+
   try {
     // Always use the saved redirectUri if available
     // Railway runs behind a proxy so req.protocol may be 'http' — force https
