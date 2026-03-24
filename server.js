@@ -850,7 +850,7 @@ function startMockTicks() {
       if (tickCount % 5 === 0 && priceAlerts.some(a => !a.triggered)) checkPriceAlerts();
     }
     broadcastLiveData();
-  }, marketOpen ? 1000 : 5000);
+  }, isMarketOpen() ? 1000 : 5000);
 }
 
 async function initLiveData() {
