@@ -47,12 +47,21 @@ function decrypt(enc) {
   } catch { return null; }
 }
 function loadConfig() {
+  // Try encrypted file first
   if (fs.existsSync(CONFIG_FILE)) {
     const d = decrypt(fs.readFileSync(CONFIG_FILE, 'utf8'));
     if (d) appConfig = d;
   }
+  // Overlay with Railway env vars — these survive restarts unlike files
+  if (process.env.UPSTOX_API_KEY)    appConfig.apiKey      = process.env.UPSTOX_API_KEY.trim();
+  if (process.env.UPSTOX_API_SECRET) appConfig.apiSecret   = process.env.UPSTOX_API_SECRET.trim();
+  if (process.env.UPSTOX_REDIRECT)   appConfig.redirectUri = process.env.UPSTOX_REDIRECT.trim();
+  if (process.env.FINR_PIN)          appConfig.pin         = CryptoJS.SHA256(process.env.FINR_PIN.trim()).toString();
 }
-function saveConfig() { fs.writeFileSync(CONFIG_FILE, encrypt(appConfig)); }
+function saveConfig() {
+  try { fs.writeFileSync(CONFIG_FILE, encrypt(appConfig)); }
+  catch(e) { console.warn('[FINR] Cannot write config (ephemeral fs):', e.message); }
+}
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: true, credentials: true }));
