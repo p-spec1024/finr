@@ -126,22 +126,6 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
 .gn{font-size:22px;font-weight:800;line-height:1;}
 .gl{font-family:var(--mono);font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;}
 
-/* ─── MARKET CONTEXT ─── */
-.mctx{border-radius:var(--r);padding:14px;margin-bottom:12px;border:1px solid;}
-.mctx.high{background:rgba(255,69,58,.07);border-color:rgba(255,69,58,.25);}
-.mctx.medium{background:rgba(255,159,10,.07);border-color:rgba(255,159,10,.25);}
-.mctx.low{background:rgba(48,209,88,.07);border-color:rgba(48,209,88,.2);}
-.ctx-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
-.ctx-badge{padding:2px 10px;border-radius:50px;font-family:var(--mono);font-size:9px;font-weight:600;}
-.ctx-badge.high{background:rgba(255,69,58,.2);color:#ff453a;}
-.ctx-badge.medium{background:rgba(255,159,10,.2);color:#ff9f0a;}
-.ctx-badge.low{background:rgba(48,209,88,.2);color:#30d158;}
-.ctx-title{font-size:13px;font-weight:700;color:var(--t1);}
-.ctx-body{font-size:12px;color:var(--t2);line-height:1.7;}
-.ctx-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
-.ctag{padding:3px 10px;border-radius:50px;font-family:var(--mono);font-size:9px;font-weight:500;}
-.ctag.b{background:rgba(48,209,88,.12);color:var(--grn);border:1px solid rgba(48,209,88,.2);}
-.ctag.a{background:rgba(255,69,58,.12);color:var(--red);border:1px solid rgba(255,69,58,.2);}
 /* News cards */
 .news-item{background:var(--s2);border:1px solid var(--s4);border-radius:12px;padding:12px 14px;cursor:pointer;transition:all .2s;}
 .news-item:hover{border-color:var(--acc);background:var(--s3);}
@@ -464,7 +448,6 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
           </div>
         </div>
         <div class="idx-row" id="h-idx"></div>
-        <div id="h-ctx"></div>
 
         <!-- Live Market News -->
         <div class="card" id="news-card">
@@ -1031,8 +1014,6 @@ function refreshAll() {
   renderGlobalMarkets();
   renderSignals();
   if (typeof renderPenny==='function' && pennyLoaded) renderPenny();
-  // Re-fetch market context
-  if (typeof fetchMarketContext==='function') fetchMarketContext();
   // Re-fetch news
   if (typeof fetchNews==='function') fetchNews();
   setTimeout(()=>toast('Data refreshed ✅'),800);
@@ -1099,8 +1080,6 @@ async function initApp() {
   renderPenny();
   checkStatus();
   loadHealth();
-  // Market context — fetched from server
-  fetchMarketContext();
   fetchNews();
   // Market hours display
   const ist = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
@@ -1116,8 +1095,6 @@ async function initApp() {
   loadTestResults();
   // Auto-refresh status every 60s
   setInterval(checkStatus, 60000);
-  // Auto-refresh market context every 5 minutes
-  setInterval(fetchMarketContext, 300000);
   // Auto-refresh news every 10 minutes
   setInterval(fetchNews, 600000);
 }
@@ -1339,53 +1316,6 @@ function renderBreadth() {
 // ══════════════════════════════════════════════════════════
 // MARKET CONTEXT (Dynamic)
 // ══════════════════════════════════════════════════════════
-// Market context is fetched from server (/api/market-context)
-// which uses lib/marketContext.js — auto-updated for 2026 macro events
-let MARKET_CONTEXTS = [];
-
-async function fetchMarketContext() {
-  try {
-    const d = await fetch('/api/market-context').then(r=>r.json());
-    MARKET_CONTEXTS = d.events || [];
-  } catch {
-    // Fallback inline context if API fails
-    MARKET_CONTEXTS = [
-      { priority:'HIGH', icon:'🇺🇸', title:'US Tariff War — India Impact', impact:'IT & pharma exporters under headwind. Domestic sectors favoured.', sectors:{buy:['Manufacturing','Infra','Power'],avoid:['IT','Chemicals']} },
-      { priority:'HIGH', icon:'🏦', title:'RBI MPC — April 4-8, 2026', impact:'25bps rate cut expected. Banking, NBFC, Realty positive.', sectors:{buy:['Banking','NBFC','Realty'],avoid:[]} },
-      { priority:'MEDIUM', icon:'📊', title:'Q4 FY26 Earnings Season', impact:'IT results first. Deal wins and FY27 guidance will move sector.', sectors:{buy:[],avoid:[]} },
-    ];
-  }
-  renderMarketContext();
-}
-
-function renderMarketContext() {
-  const sorted = [...MARKET_CONTEXTS].sort((a,b)=>{const o={HIGH:0,MEDIUM:1,LOW:2};return o[a.priority]-o[b.priority];});
-  const el = document.getElementById('h-ctx');
-  if(!el) return;
-  el.innerHTML = sorted.slice(0,4).map(c=>{
-    const cls=c.priority.toLowerCase();
-    const buy=(c.sectors?.buy||[]).filter(Boolean);
-    const avoid=(c.sectors?.avoid||[]).filter(Boolean);
-    let tags='';
-    if(buy.length||avoid.length){
-      tags='<div class="ctx-tags">';
-      buy.forEach(t=>{tags+='<span class="ctag b">✅ '+t+'</span>';});
-      avoid.forEach(t=>{tags+='<span class="ctag a">❌ '+t+'</span>';});
-      tags+='</div>';
-    }
-    return '<div class="mctx '+cls+'">'
-      +'<div class="ctx-hd">'
-      +'<span style="font-size:18px">'+(c.icon||'📌')+'</span>'
-      +'<span class="ctx-badge '+cls+'">'+c.priority+'</span>'
-      +'<span class="ctx-title">'+c.title+'</span>'
-      +'</div>'
-      +'<div class="ctx-body">'+(c.impact||c.body||'')+'</div>'
-      +tags
-      +'</div>';
-  }).join('');
-}
-
-
 // ══════════════════════════════════════════════════════════
 // LIVE NEWS
 // ══════════════════════════════════════════════════════════
