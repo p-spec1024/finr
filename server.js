@@ -319,7 +319,7 @@ function groupTradesToStrategies(orders) {
 // ══════════════════════════════════════════════════════════════════════════════
 // GEMINI AI — HELPER WITH MODEL FALLBACK
 // ══════════════════════════════════════════════════════════════════════════════
-const GEMINI_MODELS = ['gemini-2.5-flash-preview-05-20', 'gemini-2.0-flash'];
+const GEMINI_MODELS = ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.0-flash'];
 async function callGemini(prompt, opts = {}) {
   const { temperature = 0.3, maxOutputTokens = 1000, timeout = 30000 } = opts;
   for (let i = 0; i < GEMINI_MODELS.length; i++) {
@@ -334,8 +334,8 @@ async function callGemini(prompt, opts = {}) {
       return { text, model };
     } catch (e) {
       const status = e.response?.status;
-      if (status === 429 && i < GEMINI_MODELS.length - 1) {
-        log('WARN', `Gemini ${model} rate limited (429) — falling back to ${GEMINI_MODELS[i+1]}`);
+      if ((status === 429 || status === 404) && i < GEMINI_MODELS.length - 1) {
+        log('WARN', `Gemini ${model} ${status === 429 ? 'rate limited' : 'not found'} (${status}) — falling back to ${GEMINI_MODELS[i+1]}`);
         continue;
       }
       throw e;
@@ -1080,9 +1080,16 @@ function processUpstoxQuote(key, val) {
   // Response keys use COLON format: "NSE_EQ:RELIANCE", not pipe format
   const price = val.last_price;
   if (!price) return false;
-  // close_price = previous day's close; ohlc.close = today's running close (same as last_price)
-  const prevClose = val.close_price || val.ohlc?.close || price;
-  const change = price - prevClose, pct = prevClose ? (change / prevClose) * 100 : 0;
+  // Use Upstox pre-calculated values if available, else compute from close_price/ohlc.close
+  let change, pct;
+  if (val.net_change !== undefined && val.net_change !== null) {
+    change = val.net_change;
+    pct = val.percentage_change || (val.close_price ? (change / val.close_price) * 100 : 0);
+  } else {
+    const prevClose = val.close_price || val.previous_close || val.prev_close || val.ohlc?.close || price;
+    change = price - prevClose;
+    pct = prevClose ? (change / prevClose) * 100 : 0;
+  }
   const iToken = val.instrument_token || ''; // pipe format: NSE_EQ|INE...
 
   if (key.includes('NSE_INDEX')) {
@@ -1137,7 +1144,10 @@ async function pollUpstoxPrices() {
           log('OK', `Upstox REST first response — ${Object.keys(data).length} instruments, sample keys: ${keys.join(', ')}`);
           // Log one sample quote to verify field names
           const sampleVal = Object.values(data)[0];
-          if (sampleVal) log('INFO', `Sample quote fields: last_price=${sampleVal.last_price} close_price=${sampleVal.close_price} ohlc.close=${sampleVal.ohlc?.close} net_change=${sampleVal.net_change}`);
+          if (sampleVal) {
+            log('INFO', `Sample quote ALL keys: ${Object.keys(sampleVal).join(', ')}`);
+            log('INFO', `Sample values: last_price=${sampleVal.last_price} close_price=${sampleVal.close_price} ohlc=${JSON.stringify(sampleVal.ohlc)} net_change=${sampleVal.net_change} prev_close=${sampleVal.prev_close} previous_close=${sampleVal.previous_close}`);
+          }
           pollFirstLog = false;
         }
         for (const [key, val] of Object.entries(data)) {
