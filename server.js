@@ -317,6 +317,33 @@ function groupTradesToStrategies(orders) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// GEMINI AI — HELPER WITH MODEL FALLBACK
+// ══════════════════════════════════════════════════════════════════════════════
+const GEMINI_MODELS = ['gemini-2.5-flash-preview-05-20', 'gemini-2.0-flash'];
+async function callGemini(prompt, opts = {}) {
+  const { temperature = 0.3, maxOutputTokens = 1000, timeout = 30000 } = opts;
+  for (let i = 0; i < GEMINI_MODELS.length; i++) {
+    const model = GEMINI_MODELS[i];
+    try {
+      const r = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${appConfig.geminiKey}`,
+        { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature, maxOutputTokens } },
+        { headers: { 'Content-Type': 'application/json' }, timeout }
+      );
+      const text = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      return { text, model };
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 429 && i < GEMINI_MODELS.length - 1) {
+        log('WARN', `Gemini ${model} rate limited (429) — falling back to ${GEMINI_MODELS[i+1]}`);
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // GEMINI AI — OPTIONS VALIDATOR
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/api/options-validate', async (req, res) => {
@@ -355,13 +382,9 @@ Respond ONLY with this exact JSON (no markdown fences):
 recommendation must be exactly TAKE, AVOID, or WAIT.
 confidence must be exactly HIGH, MEDIUM, or LOW.`;
 
-    const r = await axios.post(
-      `https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-flash-preview:generateContent?key=${appConfig.geminiKey}`,
-      { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 1000 } },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
-    );
-    const analysis = r.data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response from Gemini';
-    log('OK', `Gemini options analysis completed for: ${trade.substring(0, 50)}`);
+    const g = await callGemini(prompt);
+    const analysis = g.text || 'No response from Gemini';
+    log('OK', `Gemini options analysis completed (${g.model}) for: ${trade.substring(0, 50)}`);
     res.json({ analysis, marketData, configured: true });
   } catch(e) {
     log('ERR', 'Gemini call failed: ' + e.message);
@@ -414,13 +437,9 @@ RULES:
 - Give specific strike guidance where possible
 - Include at least one index option (NIFTY or BANKNIFTY) if conditions are favorable`;
 
-    const r = await axios.post(
-      `https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-flash-preview:generateContent?key=${appConfig.geminiKey}`,
-      { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 2500 } },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 45000 }
-    );
-    const raw = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-    log('OK', 'Gemini options recommendations generated');
+    const g = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 2500, timeout: 45000 });
+    const raw = g.text || '[]';
+    log('OK', `Gemini options recommendations generated (${g.model})`);
     // Try to parse as JSON, fallback to raw
     let recs = [];
     try {
@@ -487,13 +506,8 @@ app.get('/api/config-status', (req, res) => {
 app.get('/api/gemini-status', async (req, res) => {
   if (!appConfig.geminiKey) return res.json({ ok: false, reason: 'No API key configured' });
   try {
-    const r = await axios.post(
-      `https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-flash-preview:generateContent?key=${appConfig.geminiKey}`,
-      { contents: [{ parts: [{ text: 'Reply with just: OK' }] }], generationConfig: { maxOutputTokens: 10 } },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
-    );
-    const text = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    res.json({ ok: true, response: text.trim(), model: 'gemini-3-flash-preview' });
+    const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 10000 });
+    res.json({ ok: true, response: g.text.trim(), model: g.model });
   } catch(e) {
     res.json({ ok: false, reason: e.response?.data?.error?.message || e.message });
   }
