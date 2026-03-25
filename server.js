@@ -661,15 +661,15 @@ function calcTaxLiability(trades) {
   let stcgTotal = 0, ltcgTotal = 0;
   for (const t of trades) {
     const pnl = (t.sellPrice - t.buyPrice) * t.qty;
-    if (pnl <= 0) continue; // losses not taxed
+    if (pnl <= 0) continue;
     const days = calcHoldingDays(t.buyDate, t.sellDate);
     if (days > 365) ltcgTotal += pnl;
     else stcgTotal += pnl;
   }
-  const ltcgExemption = 125000; // ₹1.25L exemption
+  const ltcgExemption = 125000;
   const taxableLtcg = Math.max(0, ltcgTotal - ltcgExemption);
-  const stcgTax = stcgTotal * 0.20; // 20%
-  const ltcgTax = taxableLtcg * 0.125; // 12.5%
+  const stcgTax = stcgTotal * 0.20;
+  const ltcgTax = taxableLtcg * 0.125;
   return {
     stcgTotal: +stcgTotal.toFixed(2), ltcgTotal: +ltcgTotal.toFixed(2),
     ltcgExemption, taxableLtcg: +taxableLtcg.toFixed(2),
@@ -678,10 +678,80 @@ function calcTaxLiability(trades) {
   };
 }
 
-// Get unrealized P&L from current holdings (manual + Zerodha)
+// Auto-capture Zerodha daily trades at market close
+async function captureZerodhaTrades() {
+  if (!zAccessToken || !appConfig.zApiKey) return;
+  try {
+    const headers = { 'X-Kite-Version': '3', Authorization: `token ${appConfig.zApiKey}:${zAccessToken}` };
+    const [tradeR, posR] = await Promise.allSettled([
+      axios.get('https://api.kite.trade/trades', { headers }),
+      axios.get('https://api.kite.trade/portfolio/positions', { headers })
+    ]);
+    const today = new Date().toISOString().slice(0, 10);
+    let captured = 0;
+
+    // Capture executed trades — pair BUY+SELL by symbol for intraday
+    if (tradeR.status === 'fulfilled') {
+      const trades = tradeR.value.data.data || [];
+      const bySymbol = {};
+      for (const t of trades) {
+        if (!bySymbol[t.tradingsymbol]) bySymbol[t.tradingsymbol] = { buys: [], sells: [] };
+        if (t.transaction_type === 'BUY') bySymbol[t.tradingsymbol].buys.push(t);
+        else bySymbol[t.tradingsymbol].sells.push(t);
+      }
+      for (const [sym, data] of Object.entries(bySymbol)) {
+        if (data.buys.length && data.sells.length) {
+          const avgBuy = data.buys.reduce((s, t) => s + t.price * t.quantity, 0) / data.buys.reduce((s, t) => s + t.quantity, 0);
+          const avgSell = data.sells.reduce((s, t) => s + t.price * t.quantity, 0) / data.sells.reduce((s, t) => s + t.quantity, 0);
+          const qty = Math.min(data.buys.reduce((s, t) => s + t.quantity, 0), data.sells.reduce((s, t) => s + t.quantity, 0));
+          const tradeId = `z_${today}_${sym}`;
+          if (!tradeHistory.find(t => t.id === tradeId)) {
+            tradeHistory.push({ id: tradeId, symbol: sym, qty, buyPrice: +avgBuy.toFixed(2), sellPrice: +avgSell.toFixed(2), buyDate: today, sellDate: today, type: 'zerodha', added: new Date().toISOString() });
+            captured++;
+          }
+        }
+      }
+    }
+
+    // Capture closed positions with realized P&L
+    if (posR.status === 'fulfilled') {
+      const positions = [...(posR.value.data.data?.net || []), ...(posR.value.data.data?.day || [])];
+      for (const p of positions) {
+        if (p.quantity === 0 && p.sell_quantity > 0 && p.buy_quantity > 0) {
+          const tradeId = `zp_${today}_${p.tradingsymbol}`;
+          if (!tradeHistory.find(t => t.id === tradeId)) {
+            tradeHistory.push({ id: tradeId, symbol: p.tradingsymbol, qty: p.sell_quantity, buyPrice: +p.buy_price.toFixed(2), sellPrice: +p.sell_price.toFixed(2), buyDate: today, sellDate: today, type: 'zerodha', product: p.product, added: new Date().toISOString() });
+            captured++;
+          }
+        }
+      }
+    }
+
+    if (captured > 0) { saveTrades(); log('OK', `Captured ${captured} Zerodha trades for ${today}`); }
+    else { log('INFO', `No new Zerodha trades to capture for ${today}`); }
+  } catch (e) {
+    log('ERR', 'Zerodha trade capture failed: ' + e.message);
+  }
+}
+
+// Filter trades helper
+function filterTrades(trades, query) {
+  let filtered = [...trades];
+  if (query.from) filtered = filtered.filter(t => t.sellDate >= query.from);
+  if (query.to) filtered = filtered.filter(t => t.sellDate <= query.to);
+  if (query.symbol) filtered = filtered.filter(t => t.symbol.includes(query.symbol.toUpperCase()));
+  if (query.month) {
+    // month format: '2026-03'
+    filtered = filtered.filter(t => t.sellDate.startsWith(query.month));
+  }
+  if (query.year) {
+    filtered = filtered.filter(t => t.sellDate.startsWith(query.year));
+  }
+  return filtered.sort((a, b) => b.sellDate.localeCompare(a.sellDate));
+}
+
 function getUnrealizedPnl() {
   const items = [];
-  // Manual holdings
   try {
     if (fs.existsSync(PORTFOLIO_FILE)) {
       const d = dec(fs.readFileSync(PORTFOLIO_FILE, 'utf8'));
@@ -694,7 +764,6 @@ function getUnrealizedPnl() {
       }
     }
   } catch {}
-  // Zerodha holdings
   for (const h of zerodhaHoldings) {
     const lp = h.last_price || liveStocks[h.tradingsymbol]?.price || h.average_price;
     const pnl = (lp - h.average_price) * h.quantity;
@@ -705,20 +774,47 @@ function getUnrealizedPnl() {
   return { items, totalInvested: +totalInvested.toFixed(2), totalCurrent: +totalCurrent.toFixed(2), totalPnl: +(totalCurrent - totalInvested).toFixed(2) };
 }
 
-// P&L statement endpoint
+// P&L statement endpoint — supports filters: ?from=&to=&symbol=&month=&year=
 app.get('/api/pnl', (req, res) => {
   const unrealized = getUnrealizedPnl();
-  const realized = tradeHistory.map(t => {
+  const filtered = filterTrades(tradeHistory, req.query);
+  const realized = filtered.map(t => {
     const days = calcHoldingDays(t.buyDate, t.sellDate);
     const pnl = (t.sellPrice - t.buyPrice) * t.qty;
     return { ...t, pnl: +pnl.toFixed(2), pnlPct: t.buyPrice > 0 ? +((pnl / (t.buyPrice * t.qty)) * 100).toFixed(2) : 0, holdingDays: days, taxType: calcTaxType(days) };
   });
   const realizedTotal = realized.reduce((s, t) => s + t.pnl, 0);
-  const tax = calcTaxLiability(tradeHistory);
-  res.json({ unrealized, realized, realizedTotal: +realizedTotal.toFixed(2), tax });
+  const tax = calcTaxLiability(filtered);
+
+  // Monthly breakdown
+  const monthly = {};
+  for (const t of realized) {
+    const m = t.sellDate.slice(0, 7); // '2026-03'
+    if (!monthly[m]) monthly[m] = { month: m, pnl: 0, trades: 0, wins: 0, losses: 0 };
+    monthly[m].pnl += t.pnl;
+    monthly[m].trades++;
+    if (t.pnl >= 0) monthly[m].wins++; else monthly[m].losses++;
+  }
+  const monthlySummary = Object.values(monthly).sort((a, b) => b.month.localeCompare(a.month))
+    .map(m => ({ ...m, pnl: +m.pnl.toFixed(2), winRate: m.trades > 0 ? +((m.wins / m.trades) * 100).toFixed(0) : 0 }));
+
+  // Daily breakdown (last 30 trading days)
+  const daily = {};
+  for (const t of realized) {
+    const d = t.sellDate;
+    if (!daily[d]) daily[d] = { date: d, pnl: 0, trades: 0 };
+    daily[d].pnl += t.pnl;
+    daily[d].trades++;
+  }
+  const dailySummary = Object.values(daily).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30)
+    .map(d => ({ ...d, pnl: +d.pnl.toFixed(2) }));
+
+  // Unique symbols for filter dropdown
+  const symbols = [...new Set(tradeHistory.map(t => t.symbol))].sort();
+
+  res.json({ unrealized, realized, realizedTotal: +realizedTotal.toFixed(2), tax, monthlySummary, dailySummary, symbols, totalTrades: filtered.length });
 });
 
-// Trade history CRUD
 app.get('/api/trades', (req, res) => res.json(tradeHistory));
 
 app.post('/api/trades', (req, res) => {
@@ -736,6 +832,12 @@ app.delete('/api/trades/:id', (req, res) => {
   tradeHistory.splice(idx, 1);
   saveTrades();
   res.json({ ok: true });
+});
+
+// Manual trigger to capture today's Zerodha trades
+app.post('/api/trades/capture', async (req, res) => {
+  await captureZerodhaTrades();
+  res.json({ ok: true, count: tradeHistory.length });
 });
 
 app.get('/api/pnl/csv', (req, res) => {
@@ -1236,7 +1338,7 @@ function errorPage(title, detail, host) {
 // SCHEDULED JOBS
 // ══════════════════════════════════════════════════════════════════════════════
 cron.schedule('15 9 * * 1-5', () => { initLiveData(); log('INFO', 'Market open — live data started'); });
-cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); if (mockInterval) { clearInterval(mockInterval); mockInterval = null; } startTwelveDataPolling(); });
+cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); if (mockInterval) { clearInterval(mockInterval); mockInterval = null; } startTwelveDataPolling(); captureZerodhaTrades(); });
 cron.schedule('0 0 * * *', () => { stopTwelveDataPolling(); log('INFO', 'Midnight — Twelve Data polling stopped'); });
 cron.schedule('0 10,14 * * 1-5', () => { if (zAccessToken) { fetchZerodhaData(); log('INFO', 'Zerodha data refresh'); } });
 

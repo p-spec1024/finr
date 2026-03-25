@@ -474,6 +474,10 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
           <div class="card-t">📅 Upcoming Events</div>
           <div id="h-events"></div>
         </div>
+        <div class="card">
+          <div class="card-t">FII / DII Flow<span class="ct-r" onclick="goPage('insights');document.querySelector('#ins-tabs [data-it=tracker]').click()">Details →</span></div>
+          <div id="home-fii-dii"></div>
+        </div>
       </div>
 
       <!-- ══ MARKETS ══ -->
@@ -654,14 +658,40 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
 
         <!-- P&L Statement -->
         <div id="pt-pnl" style="display:none">
+          <!-- Unrealized -->
           <div class="card">
             <div class="card-t">Unrealized P&L — Current Holdings</div>
             <div id="pnl-unrealized"><div class="empty"><i>📊</i>Loading...</div></div>
           </div>
+
+          <!-- Filters -->
+          <div class="card" style="padding:12px 14px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+              <button class="fc on" data-pv="daily" onclick="setPnlView('daily',this)">Daily</button>
+              <button class="fc" data-pv="monthly" onclick="setPnlView('monthly',this)">Monthly</button>
+              <button class="fc" data-pv="yearly" onclick="setPnlView('yearly',this)">Yearly</button>
+              <button class="fc" data-pv="all" onclick="setPnlView('all',this)">All Trades</button>
+            </div>
+            <div class="g2" style="gap:8px">
+              <div class="ig" style="margin:0"><label>From</label><input type="date" id="pnl-from" onchange="applyPnlFilters()" value="2026-01-01"></div>
+              <div class="ig" style="margin:0"><label>To</label><input type="date" id="pnl-to" onchange="applyPnlFilters()"></div>
+            </div>
+            <div class="g2" style="gap:8px;margin-top:8px">
+              <div class="ig" style="margin:0"><label>Symbol</label><select id="pnl-sym-filter" onchange="applyPnlFilters()" style="background:var(--s3);border:1px solid var(--b2);border-radius:var(--rs);padding:8px;color:var(--t1);font-family:var(--mono);font-size:11px;outline:none;width:100%"><option value="">All Symbols</option></select></div>
+              <div style="display:flex;align-items:flex-end"><button class="btn btn-o" onclick="captureTrades()" style="margin:0;font-size:11px;padding:8px 12px;white-space:nowrap">🔄 Sync Zerodha</button></div>
+            </div>
+          </div>
+
+          <!-- Realized Summary -->
           <div class="card">
-            <div class="card-t">Realized P&L — Closed Trades</div>
-            <div id="pnl-realized-summary" style="margin-bottom:12px"></div>
-            <button class="add-btn" onclick="tglTradeForm()">＋ Add Closed Trade</button>
+            <div class="card-t">Realized P&L<span id="pnl-filter-label" style="font-weight:400;font-size:11px;color:var(--t3);margin-left:8px"></span></div>
+            <div id="pnl-realized-summary"></div>
+            <div id="pnl-view-content"></div>
+          </div>
+
+          <!-- Add Trade -->
+          <div class="card">
+            <button class="add-btn" onclick="tglTradeForm()">＋ Add Closed Trade Manually</button>
             <div class="pf-form" id="trade-form">
               <div style="font-size:15px;font-weight:700;margin-bottom:12px;color:var(--t1)">Add Closed Trade</div>
               <div class="g2">
@@ -676,6 +706,8 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
             </div>
             <div id="pnl-trades-table"></div>
           </div>
+
+          <!-- Tax -->
           <div class="card">
             <div class="card-t">Tax Breakdown — FY 2025-26</div>
             <div id="pnl-tax"><div class="empty"><i>🏛️</i>Add closed trades to see tax estimate</div></div>
@@ -686,82 +718,88 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
 
       <!-- ══ INSIGHTS ══ -->
       <div class="pg" id="pg-insights">
-        <!-- India VIX -->
-        <div class="vix-card">
-          <div>
-            <div style="font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">India VIX — Fear Index</div>
-            <div class="vix-val" id="vix-val">--</div>
-            <div class="vix-info" id="vix-info">Loading...</div>
-          </div>
-          <div style="text-align:right">
-            <div id="vix-interp" style="font-size:12px;color:var(--t2);max-width:140px;text-align:right;line-height:1.5"></div>
-            <div class="vix-gauge" style="margin-top:8px;margin-left:auto"><div class="vix-fill" id="vix-gauge-fill" style="width:0%"></div></div>
-          </div>
+        <!-- Sub-tabs -->
+        <div class="frow" id="ins-tabs" style="margin-bottom:14px">
+          <button class="fc on" data-it="ai">AI Tools</button>
+          <button class="fc" data-it="signals">Signals</button>
+          <button class="fc" data-it="tracker">Tracker</button>
         </div>
 
-        <!-- Options Validator -->
-        <div class="card">
-          <div class="card-t">🤖 Options Validator — Powered by Gemini AI<span class="ct-r" style="color:var(--grn)">FREE</span></div>
-          <div class="ov-wrap">
-            <textarea class="ov-input" id="ov-input" placeholder="Describe your friend's trade idea...&#10;e.g. Buy NIFTY 23000 CE April 2 lots&#10;or Sell BANKNIFTY 49000 CE + Buy 49500 CE (bear spread)"></textarea>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px">
-              <button onclick="document.getElementById('ov-input').value='Buy NIFTY 23000 CE April expiry 2 lots at market'" style="background:var(--s3);border:1px solid var(--b2);border-radius:50px;padding:4px 10px;font-size:10px;color:var(--t3);cursor:pointer;font-family:var(--mono)">NIFTY CE Buy</button>
-              <button onclick="document.getElementById('ov-input').value='Buy BANKNIFTY 48500 PE weekly expiry 1 lot'" style="background:var(--s3);border:1px solid var(--b2);border-radius:50px;padding:4px 10px;font-size:10px;color:var(--t3);cursor:pointer;font-family:var(--mono)">BANKNIFTY PE</button>
-              <button onclick="document.getElementById('ov-input').value='Bull call spread: Buy NIFTY 23000 CE Sell 23500 CE April 2 lots'" style="background:var(--s3);border:1px solid var(--b2);border-radius:50px;padding:4px 10px;font-size:10px;color:var(--t3);cursor:pointer;font-family:var(--mono)">Bull Spread</button>
-              <button onclick="document.getElementById('ov-input').value='Sell NIFTY 22500 PE April expiry 1 lot for premium income'" style="background:var(--s3);border:1px solid var(--b2);border-radius:50px;padding:4px 10px;font-size:10px;color:var(--t3);cursor:pointer;font-family:var(--mono)">Put Sell</button>
+        <!-- AI Tools tab -->
+        <div id="it-ai">
+          <!-- India VIX -->
+          <div class="vix-card">
+            <div>
+              <div style="font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">India VIX — Fear Index</div>
+              <div class="vix-val" id="vix-val">--</div>
+              <div class="vix-info" id="vix-info">Loading...</div>
             </div>
-            <button class="ov-btn" onclick="validateOptions()" id="ov-btn">🔍 Analyse This Trade</button>
-            <div id="ov-result" style="display:none"></div>
-            <div id="ov-mkt-data" style="display:none">
-              <div style="font-family:var(--mono);font-size:9px;color:var(--t3);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Market Data Used For Analysis</div>
-              <div class="ov-mkt" id="ov-mkt-grid"></div>
+            <div style="text-align:right">
+              <div id="vix-interp" style="font-size:12px;color:var(--t2);max-width:140px;text-align:right;line-height:1.5"></div>
+              <div class="vix-gauge" style="margin-top:8px;margin-left:auto"><div class="vix-fill" id="vix-gauge-fill" style="width:0%"></div></div>
             </div>
           </div>
-        </div>
 
-        <!-- Strong Buy (10) -->
-        <div class="card">
-          <div class="card-t">🟢 Strong Buy (10 stocks)<span class="ct-r" onclick="goPage('markets')">See live prices →</span></div>
-          <div id="ins-sb"><div class="empty"><i>⏳</i>Loading...</div></div>
-        </div>
-
-        <!-- Watch (10) -->
-        <div class="card">
-          <div class="card-t">👁 Watch List (10 stocks)</div>
-          <div id="ins-w"><div class="empty"><i>⏳</i>Loading...</div></div>
-        </div>
-
-        <!-- Caution (10) -->
-        <div class="card" style="border-left:3px solid var(--red)">
-          <div class="card-t">🔴 Caution / Avoid (10 stocks)</div>
-          <div id="ins-av"><div class="empty"><i>⏳</i>Loading...</div></div>
-        </div>
-
-        <!-- Smart Money -->
-        <div class="card">
-          <div class="card-t">🧠 Smart Money Tracker</div>
-          <div id="smart-money"></div>
-        </div>
-
-        <!-- FII/DII -->
-        <div class="card">
-          <div class="card-t">FII vs DII Flow</div>
-          <div id="fii-dii"></div>
-        </div>
-
-        <!-- Price Alerts -->
-        <div class="card">
-          <div class="card-t">🔔 Price Alerts<span class="ct-r" onclick="loadAlertsList()">Refresh</span></div>
-          <div style="display:flex;gap:8px;margin-bottom:10px">
-            <input type="text" id="al-sym" placeholder="RELIANCE" style="flex:1;background:var(--s3);border:1px solid var(--b2);border-radius:var(--rs);padding:8px 10px;color:var(--t1);font-family:var(--mono);font-size:12px;outline:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
-            <input type="number" id="al-price" placeholder="₹ target" style="width:100px;background:var(--s3);border:1px solid var(--b2);border-radius:var(--rs);padding:8px 10px;color:var(--t1);font-family:var(--mono);font-size:12px;outline:none">
-            <select id="al-type" style="background:var(--s3);border:1px solid var(--b2);border-radius:var(--rs);padding:8px 10px;color:var(--t1);font-family:var(--mono);font-size:12px;outline:none">
-              <option value="above">▲ Above</option>
-              <option value="below">▼ Below</option>
-            </select>
+          <!-- Options Validator -->
+          <div class="card">
+            <div class="card-t">🤖 Options Validator — Powered by Gemini AI<span class="ct-r" style="color:var(--grn)">FREE</span></div>
+            <div class="ov-wrap">
+              <textarea class="ov-input" id="ov-input" placeholder="Describe your friend's trade idea...&#10;e.g. Buy NIFTY 23000 CE April 2 lots&#10;or Sell BANKNIFTY 49000 CE + Buy 49500 CE (bear spread)"></textarea>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px">
+                <button onclick="document.getElementById('ov-input').value='Buy NIFTY 23000 CE April expiry 2 lots at market'" style="background:var(--s3);border:1px solid var(--b2);border-radius:50px;padding:4px 10px;font-size:10px;color:var(--t3);cursor:pointer;font-family:var(--mono)">NIFTY CE Buy</button>
+                <button onclick="document.getElementById('ov-input').value='Buy BANKNIFTY 48500 PE weekly expiry 1 lot'" style="background:var(--s3);border:1px solid var(--b2);border-radius:50px;padding:4px 10px;font-size:10px;color:var(--t3);cursor:pointer;font-family:var(--mono)">BANKNIFTY PE</button>
+                <button onclick="document.getElementById('ov-input').value='Bull call spread: Buy NIFTY 23000 CE Sell 23500 CE April 2 lots'" style="background:var(--s3);border:1px solid var(--b2);border-radius:50px;padding:4px 10px;font-size:10px;color:var(--t3);cursor:pointer;font-family:var(--mono)">Bull Spread</button>
+                <button onclick="document.getElementById('ov-input').value='Sell NIFTY 22500 PE April expiry 1 lot for premium income'" style="background:var(--s3);border:1px solid var(--b2);border-radius:50px;padding:4px 10px;font-size:10px;color:var(--t3);cursor:pointer;font-family:var(--mono)">Put Sell</button>
+              </div>
+              <button class="ov-btn" onclick="validateOptions()" id="ov-btn">🔍 Analyse This Trade</button>
+              <div id="ov-result" style="display:none"></div>
+              <div id="ov-mkt-data" style="display:none">
+                <div style="font-family:var(--mono);font-size:9px;color:var(--t3);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Market Data Used For Analysis</div>
+                <div class="ov-mkt" id="ov-mkt-grid"></div>
+              </div>
+            </div>
           </div>
-          <button class="btn btn-p" onclick="addAlert()" style="margin-bottom:10px">＋ Set Alert</button>
-          <div id="alerts-list"></div>
+        </div>
+
+        <!-- Signals tab -->
+        <div id="it-signals" style="display:none">
+          <div class="card">
+            <div class="card-t">🟢 Strong Buy (10 stocks)<span class="ct-r" onclick="goPage('markets')">See live prices →</span></div>
+            <div id="ins-sb"><div class="empty"><i>⏳</i>Loading...</div></div>
+          </div>
+          <div class="card">
+            <div class="card-t">👁 Watch List (10 stocks)</div>
+            <div id="ins-w"><div class="empty"><i>⏳</i>Loading...</div></div>
+          </div>
+          <div class="card" style="border-left:3px solid var(--red)">
+            <div class="card-t">🔴 Caution / Avoid (10 stocks)</div>
+            <div id="ins-av"><div class="empty"><i>⏳</i>Loading...</div></div>
+          </div>
+        </div>
+
+        <!-- Tracker tab -->
+        <div id="it-tracker" style="display:none">
+          <div class="card">
+            <div class="card-t">🧠 Smart Money Tracker</div>
+            <div id="smart-money"></div>
+          </div>
+          <div class="card">
+            <div class="card-t">FII vs DII Flow</div>
+            <div id="fii-dii"></div>
+          </div>
+          <div class="card">
+            <div class="card-t">🔔 Price Alerts<span class="ct-r" onclick="loadAlertsList()">Refresh</span></div>
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <input type="text" id="al-sym" placeholder="RELIANCE" style="flex:1;background:var(--s3);border:1px solid var(--b2);border-radius:var(--rs);padding:8px 10px;color:var(--t1);font-family:var(--mono);font-size:12px;outline:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+              <input type="number" id="al-price" placeholder="₹ target" style="width:100px;background:var(--s3);border:1px solid var(--b2);border-radius:var(--rs);padding:8px 10px;color:var(--t1);font-family:var(--mono);font-size:12px;outline:none">
+              <select id="al-type" style="background:var(--s3);border:1px solid var(--b2);border-radius:var(--rs);padding:8px 10px;color:var(--t1);font-family:var(--mono);font-size:12px;outline:none">
+                <option value="above">▲ Above</option>
+                <option value="below">▼ Below</option>
+              </select>
+            </div>
+            <button class="btn btn-p" onclick="addAlert()" style="margin-bottom:10px">＋ Set Alert</button>
+            <div id="alerts-list"></div>
+          </div>
         </div>
       </div>
 
@@ -1128,6 +1166,7 @@ function renderAll() {
   renderTicker();
   renderVix();
   renderFiiDii();
+  renderHomeFiiDii();
   renderGainersLosers();
   renderPortfolioSum();
 }
@@ -1524,6 +1563,24 @@ function renderFiiDii() {
   html+='<span style="color:'+fiiCol+'">FII '+fiiW+'%</span><span style="color:'+diiCol+'">DII '+diiW+'%</span>';
   html+='</div></div>';
   html+='<div style="font-size:11px;color:var(--t3);line-height:1.7">'+commentary+'</div>';
+  el.innerHTML=html;
+}
+
+function renderHomeFiiDii(){
+  const el=document.getElementById('home-fii-dii');if(!el)return;
+  const fiiPos=FIIDII.fii>=0,diiPos=FIIDII.dii>=0;
+  const fiiCol=fiiPos?'var(--grn)':'var(--red)',diiCol=diiPos?'var(--grn)':'var(--red)';
+  const fiiSign=fiiPos?'+':'-',diiSign=diiPos?'+':'-';
+  const total=Math.abs(FIIDII.fii)+Math.abs(FIIDII.dii)||1;
+  const fiiW=Math.round((Math.abs(FIIDII.fii)/total)*100),diiW=100-fiiW;
+  let html='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">';
+  html+='<div class="gbox"><div class="gn" style="color:'+fiiCol+'">'+fiiSign+'₹'+Math.abs(FIIDII.fii).toLocaleString('en-IN')+'Cr</div><div class="gl">'+(fiiPos?'FII Net Buy':'FII Net Sell')+'</div></div>';
+  html+='<div class="gbox"><div class="gn" style="color:'+diiCol+'">'+diiSign+'₹'+Math.abs(FIIDII.dii).toLocaleString('en-IN')+'Cr</div><div class="gl">'+(diiPos?'DII Net Buy':'DII Net Sell')+'</div></div></div>';
+  html+='<div style="display:flex;height:5px;border-radius:3px;overflow:hidden;gap:1px">';
+  html+='<div style="width:'+fiiW+'%;background:'+fiiCol+';border-radius:3px 0 0 3px"></div>';
+  html+='<div style="width:'+diiW+'%;background:'+diiCol+';border-radius:0 3px 3px 0"></div></div>';
+  html+='<div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--t3);margin-top:3px">';
+  html+='<span style="color:'+fiiCol+'">FII '+fiiW+'%</span><span style="color:'+diiCol+'">DII '+diiW+'%</span></div>';
   el.innerHTML=html;
 }
 
@@ -2069,7 +2126,39 @@ function calcOptionsPnl() {
 // ══════════════════════════════════════════════════════════
 // P&L STATEMENT
 // ══════════════════════════════════════════════════════════
+let curPnlView='daily';
+let pnlData=null;
+
 function tglTradeForm(){document.getElementById('trade-form').classList.toggle('on');}
+
+function setPnlView(view,btn){
+  curPnlView=view;
+  document.querySelectorAll('#pt-pnl [data-pv]').forEach(b=>b.classList.remove('on'));
+  if(btn)btn.classList.add('on');
+  applyPnlFilters();
+}
+
+function buildPnlQuery(){
+  const p=new URLSearchParams();
+  const from=document.getElementById('pnl-from')?.value;
+  const to=document.getElementById('pnl-to')?.value;
+  const sym=document.getElementById('pnl-sym-filter')?.value;
+  if(from)p.set('from',from);
+  if(to)p.set('to',to);
+  if(sym)p.set('symbol',sym);
+  return p.toString();
+}
+
+async function applyPnlFilters(){await loadPnlStatement();}
+
+async function captureTrades(){
+  try{
+    toast('Syncing Zerodha trades...');
+    const d=await(await fetch('/api/trades/capture',{method:'POST'})).json();
+    toast('Sync done — '+d.count+' trades total');
+    loadPnlStatement();
+  }catch{toast('Sync failed — check Zerodha connection');}
+}
 
 async function addTrade(){
   const sym=document.getElementById('tr-sym').value.trim(),qty=parseFloat(document.getElementById('tr-qty').value),
@@ -2080,7 +2169,7 @@ async function addTrade(){
     await fetch('/api/trades',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol:sym,qty,buyPrice:buy,sellPrice:sell,buyDate:bdate,sellDate:sdate})});
     ['tr-sym','tr-qty','tr-buy','tr-sell','tr-bdate','tr-sdate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     document.getElementById('trade-form').classList.remove('on');
-    loadPnlStatement();toast('Trade added ✅');
+    loadPnlStatement();toast('Trade added');
   }catch{toast('Failed to add trade');}
 }
 
@@ -2091,16 +2180,34 @@ async function deleteTrade(id){
 
 async function loadPnlStatement(){
   try{
-    const d=await(await fetch('/api/pnl')).json();
+    const qs=buildPnlQuery();
+    const d=await(await fetch('/api/pnl'+(qs?'?'+qs:''))).json();
+    pnlData=d;
     renderUnrealized(d.unrealized);
-    renderRealized(d.realized,d.realizedTotal);
+    populateSymbolFilter(d.symbols);
+    renderPnlView(d);
+    renderTradesTable(d.realized);
     renderTax(d.tax);
+    // Update filter label
+    const lbl=document.getElementById('pnl-filter-label');
+    if(lbl){
+      const v=curPnlView==='all'?'All Trades':curPnlView==='daily'?'Daily View':curPnlView==='monthly'?'Monthly View':'Yearly View';
+      lbl.textContent='— '+v+' ('+d.totalTrades+' trades)';
+    }
   }catch{document.getElementById('pnl-unrealized').innerHTML='<div class="empty"><i>⚠️</i>Failed to load P&L</div>';}
+}
+
+function populateSymbolFilter(symbols){
+  const sel=document.getElementById('pnl-sym-filter');if(!sel)return;
+  const cur=sel.value;
+  let opts='<option value="">All Symbols</option>';
+  if(symbols&&symbols.length){for(const s of symbols)opts+='<option value="'+s+'"'+(s===cur?' selected':'')+'>'+s+'</option>';}
+  sel.innerHTML=opts;
 }
 
 function renderUnrealized(u){
   const el=document.getElementById('pnl-unrealized');
-  if(!u||!u.items.length){el.innerHTML='<div class="empty"><i>📭</i>No holdings found</div>';return;}
+  if(!u||!u.items||!u.items.length){el.innerHTML='<div class="empty"><i>📭</i>No holdings found</div>';return;}
   const totalCls=u.totalPnl>=0?'var(--grn)':'var(--red)';
   let html='<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:2px solid var(--b2);margin-bottom:8px">';
   html+='<div><span style="font-size:11px;color:var(--t3)">Invested</span><div style="font-weight:700;color:var(--t1)">₹'+fmt(u.totalInvested)+'</div></div>';
@@ -2117,18 +2224,92 @@ function renderUnrealized(u){
   el.innerHTML=html;
 }
 
-function renderRealized(trades,total){
+function renderPnlView(d){
   const sumEl=document.getElementById('pnl-realized-summary');
-  const tblEl=document.getElementById('pnl-trades-table');
-  if(!trades||!trades.length){
+  const viewEl=document.getElementById('pnl-view-content');
+  if(!d.realized||!d.realized.length){
     sumEl.innerHTML='';
-    tblEl.innerHTML='<div class="empty"><i>📭</i>No closed trades yet — add one above</div>';
+    viewEl.innerHTML='<div class="empty"><i>📭</i>No closed trades yet</div>';
     return;
   }
-  const cls=total>=0?'var(--grn)':'var(--red)',sign=total>=0?'+':'';
-  sumEl.innerHTML='<div style="display:flex;justify-content:space-between;padding:10px;background:var(--s3);border-radius:var(--rs);margin-bottom:8px">'
-    +'<span style="color:var(--t3);font-size:12px">Total Realized P&L</span>'
-    +'<span style="font-weight:800;color:'+cls+'">'+sign+'₹'+fmt(total)+'</span></div>';
+  // Summary bar
+  const cls=d.realizedTotal>=0?'var(--grn)':'var(--red)',sign=d.realizedTotal>=0?'+':'';
+  const wins=d.realized.filter(t=>t.pnl>=0).length,losses=d.realized.length-wins;
+  const wr=d.realized.length>0?Math.round(wins/d.realized.length*100):0;
+  sumEl.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">'
+    +'<div style="background:var(--s3);border-radius:var(--rs);padding:10px;text-align:center"><div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:0.5px">Total P&L</div><div style="font-size:16px;font-weight:800;color:'+cls+'">'+sign+'₹'+fmt(d.realizedTotal)+'</div></div>'
+    +'<div style="background:var(--s3);border-radius:var(--rs);padding:10px;text-align:center"><div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:0.5px">Win Rate</div><div style="font-size:16px;font-weight:800;color:var(--t1)">'+wr+'%</div></div>'
+    +'<div style="background:var(--s3);border-radius:var(--rs);padding:10px;text-align:center"><div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:0.5px">W / L</div><div style="font-size:16px;font-weight:800"><span style="color:var(--grn)">'+wins+'</span><span style="color:var(--t4)"> / </span><span style="color:var(--red)">'+losses+'</span></div></div></div>';
+
+  if(curPnlView==='daily') renderDailyView(d.dailySummary,viewEl);
+  else if(curPnlView==='monthly') renderMonthlyView(d.monthlySummary,viewEl);
+  else if(curPnlView==='yearly') renderYearlyView(d.realized,viewEl);
+  else viewEl.innerHTML=''; // 'all' just shows the trades table below
+}
+
+function renderDailyView(days,el){
+  if(!days||!days.length){el.innerHTML='<div class="empty"><i>📅</i>No daily data</div>';return;}
+  let html='';
+  for(const d of days){
+    const c=d.pnl>=0?'var(--grn)':'var(--red)',s=d.pnl>=0?'+':'';
+    const dt=new Date(d.date+'T00:00:00');
+    const dayStr=dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--b1)">';
+    html+='<div><div style="font-weight:600;font-size:13px;color:var(--t1)">'+dayStr+'</div>';
+    html+='<div style="font-family:var(--mono);font-size:10px;color:var(--t3)">'+d.trades+' trade'+(d.trades>1?'s':'')+'</div></div>';
+    html+='<div style="text-align:right;font-weight:700;font-size:14px;color:'+c+'">'+s+'₹'+fmt(d.pnl)+'</div></div>';
+  }
+  el.innerHTML=html;
+}
+
+function renderMonthlyView(months,el){
+  if(!months||!months.length){el.innerHTML='<div class="empty"><i>📅</i>No monthly data</div>';return;}
+  let html='';
+  for(const m of months){
+    const c=m.pnl>=0?'var(--grn)':'var(--red)',s=m.pnl>=0?'+':'';
+    const dt=new Date(m.month+'-01T00:00:00');
+    const mStr=dt.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+    const barW=Math.min(100,Math.abs(m.winRate));
+    html+='<div style="padding:12px 0;border-bottom:1px solid var(--b1)">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+    html+='<div style="font-weight:700;font-size:13px;color:var(--t1)">'+mStr+'</div>';
+    html+='<div style="font-weight:800;font-size:15px;color:'+c+'">'+s+'₹'+fmt(m.pnl)+'</div></div>';
+    html+='<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-bottom:4px">';
+    html+='<span>'+m.trades+' trades · '+m.wins+'W '+m.losses+'L</span>';
+    html+='<span>Win rate '+m.winRate+'%</span></div>';
+    html+='<div style="height:4px;background:var(--b1);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+barW+'%;background:'+c+';border-radius:2px"></div></div>';
+    html+='</div>';
+  }
+  el.innerHTML=html;
+}
+
+function renderYearlyView(trades,el){
+  if(!trades||!trades.length){el.innerHTML='<div class="empty"><i>📅</i>No yearly data</div>';return;}
+  const years={};
+  for(const t of trades){
+    const y=t.sellDate.slice(0,4);
+    if(!years[y])years[y]={year:y,pnl:0,trades:0,wins:0,losses:0};
+    years[y].pnl+=t.pnl;years[y].trades++;
+    if(t.pnl>=0)years[y].wins++;else years[y].losses++;
+  }
+  let html='';
+  for(const y of Object.values(years).sort((a,b)=>b.year.localeCompare(a.year))){
+    const c=y.pnl>=0?'var(--grn)':'var(--red)',s=y.pnl>=0?'+':'';
+    const wr=y.trades>0?Math.round(y.wins/y.trades*100):0;
+    html+='<div style="background:var(--s3);border-radius:var(--rs);padding:14px;margin-bottom:8px">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html+='<div style="font-weight:800;font-size:16px;color:var(--t1)">FY '+y.year+'</div>';
+    html+='<div style="font-weight:800;font-size:18px;color:'+c+'">'+s+'₹'+fmt(y.pnl)+'</div></div>';
+    html+='<div style="display:flex;gap:16px;font-size:11px;color:var(--t3)">';
+    html+='<span>'+y.trades+' trades</span><span style="color:var(--grn)">'+y.wins+' wins</span><span style="color:var(--red)">'+y.losses+' losses</span><span>Win rate '+wr+'%</span>';
+    html+='</div></div>';
+  }
+  el.innerHTML=html;
+}
+
+function renderTradesTable(trades){
+  const tblEl=document.getElementById('pnl-trades-table');
+  if(!trades||!trades.length){tblEl.innerHTML='<div class="empty"><i>📭</i>No closed trades yet — add one above</div>';return;}
   let html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">';
   html+='<thead><tr style="border-bottom:2px solid var(--b2);color:var(--t3);font-family:var(--mono);font-size:9px;text-transform:uppercase">'
     +'<th style="text-align:left;padding:8px 4px">Date</th><th style="text-align:left;padding:8px 4px">Stock</th>'
@@ -2139,9 +2320,10 @@ function renderRealized(trades,total){
   for(const t of trades){
     const c=t.pnl>=0?'var(--grn)':'var(--red)',s=t.pnl>=0?'+':'';
     const taxBg=t.taxType==='LTCG'?'var(--grn)':'var(--ora)';
+    const src=t.type==='zerodha'?'<span style="font-size:8px;color:var(--blu);margin-left:2px">Z</span>':'';
     html+='<tr style="border-bottom:1px solid var(--b1)">'
       +'<td style="padding:6px 4px;color:var(--t2)">'+t.sellDate+'</td>'
-      +'<td style="padding:6px 4px;font-weight:700;color:var(--t1)">'+t.symbol+'</td>'
+      +'<td style="padding:6px 4px;font-weight:700;color:var(--t1)">'+t.symbol+src+'</td>'
       +'<td style="padding:6px 4px;text-align:right;color:var(--t2)">'+t.qty+'</td>'
       +'<td style="padding:6px 4px;text-align:right;color:var(--t2)">₹'+fmt(t.buyPrice)+'</td>'
       +'<td style="padding:6px 4px;text-align:right;color:var(--t2)">₹'+fmt(t.sellPrice)+'</td>'
@@ -2203,6 +2385,8 @@ function initNav(){
   document.querySelectorAll('#mkt-tabs .fc').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('#mkt-tabs .fc').forEach(x=>x.classList.remove('on'));btn.classList.add('on');curMktTab=btn.dataset.mt;['stocks','sectors','global','gainers','penny'].forEach(t=>{const el=document.getElementById('mt-'+t);if(el)el.style.display=t===curMktTab?'block':'none';});if(curMktTab==='gainers')renderGainersLosers();});});
   // Portfolio sub-tabs
   document.querySelectorAll('#pf-tabs .fc').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('#pf-tabs .fc').forEach(x=>x.classList.remove('on'));btn.classList.add('on');curPfTab=btn.dataset.pt;['holdings','zerodha','options','overview','pnl'].forEach(t=>{const el=document.getElementById('pt-'+t);if(el)el.style.display=t===curPfTab?'block':'none';});if(curPfTab==='zerodha')loadZerodhaData();if(curPfTab==='options')renderOpts();if(curPfTab==='pnl')loadPnlStatement();});});
+  // Insights sub-tabs
+  document.querySelectorAll('#ins-tabs .fc').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('#ins-tabs .fc').forEach(x=>x.classList.remove('on'));btn.classList.add('on');const it=btn.dataset.it;['ai','signals','tracker'].forEach(t=>{const el=document.getElementById('it-'+t);if(el)el.style.display=t===it?'block':'none';});if(it==='tracker')loadAlertsList();});});
   renderGlossary();
   renderEconCal();
   renderHomeEvents();
