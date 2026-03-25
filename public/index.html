@@ -1912,8 +1912,16 @@ async function getOptionsRecs() {
       res.innerHTML='<div style="font-size:12px;color:var(--t2);line-height:1.8">Could not generate recommendations. Try again.</div>';
       btn.disabled=false;btn.textContent='Get AI Recommendations';return;
     }
-    // Build accordion-style list
+    // Build accordion-style list with sentiment, strategy types, and detail modal
+    const sentEmoji = s => ({HIGHLY_CONFIDENT:'🟢🔥',CONFIDENT:'🟢',MODERATE:'🟡',SPECULATIVE:'🔴⚡'}[s]||'⚪');
+    const sentLabel = s => ({HIGHLY_CONFIDENT:'Highly Confident',CONFIDENT:'Confident',MODERATE:'Moderate',SPECULATIVE:'Speculative'}[s]||s||'—');
+    const stratBadge = s => {
+      const colors = {NAKED:'#ff9f0a',VERTICAL_SPREAD:'#30d158',IRON_CONDOR:'#5e5ce6',STRADDLE:'#bf5af2',HEDGED:'#64d2ff'};
+      return s ? '<span style="font-family:var(--mono);font-size:8px;padding:2px 6px;border-radius:4px;background:'+(colors[s]||'var(--s3)')+';color:#000;font-weight:700">'+s.replace('_',' ')+'</span>' : '';
+    };
     let html='<div style="font-family:var(--mono);font-size:9px;color:var(--t3);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">'+recs.length+' PICKS — '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})+' IST</div>';
+    // Store recs globally for modal access
+    window._aiRecs = recs;
     recs.forEach((r,i)=>{
       const isCE=(r.direction||'').toUpperCase()==='CE';
       const dirCol=isCE?'var(--grn)':'var(--red)';
@@ -1922,33 +1930,53 @@ async function getOptionsRecs() {
       const confCol=r.confidence==='HIGH'?'var(--grn)':r.confidence==='MEDIUM'||r.confidence==='MED'?'var(--acc)':'var(--t3)';
       const riskCol=r.riskLevel==='LOW'?'var(--grn)':r.riskLevel==='HIGH'?'var(--red)':'var(--acc)';
       const uid='or-'+i;
-      // Collapsed row (always visible) — click to expand
+      // Collapsed row — click to expand
       html+='<div style="background:var(--s2);border-radius:10px;margin-bottom:6px;overflow:hidden;border:1px solid var(--b1)">';
-      html+='<div onclick="document.getElementById(\''+uid+'\').style.display=document.getElementById(\''+uid+'\').style.display===\'none\'?\'block\':\'none\'" style="display:flex;align-items:center;padding:12px 14px;cursor:pointer;gap:10px">';
+      html+='<div onclick="document.getElementById(\''+uid+'\').style.display=document.getElementById(\''+uid+'\').style.display===\'none\'?\'block\':\'none\'" style="display:flex;align-items:center;padding:12px 14px;cursor:pointer;gap:8px">';
       html+='<div style="font-size:11px;font-weight:900;color:var(--t4);min-width:16px">'+(i+1)+'</div>';
-      html+='<div style="flex:1"><div style="font-size:14px;font-weight:800;color:var(--t1)">'+(r.symbol||'—')+'</div>';
+      html+='<div style="flex:1"><div style="display:flex;align-items:center;gap:6px"><span style="font-size:14px;font-weight:800;color:var(--t1)">'+(r.symbol||'—')+'</span>'+stratBadge(r.strategyType)+'</div>';
       if(r.strategy) html+='<div style="font-family:var(--mono);font-size:10px;color:var(--t3);margin-top:2px">'+r.strategy+'</div>';
       html+='</div>';
+      // Sentiment emoji
+      html+='<div style="font-size:14px" title="'+sentLabel(r.sentiment)+'">'+sentEmoji(r.sentiment)+'</div>';
       html+='<div style="background:'+dirBg+';border:1px solid '+dirCol+';border-radius:6px;padding:4px 10px;display:flex;align-items:center;gap:4px">';
       html+='<span style="color:'+dirCol+';font-weight:900;font-size:13px">'+dirIcon+' '+(r.direction||'')+'</span></div>';
       html+='<div style="font-family:var(--mono);font-size:9px;color:'+confCol+';text-align:right;min-width:32px">'+(r.confidence||'')+'</div>';
       html+='<div style="color:var(--t3);font-size:14px">›</div>';
       html+='</div>';
-      // Expanded detail panel (hidden by default)
+      // Expanded detail panel
       html+='<div id="'+uid+'" style="display:none;padding:0 14px 14px;border-top:1px solid var(--b1)">';
+      // Sentiment bar
+      html+='<div style="display:flex;align-items:center;gap:8px;margin:10px 0 8px;padding:6px 10px;background:var(--s3);border-radius:8px">';
+      html+='<span style="font-size:16px">'+sentEmoji(r.sentiment)+'</span>';
+      html+='<span style="font-family:var(--mono);font-size:11px;color:var(--t1);font-weight:700">'+sentLabel(r.sentiment)+'</span>';
+      if(r.riskReward) html+='<span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--acc)">R:R '+r.riskReward+'</span>';
+      html+='</div>';
       // Reasoning
-      if(r.reasoning) html+='<div style="font-size:12px;color:var(--t2);line-height:1.7;margin:10px 0 12px;padding:8px 10px;background:var(--s3);border-radius:8px">'+r.reasoning+'</div>';
-      // Entry / Target / StopLoss grid
-      html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">';
-      html+='<div style="background:var(--s3);border-radius:8px;padding:8px 10px;text-align:center"><div style="font-family:var(--mono);font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">ENTRY</div><div style="font-size:12px;color:var(--t1);font-weight:700">'+(r.entry||'—')+'</div></div>';
-      html+='<div style="background:var(--s3);border-radius:8px;padding:8px 10px;text-align:center"><div style="font-family:var(--mono);font-size:8px;color:var(--grn);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">TARGET</div><div style="font-size:12px;color:var(--grn);font-weight:700">'+(r.target||'—')+'</div></div>';
-      html+='<div style="background:var(--s3);border-radius:8px;padding:8px 10px;text-align:center"><div style="font-family:var(--mono);font-size:8px;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">STOP LOSS</div><div style="font-size:12px;color:var(--red);font-weight:700">'+(r.stopLoss||'—')+'</div></div>';
+      if(r.reasoning) html+='<div style="font-size:12px;color:var(--t2);line-height:1.7;margin:0 0 10px;padding:8px 10px;background:var(--s3);border-radius:8px">💡 '+r.reasoning+'</div>';
+      // Fundamentals & Technicals
+      if(r.fundamentals||r.technicals) {
+        html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">';
+        if(r.fundamentals) html+='<div style="background:var(--s3);border-radius:8px;padding:8px 10px"><div style="font-family:var(--mono);font-size:8px;color:var(--acc);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">FUNDAMENTALS</div><div style="font-size:11px;color:var(--t2);line-height:1.5">'+r.fundamentals+'</div></div>';
+        if(r.technicals) html+='<div style="background:var(--s3);border-radius:8px;padding:8px 10px"><div style="font-family:var(--mono);font-size:8px;color:var(--acc);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">TECHNICALS</div><div style="font-size:11px;color:var(--t2);line-height:1.5">'+r.technicals+'</div></div>';
+        html+='</div>';
+      }
+      // Entry / Target / StopLoss / Target Time grid
+      html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px">';
+      html+='<div style="background:var(--s3);border-radius:8px;padding:8px 10px;text-align:center"><div style="font-family:var(--mono);font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">ENTRY</div><div style="font-size:11px;color:var(--t1);font-weight:700">'+(r.entry||'—')+'</div></div>';
+      html+='<div style="background:var(--s3);border-radius:8px;padding:8px 10px;text-align:center"><div style="font-family:var(--mono);font-size:8px;color:var(--grn);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">TARGET</div><div style="font-size:11px;color:var(--grn);font-weight:700">'+(r.target||'—')+'</div></div>';
+      html+='<div style="background:var(--s3);border-radius:8px;padding:8px 10px;text-align:center"><div style="font-family:var(--mono);font-size:8px;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">STOP LOSS</div><div style="font-size:11px;color:var(--red);font-weight:700">'+(r.stopLoss||'—')+'</div></div>';
+      html+='<div style="background:var(--s3);border-radius:8px;padding:8px 10px;text-align:center"><div style="font-family:var(--mono);font-size:8px;color:var(--acc);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">TIME</div><div style="font-size:11px;color:var(--t1);font-weight:700">'+(r.targetTime||r.timeframe||'—')+'</div></div>';
       html+='</div>';
-      // Risk & Timeframe
-      html+='<div style="display:flex;gap:12px;align-items:center">';
-      if(r.riskLevel) html+='<span style="font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:4px;background:var(--s3);color:'+riskCol+'">Risk: '+(r.riskLevel||'')+'</span>';
-      if(r.timeframe) html+='<span style="font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:4px;background:var(--s3);color:var(--t3)">'+(r.timeframe||'')+'</span>';
+      // Risk / Max Loss / Hedge row
+      html+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">';
+      if(r.riskLevel) html+='<span style="font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:4px;background:var(--s3);color:'+riskCol+'">Risk: '+r.riskLevel+'</span>';
+      if(r.maxLoss) html+='<span style="font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:4px;background:rgba(255,69,58,.1);color:var(--red)">Max Loss: '+r.maxLoss+'</span>';
       html+='</div>';
+      // Hedge suggestion
+      if(r.hedgeSuggestion) html+='<div style="font-size:11px;color:var(--t2);line-height:1.5;padding:6px 10px;background:rgba(100,210,255,.08);border:1px solid rgba(100,210,255,.2);border-radius:8px;margin-bottom:8px">🛡️ <strong>Hedge:</strong> '+r.hedgeSuggestion+'</div>';
+      // Open stock modal button
+      html+='<button onclick="openMod(\''+r.symbol+'\')" style="background:rgba(10,132,255,.12);color:#0a84ff;border:1px solid rgba(10,132,255,.2);border-radius:6px;padding:6px 14px;font-size:11px;font-family:var(--mono);cursor:pointer;width:100%">📊 View Full Stock Analysis</button>';
       html+='</div></div>';
     });
     html+='<div style="font-family:var(--mono);font-size:9px;color:var(--t4);text-align:center;margin-top:10px;line-height:1.6">AI recommendations are for analysis only — not financial advice.<br>Always do your own research before trading.</div>';

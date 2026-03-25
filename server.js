@@ -404,22 +404,48 @@ app.get('/api/options-recommend', async (req, res) => {
     const topLosers  = [...stocks].sort((a,b) => a.changePct - b.changePct).slice(0,10);
     const strongSignals = Object.values(signalCache).filter(s => s.score >= 65).sort((a,b) => b.score - a.score).slice(0,8);
 
-    const stockSummary = stocks.slice(0,30).map(s => {
+    const stockSummary = stocks.slice(0,40).map(s => {
       const sig = signalCache[s.symbol];
       const fund = STOCK_UNIVERSE.find(x => x.symbol === s.symbol);
-      return `${s.symbol}: ₹${s.price} (${s.changePct>=0?'+':''}${s.changePct.toFixed(2)}%) PE:${fund?.pe||'?'} Signal:${sig?.signal||'--'} Score:${sig?.score||0}`;
+      const f52 = fundamentals[s.symbol];
+      return `${s.symbol}:₹${s.price}(${s.changePct>=0?'+':''}${s.changePct.toFixed(1)}%) PE:${fund?.pe||'?'} ROE:${fund?.roe||'?'} DE:${fund?.de||'?'} Sig:${sig?.signal||'--'}(${sig?.score||0}) H52:₹${f52?.high52||'?'} L52:₹${f52?.low52||'?'} Tgt:₹${fund?.target||'?'}`;
     }).join('\n');
 
-    const prompt = `NSE F&O options strategist. Recommend TOP 5 stocks/indices for options trading NOW with CE or PE.
+    // Sector performance summary
+    const sectorPerf = {};
+    for (const s of stocks) {
+      if (!s.sector) continue;
+      if (!sectorPerf[s.sector]) sectorPerf[s.sector] = { total:0, count:0 };
+      sectorPerf[s.sector].total += (s.changePct || 0);
+      sectorPerf[s.sector].count++;
+    }
+    const sectorStr = Object.entries(sectorPerf).map(([k,v]) => `${k}:${(v.total/v.count).toFixed(2)}%`).join(' ');
 
-MARKET: Nifty=${nifty?.price||'?'}(${nifty?.changePct>=0?'+':''}${nifty?.changePct||0}%) BankNifty=${bankNifty?.price||'?'}(${bankNifty?.changePct>=0?'+':''}${bankNifty?.changePct||0}%) VIX=${vixData.value}(${vixData.trend}) FII=₹${fiiDiiData.fii}Cr DII=₹${fiiDiiData.dii}Cr ${isMarketOpen()?'OPEN':'CLOSED'}
-GAINERS: ${topGainers.map(s=>`${s.symbol}(${s.changePct>=0?'+':''}${s.changePct.toFixed(1)}%)`).join(',')}
-LOSERS: ${topLosers.map(s=>`${s.symbol}(${s.changePct.toFixed(1)}%)`).join(',')}
-STOCKS: ${stocks.slice(0,35).map(s=>{const sig=signalCache[s.symbol];return `${s.symbol}:₹${s.price}(${s.changePct>=0?'+':''}${s.changePct.toFixed(1)}%)S${sig?.score||0}`;}).join(' ')}
+    const prompt = `You are an expert NSE F&O options strategist with deep technical + fundamental analysis skills. Recommend TOP 5-6 stocks/indices for options trading NOW.
+
+MARKET SNAPSHOT:
+Nifty=${nifty?.price||'?'}(${nifty?.changePct>=0?'+':''}${nifty?.changePct||0}%) BankNifty=${bankNifty?.price||'?'}(${bankNifty?.changePct>=0?'+':''}${bankNifty?.changePct||0}%) VIX=${vixData.value}(${vixData.trend}) FII=₹${fiiDiiData.fii}Cr DII=₹${fiiDiiData.dii}Cr Status:${isMarketOpen()?'OPEN':'CLOSED'}
+
+SECTOR PERFORMANCE: ${sectorStr}
+
+TOP GAINERS: ${topGainers.map(s=>`${s.symbol}(${s.changePct>=0?'+':''}${s.changePct.toFixed(1)}%)`).join(',')}
+TOP LOSERS: ${topLosers.map(s=>`${s.symbol}(${s.changePct.toFixed(1)}%)`).join(',')}
+STRONG SIGNALS: ${strongSignals.map(s=>`${s.symbol}(${s.signal},${s.score})`).join(',')}
+
+STOCKS DATA (with fundamentals, 52W range, target):
+${stockSummary}
+
+ANALYSIS REQUIREMENTS:
+1. Do thorough technical analysis (support/resistance, RSI zones, trend, volume)
+2. Do fundamental check (PE vs sector, ROE, debt, dividend yield)
+3. Suggest specific strategy: NAKED CE/PE, BULL CALL SPREAD, BEAR PUT SPREAD, IRON CONDOR, or HEDGED positions
+4. For each pick, provide sentiment: HIGHLY_CONFIDENT, CONFIDENT, MODERATE, SPECULATIVE
+5. Include entry price range, target price range, target timeframe, and stop loss
+6. Consider VIX level for strategy selection (high VIX = sell premium, low VIX = buy premium)
 
 Reply ONLY valid JSON array, NO markdown fences, NO text before/after:
-[{"symbol":"NAME","direction":"CE or PE","confidence":"HIGH/MED/LOW","strategy":"specific strike & expiry","reasoning":"why this stock, trend, support/resistance","entry":"price or condition","target":"target price/% for the option","stopLoss":"SL level","riskLevel":"LOW/MED/HIGH","timeframe":"Intraday/Weekly/Monthly"}]
-Keep reasoning under 40 words per stock. Include NIFTY or BANKNIFTY if favorable.`;
+[{"symbol":"NAME","direction":"CE or PE","confidence":"HIGH/MED/LOW","sentiment":"HIGHLY_CONFIDENT/CONFIDENT/MODERATE/SPECULATIVE","strategy":"Naked CE / Bull Call Spread 23000-23200 / Bear Put Spread etc","strategyType":"NAKED/VERTICAL_SPREAD/IRON_CONDOR/STRADDLE/HEDGED","reasoning":"detailed 50-word analysis: why this stock, technical levels, fundamental backing, sector trend","fundamentals":"PE:x ROE:y% D/E:z — brief fundamental view","technicals":"RSI zone, support/resistance levels, trend direction, 52W position","entry":"₹xxx-₹xxx or specific strike price","target":"₹xxx-₹xxx target range","targetTime":"1-3 days / 1 week / 2 weeks / monthly expiry","stopLoss":"₹xxx SL level","riskLevel":"LOW/MED/HIGH","riskReward":"1:2 / 1:3 etc","maxLoss":"₹xxx per lot if wrong","hedgeSuggestion":"optional hedge: buy xxx as protection"}]
+Include NIFTY or BANKNIFTY if favorable. Be thorough and accurate.`;
 
     const g = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 4000, timeout: 45000 });
     const raw = g.text || '[]';
