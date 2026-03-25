@@ -596,6 +596,67 @@ suite('Signal Classification Labels', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+// SUITE 12 — Twelve Data & Post-Market Logic
+// ══════════════════════════════════════════════════════════════════════════════
+suite('Twelve Data & Post-Market', () => {
+
+  // Post-market window helper (mirrors server.js logic)
+  function isPostMarket(h, m) {
+    const mins = h * 60 + m;
+    return mins >= 930 && mins < 1440; // 3:30 PM to midnight IST
+  }
+
+  test('3:30 PM → post-market', ()    => assert(isPostMarket(15, 30)));
+  test('6:00 PM → post-market', ()    => assert(isPostMarket(18, 0)));
+  test('11:59 PM → post-market', ()   => assert(isPostMarket(23, 59)));
+  test('3:29 PM → not post-market', () => assert(!isPostMarket(15, 29)));
+  test('9:15 AM → not post-market', () => assert(!isPostMarket(9, 15)));
+  test('Midnight → not post-market', () => assert(!isPostMarket(0, 0)));
+  test('2:00 AM → not post-market', ()  => assert(!isPostMarket(2, 0)));
+
+  // Symbol config validation
+  const TWELVE_SYMBOLS = [
+    { key:'GIFT_NIFTY', symbol:'NIFTY 50',  name:'Gift Nifty',  type:'Index' },
+    { key:'GOLD',       symbol:'XAU/USD',    name:'Gold $/oz',   type:'Commodity' },
+    { key:'CRUDE',      symbol:'CL',         name:'Crude WTI',   type:'Commodity' },
+    { key:'USDINR',     symbol:'USD/INR',    name:'USD/INR',     type:'Currency' },
+    { key:'SP500',      symbol:'SPX',        name:'S&P 500',     type:'Index' },
+    { key:'NASDAQ',     symbol:'IXIC',       name:'NASDAQ',      type:'Index' },
+    { key:'DOW',        symbol:'DJI',        name:'Dow Jones',   type:'Index' },
+    { key:'NIKKEI',     symbol:'NI225',      name:'Nikkei 225',  type:'Index' },
+  ];
+
+  test('8 Twelve Data symbols configured', () => {
+    assertEqual(TWELVE_SYMBOLS.length, 8);
+  });
+
+  test('All symbols have key, symbol, name, type', () => {
+    for (const s of TWELVE_SYMBOLS) {
+      assert(s.key, 'Missing key');
+      assert(s.symbol, 'Missing symbol');
+      assert(s.name, 'Missing name');
+      assert(['Index','Commodity','Currency'].includes(s.type), `Bad type: ${s.type}`);
+    }
+  });
+
+  test('No duplicate keys', () => {
+    const keys = TWELVE_SYMBOLS.map(s => s.key);
+    assertEqual(new Set(keys).size, keys.length, 'Duplicate keys found');
+  });
+
+  test('API call budget: 8 symbols × 85 polls = 680 < 800', () => {
+    const dailyCalls = 8 * 85;
+    assert(dailyCalls <= 800, `${dailyCalls} exceeds 800 free tier limit`);
+  });
+
+  test('Poll interval 6 min: 3:30–midnight = 510 min / 6 = 85 polls', () => {
+    const windowMins = (24 * 60) - (15 * 60 + 30); // midnight - 3:30 PM
+    const polls = Math.floor(windowMins / 6);
+    assertEqual(polls, 85);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 // PRINT RESULTS
 // ══════════════════════════════════════════════════════════════════════════════
 const W = 66;

@@ -869,7 +869,7 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
 // STATE
 // ══════════════════════════════════════════════════════════
 let WS, PI;
-let S={}, SIG={}, IDX={}, VIX={value:16.2,trend:'stable'}, FIIDII={fii:-3240,dii:4180,usdInr:86.4,crude:72.8};
+let S={}, SIG={}, IDX={}, VIX={value:16.2,trend:'stable'}, FIIDII={fii:-3240,dii:4180,usdInr:86.4,crude:72.8}, GM={};
 let PF=[], NT=[], OPTS=[];
 let srt='score', sasc=false, flt='all';
 let pp={}, ei=-1, pb='';
@@ -998,6 +998,7 @@ function connectWS() {
         if(msg.signals) SIG=msg.signals;
         if(msg.vix)     VIX=msg.vix;
         if(msg.fiiDii)  FIIDII=msg.fiiDii;
+        if(msg.globalMarkets && Object.keys(msg.globalMarkets).length) GM=msg.globalMarkets;
         if(msg.status)  setSt(msg.status);
         if(msg.universe && msg.universe.length) {
           window._SU={};
@@ -1037,6 +1038,7 @@ function startRestPoll() {
       if(d.signals) SIG=d.signals;
       if(d.vix)     VIX=d.vix;
       if(d.fiiDii)  FIIDII=d.fiiDii;
+      if(d.globalMarkets && Object.keys(d.globalMarkets).length) GM=d.globalMarkets;
       if(d.universe && d.universe.length) {
         window._SU={};
         d.universe.forEach(s=>{window._SU[s.symbol]=s;});
@@ -1097,24 +1099,25 @@ function renderHeroIdx() {
     const hc = document.getElementById('h-chg');
     if(hc){hc.className='hbdg '+(n.changePct>=0?'up':'dn');hc.textContent=`${n.changePct>=0?'+':''}${n.changePct?.toFixed(2)}% ${n.changePct>=0?'▲':'▼'}`;}
   }
-  // Index chips — includes demo global data
+  // Index chips — live global data from Twelve Data when available, fallback to demo
+  const gmChip = (key, fallbackName, fallbackPrice, fallbackPct) => {
+    if (GM[key] && GM[key].isLive) return { name: GM[key].name, price: GM[key].price, changePct: GM[key].changePct };
+    return { name: fallbackName, price: fallbackPrice, changePct: fallbackPct, isMock: true };
+  };
   const chips = [
     ...(IDX['Nifty 50']       ? [{ name:'NIFTY 50',     ...IDX['Nifty 50'] }]      : []),
     ...(IDX['SENSEX']         ? [{ name:'SENSEX',        ...IDX['SENSEX'] }]         : []),
     ...(IDX['Nifty Bank']     ? [{ name:'BANK NIFTY',    ...IDX['Nifty Bank'] }]     : []),
     ...(IDX['Nifty IT']       ? [{ name:'NIFTY IT',      ...IDX['Nifty IT'] }]       : []),
     ...(IDX['Nifty Pharma']   ? [{ name:'NIFTY PHARMA',  ...IDX['Nifty Pharma'] }]   : []),
-    { name:'GIFT NIFTY',    price:22680, changePct:0.22, isMock:true },
-    { name:'S&P 500',       price:5480,  changePct:-0.35, isMock:true },
-    { name:'NASDAQ',        price:17250, changePct:-0.48, isMock:true },
-    { name:'DOW JONES',     price:39800, changePct:0.12, isMock:true },
-    { name:'NIKKEI 225',    price:38900, changePct:0.55, isMock:true },
-    { name:'HANG SENG',     price:18200, changePct:-0.72, isMock:true },
-    { name:'FTSE 100',      price:8240,  changePct:0.18, isMock:true },
-    { name:'DAX',           price:18650, changePct:0.31, isMock:true },
-    { name:'GOLD $/oz',     price:2285,  changePct:0.42, isMock:true },
-    { name:'CRUDE $/bbl',   price:FIIDII.crude, changePct:0.85, isMock:true },
-    { name:'USD/INR',       price:FIIDII.usdInr, changePct:-0.12, isMock:true },
+    gmChip('GIFT_NIFTY', 'GIFT NIFTY', 22680, 0.22),
+    gmChip('SP500',      'S&P 500',    5480,  -0.35),
+    gmChip('NASDAQ',     'NASDAQ',     17250, -0.48),
+    gmChip('DOW',        'DOW JONES',  39800, 0.12),
+    gmChip('NIKKEI',     'NIKKEI 225', 38900, 0.55),
+    gmChip('GOLD',       'GOLD $/oz',  2285,  0.42),
+    gmChip('CRUDE',      'CRUDE $/bbl',FIIDII.crude, 0.85),
+    gmChip('USDINR',     'USD/INR',    FIIDII.usdInr, -0.12),
   ];
   const html = chips.map(i => {
     const cls=i.changePct>=0?'up':'dn', s=i.changePct>=0?'+':'';
@@ -1348,14 +1351,34 @@ function renderSectors() {
 // GLOBAL MARKETS
 // ══════════════════════════════════════════════════════════
 function renderGlobalMarkets() {
-  const GLOBAL=[{n:'S&P 500',p:5650,c:-.42,type:'Index'},{n:'NASDAQ',p:17820,c:-.58,type:'Index'},{n:'Dow Jones',p:41200,c:-.18,type:'Index'},{n:'FTSE 100',p:8380,c:.22,type:'Index'},{n:'Nikkei 225',p:37600,c:-.88,type:'Index'},{n:'Hang Seng',p:22400,c:1.24,type:'Index'},{n:'Shanghai',p:3380,c:.45,type:'Index'},{n:'DAX',p:22100,c:.36,type:'Index'},{n:'Gold $/oz',p:3050,c:.68,type:'Commodity'},{n:'Silver $/oz',p:33.8,c:.92,type:'Commodity'},{n:'Crude WTI',p:FIIDII.crude,c:-.48,type:'Commodity'},{n:'Natural Gas',p:2.14,c:.85,type:'Commodity'},{n:'USD/INR',p:FIIDII.usdInr,c:.08,type:'Currency'},{n:'USD/JPY',p:148.6,c:-.22,type:'Currency'},{n:'EUR/USD',p:1.082,c:-.18,type:'Currency'},{n:'Bitcoin',p:87400,c:-1.8,type:'Crypto'}];
+  // Use live Twelve Data when available, fallback to static demo values
+  const gm = (key, fallback) => (GM[key] && GM[key].isLive) ? { n:GM[key].name, p:GM[key].price, c:GM[key].changePct, type:GM[key].type, live:true } : fallback;
+  const GLOBAL=[
+    gm('SP500',  {n:'S&P 500',p:5650,c:-.42,type:'Index'}),
+    gm('NASDAQ', {n:'NASDAQ',p:17820,c:-.58,type:'Index'}),
+    gm('DOW',    {n:'Dow Jones',p:41200,c:-.18,type:'Index'}),
+    {n:'FTSE 100',p:8380,c:.22,type:'Index'},
+    gm('NIKKEI', {n:'Nikkei 225',p:37600,c:-.88,type:'Index'}),
+    {n:'Hang Seng',p:22400,c:1.24,type:'Index'},
+    {n:'Shanghai',p:3380,c:.45,type:'Index'},
+    {n:'DAX',p:22100,c:.36,type:'Index'},
+    gm('GIFT_NIFTY', {n:'Gift Nifty',p:22680,c:.22,type:'Index'}),
+    gm('GOLD',   {n:'Gold $/oz',p:3050,c:.68,type:'Commodity'}),
+    {n:'Silver $/oz',p:33.8,c:.92,type:'Commodity'},
+    gm('CRUDE',  {n:'Crude WTI',p:FIIDII.crude,c:-.48,type:'Commodity'}),
+    {n:'Natural Gas',p:2.14,c:.85,type:'Commodity'},
+    gm('USDINR', {n:'USD/INR',p:FIIDII.usdInr,c:.08,type:'Currency'}),
+    {n:'USD/JPY',p:148.6,c:-.22,type:'Currency'},
+    {n:'EUR/USD',p:1.082,c:-.18,type:'Currency'},
+    {n:'Bitcoin',p:87400,c:-1.8,type:'Crypto'}
+  ];
   const el=document.getElementById('global-list');if(!el)return;
   const grouped={Index:[],Commodity:[],Currency:[],Crypto:[]};
   GLOBAL.forEach(g=>grouped[g.type]?.push(g));
   el.innerHTML=Object.entries(grouped).map(([type,items])=>`
     <div style="margin-bottom:14px">
       <div style="font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">${type}s</div>
-      ${items.map(g=>{const cls=g.c>=0?'up':'dn',sign=g.c>=0?'+':'';return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--b1)"><span style="font-size:13px;font-weight:600;color:var(--t1)">${g.n}</span><div style="text-align:right"><span style="font-size:13px;font-weight:700;color:var(--t1)">  ${fmt(g.p)}</span><span style="font-family:var(--mono);font-size:10px;color:${g.c>=0?'var(--grn)':'var(--red)'};margin-left:8px">${sign}${g.c}%</span></div></div>`;}).join('')}
+      ${items.map(g=>{const cls=g.c>=0?'up':'dn',sign=g.c>=0?'+':'';const liveTag=g.live?'<span style="font-size:8px;color:var(--grn);margin-left:6px">LIVE</span>':'';return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--b1)"><span style="font-size:13px;font-weight:600;color:var(--t1)">${g.n}${liveTag}</span><div style="text-align:right"><span style="font-size:13px;font-weight:700;color:var(--t1)">  ${fmt(g.p)}</span><span style="font-family:var(--mono);font-size:10px;color:${g.c>=0?'var(--grn)':'var(--red)'};margin-left:8px">${sign}${g.c}%</span></div></div>`;}).join('')}
     </div>`).join('');
 }
 

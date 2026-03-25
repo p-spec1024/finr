@@ -52,6 +52,76 @@ let priceHistory     = {}; // symbol → last 30 prices for RSI/EMA
 let wsReconnectMs    = 1000;
 let mockInterval     = null;
 let testResults      = [];
+let globalMarkets    = {}; // Twelve Data global market prices
+let twelveDataInterval = null;
+
+// ── Twelve Data config ───────────────────────────────────────────────────────
+const TWELVE_DATA_SYMBOLS = [
+  { key: 'GIFT_NIFTY',  symbol: 'NIFTY 50',  name: 'Gift Nifty',  type: 'Index' },
+  { key: 'GOLD',        symbol: 'XAU/USD',    name: 'Gold $/oz',   type: 'Commodity' },
+  { key: 'CRUDE',       symbol: 'CL',         name: 'Crude WTI',   type: 'Commodity' },
+  { key: 'USDINR',      symbol: 'USD/INR',    name: 'USD/INR',     type: 'Currency' },
+  { key: 'SP500',       symbol: 'SPX',        name: 'S&P 500',     type: 'Index' },
+  { key: 'NASDAQ',      symbol: 'IXIC',       name: 'NASDAQ',      type: 'Index' },
+  { key: 'DOW',         symbol: 'DJI',        name: 'Dow Jones',   type: 'Index' },
+  { key: 'NIKKEI',      symbol: 'NI225',      name: 'Nikkei 225',  type: 'Index' },
+];
+
+function isPostMarketWindow() {
+  const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const mins = ist.getHours() * 60 + ist.getMinutes();
+  return mins >= 930 && mins < 1440; // 3:30 PM to midnight IST
+}
+
+async function fetchTwelveData() {
+  const apiKey = appConfig.twelveDataKey;
+  if (!apiKey) { log('WARN', 'Twelve Data API key not set — skipping global fetch'); return; }
+  if (!isPostMarketWindow()) { log('INFO', 'Outside post-market window — skipping Twelve Data'); return; }
+
+  let fetched = 0;
+  for (const s of TWELVE_DATA_SYMBOLS) {
+    try {
+      const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(s.symbol)}&apikey=${apiKey}`;
+      const { data } = await axios.get(url, { timeout: 8000 });
+      if (data.status === 'error') { log('WARN', `Twelve Data error for ${s.symbol}: ${data.message}`); continue; }
+      const price = parseFloat(data.close) || parseFloat(data.price) || 0;
+      const prevClose = parseFloat(data.previous_close) || price;
+      const change = price - prevClose;
+      const changePct = prevClose ? (change / prevClose) * 100 : 0;
+      globalMarkets[s.key] = {
+        key: s.key, name: s.name, type: s.type, symbol: s.symbol,
+        price: +price.toFixed(2), change: +change.toFixed(2), changePct: +changePct.toFixed(2),
+        lastUpdate: Date.now(), isLive: true
+      };
+      fetched++;
+    } catch (e) {
+      log('WARN', `Twelve Data fetch failed for ${s.symbol}: ${e.message}`);
+    }
+  }
+  if (fetched > 0) {
+    // Update fiiDiiData with live values
+    if (globalMarkets.USDINR) fiiDiiData.usdInr = globalMarkets.USDINR.price;
+    if (globalMarkets.CRUDE)  fiiDiiData.crude   = globalMarkets.CRUDE.price;
+    broadcastLiveData();
+    log('OK', `Twelve Data: ${fetched}/${TWELVE_DATA_SYMBOLS.length} symbols updated`);
+  }
+}
+
+function startTwelveDataPolling() {
+  if (twelveDataInterval) return;
+  if (!isPostMarketWindow()) return;
+  fetchTwelveData(); // immediate first fetch
+  twelveDataInterval = setInterval(() => {
+    if (!isPostMarketWindow()) { stopTwelveDataPolling(); return; }
+    fetchTwelveData();
+  }, 6 * 60 * 1000); // every 6 minutes
+  log('OK', 'Twelve Data polling started (every 6 min)');
+}
+
+function stopTwelveDataPolling() {
+  if (twelveDataInterval) { clearInterval(twelveDataInterval); twelveDataInterval = null; }
+  log('INFO', 'Twelve Data polling stopped');
+}
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 const LOGS = [];
@@ -82,7 +152,8 @@ function loadConfig() {
   if (process.env.GEMINI_API_KEY)    appConfig.geminiKey     = process.env.GEMINI_API_KEY.trim();
   if (process.env.ZERODHA_API_KEY)   appConfig.zApiKey       = process.env.ZERODHA_API_KEY.trim();
   if (process.env.ZERODHA_API_SECRET) appConfig.zApiSecret   = process.env.ZERODHA_API_SECRET.trim();
-  log('OK', `Config loaded — Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey}`);
+  if (process.env.TWELVE_DATA_API_KEY) appConfig.twelveDataKey = process.env.TWELVE_DATA_API_KEY.trim();
+  log('OK', `Config loaded — Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey} TwelveData:${!!appConfig.twelveDataKey}`);
 }
 function saveConfig() {
   try { fs.writeFileSync(CONFIG_FILE, enc(appConfig)); }
@@ -477,7 +548,11 @@ app.post('/api/alerts/clear-triggered', (req, res) => {
 // LIVE DATA APIs
 // ══════════════════════════════════════════════════════════════════════════════
 app.get('/api/live', (req, res) => {
-  res.json({ stocks: liveStocks, indices: liveIndices, signals: signalCache, universe: stockUniverse, vix: vixData, fiiDii: fiiDiiData });
+  res.json({ stocks: liveStocks, indices: liveIndices, signals: signalCache, universe: stockUniverse, vix: vixData, fiiDii: fiiDiiData, globalMarkets });
+});
+
+app.get('/api/global', (req, res) => {
+  res.json({ globalMarkets, isPostMarket: isPostMarketWindow(), symbolCount: TWELVE_DATA_SYMBOLS.length });
 });
 
 app.get('/api/technical/:symbol', (req, res) => {
@@ -870,13 +945,13 @@ async function initLiveData() {
 const clients = new Set();
 wss.on('connection', ws => {
   clients.add(ws);
-  ws.send(JSON.stringify({ type:'init', stocks:liveStocks, indices:liveIndices, signals:signalCache, status:connectionStatus, vix:vixData, fiiDii:fiiDiiData }));
+  ws.send(JSON.stringify({ type:'init', stocks:liveStocks, indices:liveIndices, signals:signalCache, status:connectionStatus, vix:vixData, fiiDii:fiiDiiData, globalMarkets }));
   ws.on('close', () => clients.delete(ws));
   ws.on('error', () => clients.delete(ws));
   ws.on('message', m => { if (m.toString()==='ping') ws.send('pong'); });
 });
 function broadcastLiveData() {
-  const msg = JSON.stringify({ type:'tick', stocks:liveStocks, indices:liveIndices, signals:signalCache, vix:vixData, fiiDii:fiiDiiData });
+  const msg = JSON.stringify({ type:'tick', stocks:liveStocks, indices:liveIndices, signals:signalCache, vix:vixData, fiiDii:fiiDiiData, globalMarkets });
   for (const c of clients) { if (c.readyState===WebSocket.OPEN) c.send(msg); }
 }
 function broadcastStatus() {
@@ -1045,7 +1120,8 @@ function errorPage(title, detail, host) {
 // SCHEDULED JOBS
 // ══════════════════════════════════════════════════════════════════════════════
 cron.schedule('15 9 * * 1-5', () => { initLiveData(); log('INFO', 'Market open — live data started'); });
-cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); if (mockInterval) { clearInterval(mockInterval); mockInterval = null; } });
+cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); if (mockInterval) { clearInterval(mockInterval); mockInterval = null; } startTwelveDataPolling(); });
+cron.schedule('0 0 * * *', () => { stopTwelveDataPolling(); log('INFO', 'Midnight — Twelve Data polling stopped'); });
 cron.schedule('0 10,14 * * 1-5', () => { if (zAccessToken) { fetchZerodhaData(); log('INFO', 'Zerodha data refresh'); } });
 
 // Catch-all — serve frontend
@@ -1059,8 +1135,9 @@ server.listen(PORT, async () => {
   log('INFO', `FINR v2.0 starting on port ${PORT}`);
   loadConfig();
   loadAlerts();
-  log('INFO', `Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey}`);
+  log('INFO', `Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey} TwelveData:${!!appConfig.twelveDataKey}`);
   await initLiveData();
+  if (isPostMarketWindow()) startTwelveDataPolling();
   runUnitTests();
   log('INFO', `Server ready — ${testResults.filter(t=>t.pass).length}/${testResults.length} tests passed`);
   log('INFO', `═══════════════════════════════════════`);
