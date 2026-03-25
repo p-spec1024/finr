@@ -982,74 +982,100 @@ function recalcSignals() {
 // ══════════════════════════════════════════════════════════════════════════════
 // UPSTOX WEBSOCKET
 // ══════════════════════════════════════════════════════════════════════════════
-async function connectUpstoxWs() {
-  if (!accessToken || !STOCK_UNIVERSE.length) return;
-  if (upstoxWs && [WebSocket.OPEN, WebSocket.CONNECTING].includes(upstoxWs.readyState)) return;
+// ── Upstox REST Polling (v2 WS deprecated, v3 requires protobuf) ──
+let pricePoller = null;
+let pollErrors = 0;
 
-  // Step 1: Get authorized WebSocket URL from Upstox REST API
-  let wsUrl;
-  try {
-    const authRes = await axios.get('https://api.upstox.com/v2/feed/market-data-feed/authorize', {
-      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
-    });
-    wsUrl = authRes.data?.data?.authorizedRedirectUri;
-    if (!wsUrl) { log('ERR', 'Upstox WS authorize returned no URL: ' + JSON.stringify(authRes.data)); return; }
-    log('OK', 'Upstox WS authorized — connecting to streamer');
-  } catch (e) {
-    log('ERR', 'Upstox WS authorize failed: ' + (e.response?.data?.message || e.message));
-    setTimeout(connectUpstoxWs, wsReconnectMs);
-    wsReconnectMs = Math.min(wsReconnectMs * 2, 30000);
-    return;
+function processUpstoxQuote(key, val) {
+  // val format from /v2/market-quote/quotes
+  const price = val.last_price;
+  if (!price) return false;
+  const close = val.ohlc?.close || val.close_price || price;
+  const change = price - close, pct = close ? (change / close) * 100 : 0;
+
+  if (key.includes('NSE_INDEX')) {
+    const name = key.split('|')[1];
+    if (name === 'India VIX') {
+      vixData.value = price; vixData.change = +pct.toFixed(2);
+      vixData.trend = pct > 0.5 ? 'rising' : pct < -0.5 ? 'falling' : 'stable';
+    } else {
+      liveIndices[name] = { price, change: +change.toFixed(2), changePct: +pct.toFixed(2), name };
+    }
+  } else {
+    const s = STOCK_UNIVERSE.find(x => x.instrumentKey === key);
+    if (s) {
+      liveStocks[s.symbol] = {
+        symbol: s.symbol, name: s.name, sector: s.sector, price,
+        change: +change.toFixed(2), changePct: +pct.toFixed(2), lastUpdate: Date.now(),
+        high52: val.ohlc?.high || fundamentals[s.symbol]?.high52 || +(price * 1.35).toFixed(2),
+        low52: val.ohlc?.low || fundamentals[s.symbol]?.low52 || +(price * 0.72).toFixed(2)
+      };
+      const sig = calcSignal(s.symbol, price);
+      if (sig) signalCache[s.symbol] = { ...sig, symbol: s.symbol };
+      return true;
+    }
   }
+  return false;
+}
 
-  // Step 2: Connect to the authorized WebSocket URL
-  upstoxWs = new WebSocket(wsUrl);
-  upstoxWs.on('open', () => {
-    log('OK', 'Upstox WebSocket connected');
-    connectionStatus = 'live'; wsReconnectMs = 1000; broadcastStatus();
-    const keys = [
-      ...STOCK_UNIVERSE.map(s => s.instrumentKey),
-      'NSE_INDEX|Nifty 50', 'NSE_INDEX|SENSEX', 'NSE_INDEX|Nifty Bank',
-      'NSE_INDEX|Nifty IT', 'NSE_INDEX|Nifty Pharma', 'NSE_INDEX|India VIX'
-    ];
-    upstoxWs.send(JSON.stringify({ guid:'finr', method:'sub', data:{ mode:'full', instrumentKeys:keys } }));
-  });
-  upstoxWs.on('message', raw => {
+async function pollUpstoxPrices() {
+  if (!accessToken) return;
+  const allKeys = [
+    ...STOCK_UNIVERSE.map(s => s.instrumentKey),
+    'NSE_INDEX|Nifty 50', 'NSE_INDEX|SENSEX', 'NSE_INDEX|Nifty Bank',
+    'NSE_INDEX|Nifty IT', 'NSE_INDEX|Nifty Pharma', 'NSE_INDEX|India VIX'
+  ];
+  // Upstox allows max ~500 keys per request; batch in chunks of 25
+  const chunkSize = 25;
+  let updated = false;
+  for (let i = 0; i < allKeys.length; i += chunkSize) {
+    const chunk = allKeys.slice(i, i + chunkSize);
     try {
-      const msg = JSON.parse(raw.toString());
-      const feeds = msg.feeds || {};
-      let updated = false;
-      for (const [key, val] of Object.entries(feeds)) {
-        const ltpc = val.ff?.marketFF?.ltpc || val.ff?.indexFF?.ltpc;
-        if (!ltpc) continue;
-        const price = ltpc.ltp, close = ltpc.cp || price;
-        const change = price - close, pct = close ? (change/close)*100 : 0;
-        if (key.includes('NSE_INDEX')) {
-          const name = key.split('|')[1];
-          if (name === 'India VIX') { vixData.value = price; vixData.change = +pct.toFixed(2); vixData.trend = pct > 0.5 ? 'rising' : pct < -0.5 ? 'falling' : 'stable'; }
-          else liveIndices[name] = { price, change:+change.toFixed(2), changePct:+pct.toFixed(2), name };
-        } else {
-          const s = STOCK_UNIVERSE.find(x => x.instrumentKey === key);
-          if (s) {
-            liveStocks[s.symbol] = { symbol:s.symbol, name:s.name, sector:s.sector, price, change:+change.toFixed(2), changePct:+pct.toFixed(2), lastUpdate:Date.now(),
-              high52: fundamentals[s.symbol]?.high52 || +(price*1.35).toFixed(2),
-              low52:  fundamentals[s.symbol]?.low52  || +(price*0.72).toFixed(2) };
-            const sig = calcSignal(s.symbol, price);
-            if (sig) signalCache[s.symbol] = { ...sig, symbol: s.symbol };
-            updated = true;
-          }
+      const res = await axios.get('https://api.upstox.com/v2/market-quote/quotes', {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+        params: { instrument_key: chunk.join(',') }
+      });
+      const data = res.data?.data;
+      if (data) {
+        for (const [key, val] of Object.entries(data)) {
+          if (processUpstoxQuote(key, val)) updated = true;
         }
+        pollErrors = 0;
       }
-      if (updated) broadcastLiveData();
-    } catch {}
-  });
-  upstoxWs.on('close', () => {
-    log('WARN', `Upstox WS closed — retry in ${wsReconnectMs}ms`);
-    connectionStatus = 'reconnecting'; broadcastStatus();
-    setTimeout(connectUpstoxWs, wsReconnectMs);
-    wsReconnectMs = Math.min(wsReconnectMs * 2, 30000);
-  });
-  upstoxWs.on('error', e => log('ERR', 'Upstox WS error: ' + e.message));
+    } catch (e) {
+      pollErrors++;
+      if (pollErrors <= 3) log('ERR', `Upstox REST poll error (batch ${Math.floor(i/chunkSize)+1}): ${e.response?.status || ''} ${e.message}`);
+      if (e.response?.status === 410 || e.response?.status === 401) {
+        log('ERR', 'Upstox REST API unavailable — stopping poller');
+        stopPricePoller();
+        connectionStatus = 'disconnected'; broadcastStatus();
+        return;
+      }
+    }
+  }
+  if (updated) {
+    connectionStatus = 'live'; broadcastStatus();
+    broadcastLiveData();
+  }
+}
+
+function startPricePoller() {
+  if (pricePoller) return;
+  const intervalMs = 3000; // Poll every 3 seconds
+  pollUpstoxPrices(); // First poll immediately
+  pricePoller = setInterval(() => {
+    if (isMarketOpen()) pollUpstoxPrices();
+  }, intervalMs);
+  log('OK', `Upstox REST price poller started (every ${intervalMs/1000}s)`);
+}
+
+function stopPricePoller() {
+  if (pricePoller) { clearInterval(pricePoller); pricePoller = null; }
+}
+
+// Keep old function name for compatibility with initLiveData
+function connectUpstoxWs() {
+  startPricePoller();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1354,7 +1380,7 @@ function errorPage(title, detail, host) {
 // SCHEDULED JOBS
 // ══════════════════════════════════════════════════════════════════════════════
 cron.schedule('15 9 * * 1-5', () => { initLiveData(); log('INFO', 'Market open — live data started'); });
-cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); if (mockInterval) { clearInterval(mockInterval); mockInterval = null; } startTwelveDataPolling(); captureZerodhaTrades(); });
+cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); if (mockInterval) { clearInterval(mockInterval); mockInterval = null; } stopPricePoller(); startTwelveDataPolling(); captureZerodhaTrades(); });
 cron.schedule('0 0 * * *', () => { stopTwelveDataPolling(); log('INFO', 'Midnight — Twelve Data polling stopped'); });
 cron.schedule('0 10,14 * * 1-5', () => { if (zAccessToken) { fetchZerodhaData(); log('INFO', 'Zerodha data refresh'); } });
 
