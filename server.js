@@ -1114,70 +1114,94 @@ const STOCK_UNIVERSE = [
   { instrumentKey:'NSE_EQ|INE121J01017', symbol:'M&MFIN',     name:'Mahindra & Mahindra Fin', sector:'NBFC',        pe:8,   roe:15, de:4.2,  div:2.5, target:285,  cap:'Large' },
   { instrumentKey:'NSE_EQ|INE536H01010', symbol:'COLPAL',     name:'Colgate-Palmolive India', sector:'FMCG',        pe:50,  roe:55, de:0.0,  div:2.0, target:3200, cap:'Large' },
   { instrumentKey:'NSE_EQ|INE094A01015', symbol:'LICHSGFIN',  name:'LIC Housing Finance',     sector:'NBFC',        pe:8,   roe:14, de:8.0,  div:3.0, target:700,  cap:'Large' },
+  // ── Moved from Penny (Mid/Large Cap with Upstox polling) ──────────────────
+  { instrumentKey:'NSE_EQ|INE704P01017', symbol:'COCHINSHIP', name:'Cochin Shipyard',           sector:'Defence',     pe:30,  roe:20, de:0.1,  div:1.5, target:2200, cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE450U01017', symbol:'ROUTE',      name:'Route Mobile',              sector:'IT',          pe:28,  roe:18, de:0.0,  div:0.5, target:1500, cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE171Z01018', symbol:'BDL',        name:'Bharat Dynamics',           sector:'Defence',     pe:42,  roe:22, de:0.0,  div:1.0, target:1600, cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE382Z01011', symbol:'GRSE',       name:'Garden Reach Shipbuilders', sector:'Defence',     pe:35,  roe:25, de:0.0,  div:1.2, target:1900, cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE249Z01012', symbol:'MAZAGON',    name:'Mazagon Dock Shipbuilders', sector:'Defence',     pe:25,  roe:28, de:0.0,  div:1.5, target:5500, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE484J01027', symbol:'GODREJPROP', name:'Godrej Properties',         sector:'Infrastructure', pe:55, roe:12, de:0.5, div:0.2, target:3000, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE093I01010', symbol:'OBEROIRLTY', name:'Oberoi Realty',             sector:'Infrastructure', pe:22, roe:18, de:0.1, div:0.3, target:2200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE811K01011', symbol:'PRESTIGE',   name:'Prestige Estates',          sector:'Infrastructure', pe:35, roe:15, de:0.8, div:0.3, target:1800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE288B01029', symbol:'DEEPAKNITRITE',name:'Deepak Nitrite',          sector:'Chemicals',   pe:38,  roe:22, de:0.1,  div:0.4, target:2800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE828B01012', symbol:'CLEAN',      name:'Clean Science & Technology',sector:'Chemicals',   pe:55,  roe:25, de:0.0,  div:0.3, target:1600, cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE494B01023', symbol:'TVSMOTOR',   name:'TVS Motor Company',         sector:'Auto',        pe:48,  roe:22, de:0.3,  div:0.5, target:2800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE548C01032', symbol:'EMAMILTD',   name:'Emami Ltd',                 sector:'FMCG',        pe:28,  roe:20, de:0.2,  div:1.5, target:850,  cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE191H01014', symbol:'PVR',        name:'PVR INOX Ltd',              sector:'Consumer',    pe:35,  roe:10, de:0.8,  div:0.2, target:1600, cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE053A01029', symbol:'INDHOTEL',   name:'Indian Hotels (Taj)',       sector:'Consumer',    pe:50,  roe:15, de:0.3,  div:0.5, target:800,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE490G01020', symbol:'MOIL',       name:'MOIL Ltd',                  sector:'Mining',      pe:10,  roe:14, de:0.0,  div:4.5, target:420,  cap:'Mid'   },
+  // ── New Additions (15 frequent movers) ────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE814H01011', symbol:'ADANIPOWER', name:'Adani Power',               sector:'Power',       pe:12,  roe:22, de:1.5,  div:0.0, target:600,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE935N01020', symbol:'DIXON',      name:'Dixon Technologies',        sector:'Consumer',    pe:85,  roe:25, de:0.1,  div:0.3, target:16000,cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE465A01025', symbol:'BHARATFORG', name:'Bharat Forge',              sector:'Auto',        pe:50,  roe:16, de:0.3,  div:0.6, target:1600, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE226A01021', symbol:'VOLTAS',     name:'Voltas Ltd',                sector:'Consumer',    pe:55,  roe:12, de:0.0,  div:0.5, target:1800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE048G01026', symbol:'NAVINFLUOR', name:'Navin Fluorine Intl',       sector:'Chemicals',   pe:35,  roe:18, de:0.0,  div:0.5, target:4200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE647A01010', symbol:'SRF',        name:'SRF Ltd',                   sector:'Chemicals',   pe:40,  roe:18, de:0.4,  div:0.4, target:2800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE202E01016', symbol:'IREDA',      name:'Indian Renewable Energy DA',sector:'NBFC',        pe:25,  roe:18, de:5.0,  div:1.0, target:250,  cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE302A01020', symbol:'EXIDEIND',   name:'Exide Industries',          sector:'Auto',        pe:38,  roe:12, de:0.1,  div:1.2, target:550,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE540L01014', symbol:'ALKEM',      name:'Alkem Laboratories',        sector:'Pharma',      pe:28,  roe:18, de:0.0,  div:0.8, target:6200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE571A01020', symbol:'IPCALAB',    name:'IPCA Laboratories',         sector:'Pharma',      pe:45,  roe:15, de:0.1,  div:0.5, target:1800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE398R01022', symbol:'SYNGENE',    name:'Syngene International',     sector:'Pharma',      pe:38,  roe:14, de:0.2,  div:0.3, target:900,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE881D01027', symbol:'OFSS',       name:'Oracle Financial Services', sector:'IT',          pe:30,  roe:28, de:0.0,  div:2.5, target:12000,cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE299U01018', symbol:'CROMPTON',   name:'Crompton Greaves Consumer', sector:'Consumer',    pe:42,  roe:20, de:0.0,  div:0.8, target:450,  cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE100A01010', symbol:'ATUL',       name:'Atul Ltd',                  sector:'Chemicals',   pe:42,  roe:14, de:0.0,  div:0.5, target:7500, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE885A01032', symbol:'AMARAJABAT', name:'Amara Raja Energy',         sector:'Auto',        pe:18,  roe:15, de:0.1,  div:1.5, target:1200, cap:'Large' },
 ];
 
 const SECTOR_PE = { IT:27, Banking:15, Pharma:30, Energy:10, FMCG:48, Auto:20, Metals:8, Power:16, Telecom:22, NBFC:22, Mining:7, Diversified:18, Defence:38, Engineering:20, Insurance:55, Retail:60, Cement:22, Healthcare:35, Airlines:30, Consumer:50, Infrastructure:18, Paints:55, Chemicals:28 };
 
 const PENNY_STOCKS = [
-  // ── Original 5 ────────────────────────────────────────────────────────────
-  { symbol:'SUZLON',     name:'Suzlon Energy',       sector:'Power',      price:42,   risk:'HIGH',    flag:'High debt, renewable tailwind',                    vol:'Very High',  promoter:16 },
-  { symbol:'IRFC',       name:'Indian Railway FC',   sector:'Finance',    price:145,  risk:'LOW',     flag:'PSU backed, steady income',                        vol:'Moderate',   promoter:0  },
-  { symbol:'YESBANK',    name:'Yes Bank',            sector:'Banking',    price:19,   risk:'HIGH',    flag:'Recovery play, watch FII buying',                  vol:'Very High',  promoter:0  },
+  // ── Ultra-Speculative (sub-₹50) ──────────────────────────────────────────
   { symbol:'IDEA',       name:'Vodafone Idea',       sector:'Telecom',    price:8,    risk:'EXTREME', flag:'High debt, survival uncertain',                    vol:'Very High',  promoter:22 },
   { symbol:'JPPOWER',    name:'Jaiprakash Power',    sector:'Power',      price:12,   risk:'HIGH',    flag:'Debt restructuring, power demand',                 vol:'High',       promoter:35 },
-  // ── Power & Energy ────────────────────────────────────────────────────────
+  { symbol:'JPASSOCIAT', name:'Jaiprakash Associates',sector:'Infrastructure',price:5,risk:'EXTREME', flag:'Deep value play, high debt, asset monetization',   vol:'Very High',  promoter:24 },
+  { symbol:'RELINFRA',   name:'Reliance Infra',      sector:'Infrastructure',price:15,risk:'EXTREME', flag:'ADAG turnaround, legal disputes, speculative',     vol:'Very High',  promoter:17 },
+  { symbol:'YESBANK',    name:'Yes Bank',            sector:'Banking',    price:19,   risk:'HIGH',    flag:'Recovery play, watch FII buying',                  vol:'Very High',  promoter:0  },
   { symbol:'RPOWER',     name:'Reliance Power',      sector:'Power',      price:28,   risk:'HIGH',    flag:'ADAG group, high debt but power capex play',       vol:'Very High',  promoter:24 },
-  { symbol:'JSWENERGY',  name:'JSW Energy',          sector:'Power',      price:58,   risk:'MEDIUM',  flag:'Capacity addition, JSW group backing',             vol:'High',       promoter:75 },
-  { symbol:'NLCINDIA',   name:'NLC India',           sector:'Power',      price:230,  risk:'LOW',     flag:'PSU lignite miner + power, govt backing',          vol:'Moderate',   promoter:72 },
-  { symbol:'SJVN',       name:'SJVN Ltd',            sector:'Power',      price:110,  risk:'LOW',     flag:'PSU hydro power, steady dividends',                vol:'Moderate',   promoter:81 },
-  // ── PSU Banks & Finance ───────────────────────────────────────────────────
-  { symbol:'CENTRALBK',  name:'Central Bank India',  sector:'Banking',    price:48,   risk:'HIGH',    flag:'PSU bank turnaround, high NPAs improving',         vol:'Very High',  promoter:93 },
-  { symbol:'UNIONBANK',  name:'Union Bank of India', sector:'Banking',    price:105,  risk:'MEDIUM',  flag:'PSU bank, credit growth improving',                vol:'High',       promoter:83 },
+  { symbol:'TRIDENT',    name:'Trident Ltd',         sector:'Textiles',   price:30,   risk:'MEDIUM',  flag:'Popular retail favourite, profitable textile exporter',vol:'Very High',promoter:73 },
+  { symbol:'TV18BRDCST', name:'TV18 Broadcast',      sector:'Media',      price:40,   risk:'MEDIUM',  flag:'Reliance-backed broadcasting, news channels',      vol:'High',       promoter:44 },
+  { symbol:'SUZLON',     name:'Suzlon Energy',       sector:'Power',      price:42,   risk:'HIGH',    flag:'High debt, renewable tailwind strong',              vol:'Very High',  promoter:16 },
+  { symbol:'IFCI',       name:'IFCI Ltd',            sector:'Finance',    price:42,   risk:'HIGH',    flag:'PSU financial institution, turnaround play',       vol:'Very High',  promoter:71 },
   { symbol:'UCOBANK',    name:'UCO Bank',            sector:'Banking',    price:42,   risk:'HIGH',    flag:'PSU bank, recovery play, watch asset quality',     vol:'Very High',  promoter:95 },
-  { symbol:'BANDHANBNK', name:'Bandhan Bank',        sector:'Banking',    price:165,  risk:'MEDIUM',  flag:'Microfinance focus, watch asset quality trends',   vol:'High',       promoter:40 },
-  { symbol:'MANAPPURAM', name:'Manappuram Finance',  sector:'Finance',    price:180,  risk:'MEDIUM',  flag:'Gold loan NBFC, rate sensitive',                   vol:'High',       promoter:35 },
-  // ── Metals & Mining ───────────────────────────────────────────────────────
-  { symbol:'SAIL',       name:'Steel Auth India',    sector:'Metals',     price:115,  risk:'MEDIUM',  flag:'PSU steel, capex cycle beneficiary',               vol:'Very High',  promoter:65 },
-  { symbol:'NATIONALUM', name:'National Aluminium',  sector:'Metals',     price:195,  risk:'MEDIUM',  flag:'PSU aluminium, commodity cycle play',              vol:'High',       promoter:51 },
-  { symbol:'HINDCOPPER', name:'Hindustan Copper',    sector:'Metals',     price:280,  risk:'MEDIUM',  flag:'Only listed copper producer, EV demand play',      vol:'High',       promoter:67 },
-  { symbol:'NMDC',       name:'NMDC Ltd',            sector:'Mining',     price:225,  risk:'LOW',     flag:'PSU iron ore miner, high dividend payer',          vol:'High',       promoter:60 },
-  { symbol:'MOIL',       name:'MOIL Ltd',            sector:'Mining',     price:350,  risk:'LOW',     flag:'PSU manganese monopoly, steel sector linked',      vol:'Moderate',   promoter:64 },
-  // ── Infrastructure & Construction ─────────────────────────────────────────
-  { symbol:'IRCON',      name:'Ircon International', sector:'Infra',      price:220,  risk:'LOW',     flag:'PSU railway construction, strong order book',      vol:'High',       promoter:73 },
-  { symbol:'NBCC',       name:'NBCC India',          sector:'Infra',      price:95,   risk:'MEDIUM',  flag:'PSU construction, redevelopment projects',         vol:'Very High',  promoter:62 },
-  { symbol:'RVNL',       name:'Rail Vikas Nigam',    sector:'Infra',      price:420,  risk:'MEDIUM',  flag:'Railway infra PSU, capex beneficiary',             vol:'Very High',  promoter:72 },
-  { symbol:'HUDCO',      name:'HUDCO',               sector:'Finance',    price:235,  risk:'LOW',     flag:'PSU housing finance, steady dividends',            vol:'High',       promoter:75 },
-  { symbol:'COCHINSHIP', name:'Cochin Shipyard',     sector:'Defence',    price:1800, risk:'MEDIUM',  flag:'PSU defence shipyard, order book strong',          vol:'High',       promoter:73 },
-  // ── Telecom & Tech ────────────────────────────────────────────────────────
-  { symbol:'HFCL',       name:'HFCL Ltd',            sector:'Telecom',    price:120,  risk:'MEDIUM',  flag:'5G infra, optical fibre, defence orders',          vol:'Very High',  promoter:41 },
-  { symbol:'ROUTE',      name:'Route Mobile',        sector:'IT',         price:1250, risk:'MEDIUM',  flag:'CPaaS platform, global expansion story',           vol:'Moderate',   promoter:74 },
-  // ── Defence ───────────────────────────────────────────────────────────────
-  { symbol:'BDL',        name:'Bharat Dynamics',     sector:'Defence',    price:1300, risk:'MEDIUM',  flag:'PSU missile manufacturer, order book visibility',  vol:'High',       promoter:75 },
-  { symbol:'GRSE',       name:'Garden Reach Ship',   sector:'Defence',    price:1600, risk:'MEDIUM',  flag:'PSU warship builder, strong order pipeline',       vol:'High',       promoter:74 },
-  { symbol:'MAZAGON',    name:'Mazagon Dock Ship',   sector:'Defence',    price:4800, risk:'MEDIUM',  flag:'PSU submarine & warship builder',                  vol:'High',       promoter:84 },
-  // ── Real Estate ───────────────────────────────────────────────────────────
-  { symbol:'DLF',        name:'DLF Ltd',             sector:'Realty',     price:720,  risk:'MEDIUM',  flag:'Largest listed developer, luxury focus',            vol:'Very High',  promoter:75 },
-  { symbol:'GODREJPROP', name:'Godrej Properties',   sector:'Realty',     price:2600, risk:'MEDIUM',  flag:'Premium developer, pan-India presence',            vol:'High',       promoter:58 },
-  { symbol:'OBEROIRLTY', name:'Oberoi Realty',       sector:'Realty',     price:1950, risk:'MEDIUM',  flag:'Mumbai luxury developer, land bank strong',        vol:'Moderate',   promoter:68 },
-  { symbol:'PRESTIGE',   name:'Prestige Estates',    sector:'Realty',     price:1500, risk:'MEDIUM',  flag:'South India developer, Blackstone partnership',    vol:'High',       promoter:68 },
-  // ── Chemicals & Pharma ────────────────────────────────────────────────────
-  { symbol:'DEEPAKNITRITE',name:'Deepak Nitrite',    sector:'Chemicals',  price:2400, risk:'MEDIUM',  flag:'Specialty chemicals, import substitution play',    vol:'High',       promoter:50 },
-  { symbol:'CLEAN',      name:'Clean Science & Tech',sector:'Chemicals',  price:1350, risk:'MEDIUM',  flag:'Green chemistry leader, high margins',             vol:'Moderate',   promoter:72 },
-  { symbol:'AUROPHARMA', name:'Aurobindo Pharma',    sector:'Pharma',     price:1150, risk:'MEDIUM',  flag:'US generics, injectables pipeline strong',         vol:'High',       promoter:52 },
-  { symbol:'BIOCON',     name:'Biocon Ltd',          sector:'Pharma',     price:340,  risk:'MEDIUM',  flag:'Biosimilars leader, Viatris partnership',          vol:'High',       promoter:60 },
-  // ── Auto / Components ─────────────────────────────────────────────────────
-  { symbol:'TVSMOTOR',   name:'TVS Motor',           sector:'Auto',       price:2500, risk:'LOW',     flag:'Two-wheeler leader, EV push',                      vol:'High',       promoter:50 },
-  { symbol:'ASHOKLEY',   name:'Ashok Leyland',       sector:'Auto',       price:225,  risk:'MEDIUM',  flag:'CV leader, infra capex cycle play',                vol:'Very High',  promoter:52 },
-  { symbol:'MOTHERSON',  name:'Motherson Sumi',      sector:'Auto',       price:175,  risk:'MEDIUM',  flag:'Global auto components, diversified',              vol:'Very High',  promoter:67 },
-  // ── FMCG / Consumer ───────────────────────────────────────────────────────
-  { symbol:'COLPAL',     name:'Colgate-Palmolive',   sector:'FMCG',       price:2800, risk:'LOW',     flag:'MNC oral care monopoly, steady compounder',        vol:'Low',        promoter:51 },
-  { symbol:'EMAMILTD',   name:'Emami Ltd',           sector:'FMCG',       price:720,  risk:'MEDIUM',  flag:'Navratna, BoroPlus brand house',                   vol:'Moderate',   promoter:55 },
-  // ── Media / Consumer ──────────────────────────────────────────────────────
-  { symbol:'SUNTV',      name:'Sun TV Network',      sector:'Media',      price:650,  risk:'LOW',     flag:'South India media monopoly, high dividends',       vol:'Moderate',   promoter:75 },
-  { symbol:'PVR',        name:'PVR INOX',            sector:'Consumer',   price:1400, risk:'MEDIUM',  flag:'Multiplex leader, footfall recovery',              vol:'High',       promoter:28 },
-  // ── Hotels / Travel ───────────────────────────────────────────────────────
-  { symbol:'INDHOTEL',   name:'Indian Hotels (Taj)',  sector:'Consumer',   price:680,  risk:'LOW',     flag:'Tata group, premium hospitality brand',            vol:'High',       promoter:38 },
+  { symbol:'CENTRALBK',  name:'Central Bank India',  sector:'Banking',    price:48,   risk:'HIGH',    flag:'PSU bank turnaround, high NPAs improving',         vol:'Very High',  promoter:93 },
+  { symbol:'TTML',       name:'Tata Teleservices MH',sector:'Telecom',    price:50,   risk:'HIGH',    flag:'Tata group telecom, enterprise focus pivot',       vol:'High',       promoter:74 },
+  // ── Speculative Small/Mid (₹50–₹150) ─────────────────────────────────────
+  { symbol:'NFL',        name:'National Fertilizers', sector:'Chemicals',  price:55,   risk:'MEDIUM',  flag:'PSU fertilizer maker, govt subsidy backed',        vol:'High',       promoter:74 },
+  { symbol:'NETWORK18',  name:'Network18 Media',     sector:'Media',      price:60,   risk:'MEDIUM',  flag:'Reliance-backed media conglomerate',               vol:'High',       promoter:75 },
+  { symbol:'MMTC',       name:'MMTC Ltd',            sector:'Diversified',price:65,   risk:'HIGH',    flag:'PSU trading company, gold import, volatile',       vol:'Very High',  promoter:90 },
+  { symbol:'WELSPUNLIV', name:'Welspun Living',      sector:'Textiles',   price:75,   risk:'MEDIUM',  flag:'Home textiles leader, US market dependent',        vol:'High',       promoter:74 },
+  { symbol:'PNBHOUSING', name:'PNB Housing Finance', sector:'Finance',    price:75,   risk:'HIGH',    flag:'Housing finance, rate sensitive, PSU backed',      vol:'High',       promoter:32 },
+  { symbol:'HBLPOWER',   name:'HBL Power Systems',   sector:'Engineering',price:80,   risk:'MEDIUM',  flag:'Defence electronics, battery systems',             vol:'High',       promoter:43 },
+  { symbol:'IBREALEST',  name:'Indiabulls Real Est',  sector:'Realty',     price:80,   risk:'HIGH',    flag:'Real estate developer, speculative turnaround',    vol:'High',       promoter:40 },
+  { symbol:'DCBBANK',    name:'DCB Bank',            sector:'Banking',    price:90,   risk:'MEDIUM',  flag:'Niche private bank, SME lending focus',            vol:'Moderate',   promoter:15 },
+  { symbol:'JKBANK',     name:'J&K Bank',            sector:'Banking',    price:95,   risk:'MEDIUM',  flag:'Regional PSU bank, J&K monopoly',                 vol:'High',       promoter:63 },
+  { symbol:'SOUTHBANK',  name:'South Indian Bank',   sector:'Banking',    price:22,   risk:'MEDIUM',  flag:'Regional Kerala bank, NRI deposit strong',         vol:'High',       promoter:0  },
+  { symbol:'UNIONBANK',  name:'Union Bank of India', sector:'Banking',    price:105,  risk:'MEDIUM',  flag:'PSU bank, credit growth improving',                vol:'High',       promoter:83 },
+  { symbol:'CESC',       name:'CESC Ltd',            sector:'Power',      price:130,  risk:'LOW',     flag:'RP-SG Group, Kolkata power distribution monopoly', vol:'Moderate',   promoter:52 },
+  { symbol:'RCF',        name:'Rashtriya Chemicals', sector:'Chemicals',  price:130,  risk:'MEDIUM',  flag:'PSU fertilizer/chemicals, govt subsidy play',      vol:'High',       promoter:75 },
+  { symbol:'DELTACORP',  name:'Delta Corp',          sector:'Consumer',   price:130,  risk:'HIGH',    flag:'Only listed gaming/casino company in India',       vol:'Very High',  promoter:34 },
   { symbol:'LEMONTRE',   name:'Lemon Tree Hotels',   sector:'Consumer',   price:135,  risk:'MEDIUM',  flag:'Budget hotel chain, occupancy recovering',         vol:'High',       promoter:25 },
+  { symbol:'ENGINERSIN', name:'Engineers India',      sector:'Engineering',price:140,  risk:'LOW',     flag:'PSU consultancy, oil & gas, steady dividends',     vol:'Moderate',   promoter:51 },
+  { symbol:'RAIN',       name:'Rain Industries',     sector:'Chemicals',  price:140,  risk:'MEDIUM',  flag:'Carbon products, aluminium cycle play',            vol:'High',       promoter:46 },
+  { symbol:'IRFC',       name:'Indian Railway FC',   sector:'Finance',    price:145,  risk:'LOW',     flag:'PSU backed, guaranteed steady income',             vol:'Moderate',   promoter:86 },
+  { symbol:'ZEEL',       name:'Zee Entertainment',   sector:'Media',      price:125,  risk:'HIGH',    flag:'Media house, Sony merger failed, restructuring',   vol:'Very High',  promoter:4  },
+  // ── Mid/Small Cap (₹150–₹350) ────────────────────────────────────────────
+  { symbol:'BANDHANBNK', name:'Bandhan Bank',        sector:'Banking',    price:165,  risk:'MEDIUM',  flag:'Microfinance focus, watch asset quality trends',   vol:'High',       promoter:40 },
+  { symbol:'MOTHERSON',  name:'Motherson Sumi',      sector:'Auto',       price:175,  risk:'MEDIUM',  flag:'Global auto components, diversified',              vol:'Very High',  promoter:67 },
+  { symbol:'MANAPPURAM', name:'Manappuram Finance',  sector:'Finance',    price:180,  risk:'MEDIUM',  flag:'Gold loan NBFC, rate sensitive',                   vol:'High',       promoter:35 },
+  { symbol:'KTKBANK',    name:'Karnataka Bank',      sector:'Banking',    price:180,  risk:'MEDIUM',  flag:'Regional South India bank, digital push',          vol:'Moderate',   promoter:0  },
+  { symbol:'ORIENTELEC', name:'Orient Electric',     sector:'Consumer',   price:200,  risk:'MEDIUM',  flag:'Fans and appliances, CK Birla group',             vol:'Moderate',   promoter:38 },
+  { symbol:'ASHOKLEY',   name:'Ashok Leyland',       sector:'Auto',       price:225,  risk:'MEDIUM',  flag:'CV leader, infra capex cycle play',                vol:'Very High',  promoter:52 },
+  { symbol:'NLCINDIA',   name:'NLC India',           sector:'Power',      price:230,  risk:'LOW',     flag:'PSU lignite miner + power, govt backing',          vol:'Moderate',   promoter:72 },
+  { symbol:'GRAPHITE',   name:'Graphite India',      sector:'Diversified',price:250,  risk:'MEDIUM',  flag:'Graphite electrode maker, steel cycle play',       vol:'High',       promoter:73 },
+  { symbol:'TANLA',      name:'Tanla Platforms',     sector:'IT',         price:250,  risk:'MEDIUM',  flag:'Cloud communications platform, CPaaS growth',      vol:'High',       promoter:39 },
+  { symbol:'ABFRL',      name:'Aditya Birla Fashion',sector:'Consumer',   price:250,  risk:'MEDIUM',  flag:'Fashion retail, brand portfolio, growth play',     vol:'High',       promoter:52 },
+  { symbol:'NATCOPHARM', name:'Natco Pharma',        sector:'Pharma',     price:270,  risk:'MEDIUM',  flag:'Specialty generics, cancer drugs, niche player',   vol:'High',       promoter:46 },
+  { symbol:'CANFINHOME', name:'Can Fin Homes',       sector:'Finance',    price:280,  risk:'MEDIUM',  flag:'Canara Bank housing arm, rate sensitive',          vol:'Moderate',   promoter:30 },
+  { symbol:'KPITTECH',   name:'KPIT Technologies',   sector:'IT',         price:280,  risk:'MEDIUM',  flag:'Auto-tech leader, EV software, niche play',        vol:'High',       promoter:40 },
+  { symbol:'SUNTECK',    name:'Sunteck Realty',      sector:'Realty',     price:280,  risk:'MEDIUM',  flag:'Mumbai luxury developer, BKC projects',            vol:'Moderate',   promoter:73 },
+  { symbol:'HINDZINC',   name:'Hindustan Zinc',      sector:'Mining',     price:290,  risk:'LOW',     flag:'Vedanta subsidiary, zinc monopoly, high dividend', vol:'High',       promoter:65 },
+  { symbol:'BIOCON',     name:'Biocon Ltd',          sector:'Pharma',     price:340,  risk:'MEDIUM',  flag:'Biosimilars leader, Viatris partnership',          vol:'High',       promoter:60 },
 ];
 
 function calcSignal(symbol, price) {
@@ -1442,7 +1466,23 @@ const MOCK_BASE = {
   NHPC:95, GAIL:200, NAUKRI:7000, PIIND:3800, ICICIGI:1850,
   LTTS:5200, FEDERALBNK:170, AUBANK:700, TATACHEM:1100,
   INDUSTOWER:380, CUMMINSIND:3500, 'M&MFIN':270,
-  UPL:550, IDFCFIRSTB:75, CONCOR:950, LICHSGFIN:650
+  UPL:550, IDFCFIRSTB:75, CONCOR:950, LICHSGFIN:650,
+  // Moved from Penny to STOCK_UNIVERSE
+  COCHINSHIP:1800, ROUTE:1250, BDL:1300, GRSE:1600, MAZAGON:4800,
+  GODREJPROP:2600, OBEROIRLTY:1950, PRESTIGE:1500, DEEPAKNITRITE:2400, CLEAN:1350,
+  TVSMOTOR:2500, EMAMILTD:720, PVR:1400, INDHOTEL:680, MOIL:350,
+  // New 15 stocks
+  ADANIPOWER:550, DIXON:15000, BHARATFORG:1450, VOLTAS:1700, NAVINFLUOR:3800,
+  SRF:2500, IREDA:200, EXIDEIND:480, ALKEM:5800, IPCALAB:1650,
+  SYNGENE:820, OFSS:11000, CROMPTON:400, ATUL:7000, AMARAJABAT:1100,
+  // New penny/smallcap stocks
+  JPASSOCIAT:5, RELINFRA:15, TRIDENT:30, TV18BRDCST:40, IFCI:42,
+  TTML:50, NFL:55, NETWORK18:60, MMTC:65, WELSPUNLIV:75,
+  PNBHOUSING:75, HBLPOWER:80, IBREALEST:80, DCBBANK:90, JKBANK:95,
+  SOUTHBANK:22, CESC:130, RCF:130, DELTACORP:130, ENGINERSIN:140,
+  RAIN:140, ZEEL:125, KTKBANK:180, ORIENTELEC:200, GRAPHITE:250,
+  TANLA:250, ABFRL:250, NATCOPHARM:270, CANFINHOME:280, KPITTECH:280,
+  SUNTECK:280, HINDZINC:290
 };
 const IDX_BASE  = { 'Nifty 50':22950, 'SENSEX':75600, 'Nifty Bank':49800, 'Nifty IT':36400, 'Nifty Pharma':23800 };
 
