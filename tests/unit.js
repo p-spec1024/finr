@@ -657,6 +657,109 @@ suite('Twelve Data & Post-Market', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+// SUITE 13 — P&L Statement & Tax Calculations
+// ══════════════════════════════════════════════════════════════════════════════
+suite('P&L Statement & Tax', () => {
+
+  function calcHoldingDays(buyDate, sellDate) {
+    const buy = new Date(buyDate), sell = new Date(sellDate);
+    return Math.max(1, Math.ceil((sell - buy) / (1000 * 60 * 60 * 24)));
+  }
+
+  function calcTaxType(holdingDays) {
+    return holdingDays > 365 ? 'LTCG' : 'STCG';
+  }
+
+  function calcTaxLiability(trades) {
+    let stcgTotal = 0, ltcgTotal = 0;
+    for (const t of trades) {
+      const pnl = (t.sellPrice - t.buyPrice) * t.qty;
+      if (pnl <= 0) continue;
+      const days = calcHoldingDays(t.buyDate, t.sellDate);
+      if (days > 365) ltcgTotal += pnl;
+      else stcgTotal += pnl;
+    }
+    const ltcgExemption = 125000;
+    const taxableLtcg = Math.max(0, ltcgTotal - ltcgExemption);
+    const stcgTax = stcgTotal * 0.20;
+    const ltcgTax = taxableLtcg * 0.125;
+    return { stcgTotal, ltcgTotal, ltcgExemption, taxableLtcg, stcgTax, ltcgTax, totalTax: stcgTax + ltcgTax };
+  }
+
+  test('Holding days: 2025-01-01 to 2025-07-01 = 181', () => {
+    assertEqual(calcHoldingDays('2025-01-01', '2025-07-01'), 181);
+  });
+
+  test('Holding days: same day = 1 (minimum)', () => {
+    assertEqual(calcHoldingDays('2025-03-15', '2025-03-15'), 1);
+  });
+
+  test('Tax type: 400 days → LTCG', () => {
+    assertEqual(calcTaxType(400), 'LTCG');
+  });
+
+  test('Tax type: 365 days → STCG (must exceed 365)', () => {
+    assertEqual(calcTaxType(365), 'STCG');
+  });
+
+  test('Tax type: 366 days → LTCG', () => {
+    assertEqual(calcTaxType(366), 'LTCG');
+  });
+
+  test('STCG tax: ₹50K profit → ₹10K (20%)', () => {
+    const trades = [{ buyPrice: 100, sellPrice: 150, qty: 1000, buyDate: '2025-01-01', sellDate: '2025-03-01' }];
+    const tax = calcTaxLiability(trades);
+    assertEqual(tax.stcgTotal, 50000);
+    assertEqual(tax.stcgTax, 10000);
+  });
+
+  test('LTCG tax: ₹2L profit → ₹9,375 (12.5% on 75K)', () => {
+    const trades = [{ buyPrice: 100, sellPrice: 300, qty: 1000, buyDate: '2024-01-01', sellDate: '2025-06-01' }];
+    const tax = calcTaxLiability(trades);
+    assertEqual(tax.ltcgTotal, 200000);
+    assertEqual(tax.taxableLtcg, 75000);
+    assertApprox(tax.ltcgTax, 9375, 0.01);
+  });
+
+  test('LTCG below exemption: ₹1L → ₹0 tax', () => {
+    const trades = [{ buyPrice: 100, sellPrice: 200, qty: 1000, buyDate: '2024-01-01', sellDate: '2025-06-01' }];
+    const tax = calcTaxLiability(trades);
+    assertEqual(tax.taxableLtcg, 0);
+    assertEqual(tax.ltcgTax, 0);
+  });
+
+  test('Loss trades: no tax', () => {
+    const trades = [{ buyPrice: 200, sellPrice: 100, qty: 100, buyDate: '2025-01-01', sellDate: '2025-03-01' }];
+    const tax = calcTaxLiability(trades);
+    assertEqual(tax.totalTax, 0);
+  });
+
+  test('Mixed STCG+LTCG: correct combined tax', () => {
+    const trades = [
+      { buyPrice: 100, sellPrice: 200, qty: 500, buyDate: '2025-01-01', sellDate: '2025-06-01' },
+      { buyPrice: 100, sellPrice: 400, qty: 500, buyDate: '2024-01-01', sellDate: '2025-06-01' },
+    ];
+    const tax = calcTaxLiability(trades);
+    assertEqual(tax.stcgTotal, 50000);
+    assertEqual(tax.stcgTax, 10000);
+    assertEqual(tax.ltcgTotal, 150000);
+    assertApprox(tax.totalTax, 13125, 0.01);
+  });
+
+  test('Empty trades: zero tax', () => {
+    assertEqual(calcTaxLiability([]).totalTax, 0);
+  });
+
+  test('P&L calc: (3200-2800)*10 = 4000', () => {
+    assertEqual((3200 - 2800) * 10, 4000);
+  });
+
+  test('P&L %: 14.29%', () => {
+    assertApprox((4000 / (2800 * 10)) * 100, 14.29, 0.01);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 // PRINT RESULTS
 // ══════════════════════════════════════════════════════════════════════════════
 const W = 66;

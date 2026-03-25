@@ -29,6 +29,7 @@ const PORTFOLIO_FILE = path.join(__dirname, '.finr_portfolio.enc');
 const NOTES_FILE     = path.join(__dirname, '.finr_notes.enc');
 const OPTIONS_FILE   = path.join(__dirname, '.finr_options.enc');
 const ALERTS_FILE    = path.join(__dirname, '.finr_alerts.enc');
+const TRADES_FILE    = path.join(__dirname, '.finr_trades.enc');
 const ENC_KEY        = process.env.FINR_SECRET || 'finr-secure-key-2026';
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -43,6 +44,7 @@ let fundamentals     = {};
 let stockUniverse    = [];
 let zerodhaHoldings  = [];
 let priceAlerts      = []; // { id, symbol, targetPrice, type: 'above'|'below', triggered: false, created }
+let tradeHistory     = []; // { id, symbol, qty, buyPrice, sellPrice, buyDate, sellDate, type: 'manual'|'zerodha' }
 let zerodhaPositions = [];
 let zerodhaOrders    = [];
 let vixData          = { value: 14.5, change: 0, trend: 'stable' };
@@ -637,6 +639,120 @@ app.get('/api/zerodha-portfolio', (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+// TRADE HISTORY & P&L STATEMENT
+// ══════════════════════════════════════════════════════════════════════════════
+function loadTrades() {
+  try { if (fs.existsSync(TRADES_FILE)) { const d = dec(fs.readFileSync(TRADES_FILE, 'utf8')); if (d) tradeHistory = d; } } catch {}
+}
+function saveTrades() {
+  try { fs.writeFileSync(TRADES_FILE, enc(tradeHistory)); } catch(e) { log('WARN', 'Cannot write trades: ' + e.message); }
+}
+
+function calcHoldingDays(buyDate, sellDate) {
+  const buy = new Date(buyDate), sell = new Date(sellDate);
+  return Math.max(1, Math.ceil((sell - buy) / (1000 * 60 * 60 * 24)));
+}
+
+function calcTaxType(holdingDays) {
+  return holdingDays > 365 ? 'LTCG' : 'STCG';
+}
+
+function calcTaxLiability(trades) {
+  let stcgTotal = 0, ltcgTotal = 0;
+  for (const t of trades) {
+    const pnl = (t.sellPrice - t.buyPrice) * t.qty;
+    if (pnl <= 0) continue; // losses not taxed
+    const days = calcHoldingDays(t.buyDate, t.sellDate);
+    if (days > 365) ltcgTotal += pnl;
+    else stcgTotal += pnl;
+  }
+  const ltcgExemption = 125000; // ₹1.25L exemption
+  const taxableLtcg = Math.max(0, ltcgTotal - ltcgExemption);
+  const stcgTax = stcgTotal * 0.20; // 20%
+  const ltcgTax = taxableLtcg * 0.125; // 12.5%
+  return {
+    stcgTotal: +stcgTotal.toFixed(2), ltcgTotal: +ltcgTotal.toFixed(2),
+    ltcgExemption, taxableLtcg: +taxableLtcg.toFixed(2),
+    stcgTax: +stcgTax.toFixed(2), ltcgTax: +ltcgTax.toFixed(2),
+    totalTax: +(stcgTax + ltcgTax).toFixed(2)
+  };
+}
+
+// Get unrealized P&L from current holdings (manual + Zerodha)
+function getUnrealizedPnl() {
+  const items = [];
+  // Manual holdings
+  try {
+    if (fs.existsSync(PORTFOLIO_FILE)) {
+      const d = dec(fs.readFileSync(PORTFOLIO_FILE, 'utf8'));
+      if (d && d.holdings) {
+        for (const h of d.holdings) {
+          const lp = liveStocks[h.sym]?.price || h.buy;
+          const pnl = (lp - h.buy) * h.qty;
+          items.push({ symbol: h.sym, qty: h.qty, buyPrice: h.buy, currentPrice: +lp.toFixed(2), pnl: +pnl.toFixed(2), pnlPct: +((pnl / (h.buy * h.qty)) * 100).toFixed(2), source: 'manual' });
+        }
+      }
+    }
+  } catch {}
+  // Zerodha holdings
+  for (const h of zerodhaHoldings) {
+    const lp = h.last_price || liveStocks[h.tradingsymbol]?.price || h.average_price;
+    const pnl = (lp - h.average_price) * h.quantity;
+    items.push({ symbol: h.tradingsymbol, qty: h.quantity, buyPrice: +h.average_price.toFixed(2), currentPrice: +lp.toFixed(2), pnl: +pnl.toFixed(2), pnlPct: h.average_price > 0 ? +((pnl / (h.average_price * h.quantity)) * 100).toFixed(2) : 0, source: 'zerodha' });
+  }
+  const totalInvested = items.reduce((s, i) => s + i.buyPrice * i.qty, 0);
+  const totalCurrent = items.reduce((s, i) => s + i.currentPrice * i.qty, 0);
+  return { items, totalInvested: +totalInvested.toFixed(2), totalCurrent: +totalCurrent.toFixed(2), totalPnl: +(totalCurrent - totalInvested).toFixed(2) };
+}
+
+// P&L statement endpoint
+app.get('/api/pnl', (req, res) => {
+  const unrealized = getUnrealizedPnl();
+  const realized = tradeHistory.map(t => {
+    const days = calcHoldingDays(t.buyDate, t.sellDate);
+    const pnl = (t.sellPrice - t.buyPrice) * t.qty;
+    return { ...t, pnl: +pnl.toFixed(2), pnlPct: t.buyPrice > 0 ? +((pnl / (t.buyPrice * t.qty)) * 100).toFixed(2) : 0, holdingDays: days, taxType: calcTaxType(days) };
+  });
+  const realizedTotal = realized.reduce((s, t) => s + t.pnl, 0);
+  const tax = calcTaxLiability(tradeHistory);
+  res.json({ unrealized, realized, realizedTotal: +realizedTotal.toFixed(2), tax });
+});
+
+// Trade history CRUD
+app.get('/api/trades', (req, res) => res.json(tradeHistory));
+
+app.post('/api/trades', (req, res) => {
+  const { symbol, qty, buyPrice, sellPrice, buyDate, sellDate } = req.body;
+  if (!symbol || !qty || !buyPrice || !sellPrice || !buyDate || !sellDate) return res.status(400).json({ error: 'All fields required' });
+  const trade = { id: Date.now().toString(36), symbol: symbol.toUpperCase(), qty: +qty, buyPrice: +buyPrice, sellPrice: +sellPrice, buyDate, sellDate, type: 'manual', added: new Date().toISOString() };
+  tradeHistory.push(trade);
+  saveTrades();
+  res.json({ ok: true, trade });
+});
+
+app.delete('/api/trades/:id', (req, res) => {
+  const idx = tradeHistory.findIndex(t => t.id === req.params.id);
+  if (idx < 0) return res.status(404).json({ error: 'Trade not found' });
+  tradeHistory.splice(idx, 1);
+  saveTrades();
+  res.json({ ok: true });
+});
+
+app.get('/api/pnl/csv', (req, res) => {
+  const rows = [['Date','Symbol','Qty','Buy Price','Sell Price','P&L','P&L %','Holding Days','Tax Type']];
+  for (const t of tradeHistory) {
+    const days = calcHoldingDays(t.buyDate, t.sellDate);
+    const pnl = (t.sellPrice - t.buyPrice) * t.qty;
+    const pct = t.buyPrice > 0 ? ((pnl / (t.buyPrice * t.qty)) * 100).toFixed(2) : '0';
+    rows.push([t.sellDate, t.symbol, t.qty, t.buyPrice, t.sellPrice, pnl.toFixed(2), pct + '%', days, calcTaxType(days)]);
+  }
+  const csv = rows.map(r => r.join(',')).join('\n');
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=FINR_PnL_' + new Date().toISOString().slice(0,10) + '.csv');
+  res.send(csv);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 // STOCK UNIVERSE & FUNDAMENTALS
 // ══════════════════════════════════════════════════════════════════════════════
 const STOCK_UNIVERSE = [
@@ -1135,7 +1251,8 @@ server.listen(PORT, async () => {
   log('INFO', `FINR v2.0 starting on port ${PORT}`);
   loadConfig();
   loadAlerts();
-  log('INFO', `Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey} TwelveData:${!!appConfig.twelveDataKey}`);
+  loadTrades();
+  log('INFO', `Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey} TwelveData:${!!appConfig.twelveDataKey} Trades:${tradeHistory.length}`);
   await initLiveData();
   if (isPostMarketWindow()) startTwelveDataPolling();
   runUnitTests();

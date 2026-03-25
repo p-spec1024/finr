@@ -547,6 +547,7 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
           <button class="fc" data-pt="zerodha">Zerodha P&amp;L</button>
           <button class="fc" data-pt="options">Options Book</button>
           <button class="fc" data-pt="overview">Investment Overview</button>
+          <button class="fc" data-pt="pnl">P&amp;L Statement</button>
         </div>
 
         <!-- Holdings -->
@@ -637,6 +638,37 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
             <div class="card-t">P&L Summary</div>
             <div id="ov-pnl"><div class="empty"><i>💼</i>Add holdings to see P&L</div></div>
           </div>
+        </div>
+
+        <!-- P&L Statement -->
+        <div id="pt-pnl" style="display:none">
+          <div class="card">
+            <div class="card-t">Unrealized P&L — Current Holdings</div>
+            <div id="pnl-unrealized"><div class="empty"><i>📊</i>Loading...</div></div>
+          </div>
+          <div class="card">
+            <div class="card-t">Realized P&L — Closed Trades</div>
+            <div id="pnl-realized-summary" style="margin-bottom:12px"></div>
+            <button class="add-btn" onclick="tglTradeForm()">＋ Add Closed Trade</button>
+            <div class="pf-form" id="trade-form">
+              <div style="font-size:15px;font-weight:700;margin-bottom:12px;color:var(--t1)">Add Closed Trade</div>
+              <div class="g2">
+                <div class="ig"><label>Symbol *</label><input type="text" id="tr-sym" placeholder="RELIANCE" oninput="this.value=this.value.toUpperCase()"></div>
+                <div class="ig"><label>Quantity *</label><input type="number" id="tr-qty" placeholder="10"></div>
+                <div class="ig"><label>Buy Price ₹ *</label><input type="number" id="tr-buy" placeholder="2800" step="0.01"></div>
+                <div class="ig"><label>Sell Price ₹ *</label><input type="number" id="tr-sell" placeholder="3200" step="0.01"></div>
+                <div class="ig"><label>Buy Date *</label><input type="date" id="tr-bdate"></div>
+                <div class="ig"><label>Sell Date *</label><input type="date" id="tr-sdate"></div>
+              </div>
+              <div style="display:flex;gap:8px"><button class="btn btn-dk" onclick="addTrade()" style="margin:0">Add Trade</button><button class="btn btn-o" onclick="tglTradeForm()" style="margin:0">Cancel</button></div>
+            </div>
+            <div id="pnl-trades-table"></div>
+          </div>
+          <div class="card">
+            <div class="card-t">Tax Breakdown — FY 2025-26</div>
+            <div id="pnl-tax"><div class="empty"><i>🏛️</i>Add closed trades to see tax estimate</div></div>
+          </div>
+          <div style="margin-top:10px"><button class="btn btn-o" onclick="window.open('/api/pnl/csv','_blank')" style="width:100%">📥 Export P&L as CSV</button></div>
         </div>
       </div>
 
@@ -2008,6 +2040,112 @@ function calcOptionsPnl() {
 
 
 // ══════════════════════════════════════════════════════════
+// P&L STATEMENT
+// ══════════════════════════════════════════════════════════
+function tglTradeForm(){document.getElementById('trade-form').classList.toggle('on');}
+
+async function addTrade(){
+  const sym=document.getElementById('tr-sym').value.trim(),qty=parseFloat(document.getElementById('tr-qty').value),
+    buy=parseFloat(document.getElementById('tr-buy').value),sell=parseFloat(document.getElementById('tr-sell').value),
+    bdate=document.getElementById('tr-bdate').value,sdate=document.getElementById('tr-sdate').value;
+  if(!sym||!qty||!buy||!sell||!bdate||!sdate){toast('All fields required');return;}
+  try{
+    await fetch('/api/trades',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol:sym,qty,buyPrice:buy,sellPrice:sell,buyDate:bdate,sellDate:sdate})});
+    ['tr-sym','tr-qty','tr-buy','tr-sell','tr-bdate','tr-sdate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    document.getElementById('trade-form').classList.remove('on');
+    loadPnlStatement();toast('Trade added ✅');
+  }catch{toast('Failed to add trade');}
+}
+
+async function deleteTrade(id){
+  if(!confirm('Delete this trade?'))return;
+  try{await fetch('/api/trades/'+id,{method:'DELETE'});loadPnlStatement();toast('Deleted');}catch{}
+}
+
+async function loadPnlStatement(){
+  try{
+    const d=await(await fetch('/api/pnl')).json();
+    renderUnrealized(d.unrealized);
+    renderRealized(d.realized,d.realizedTotal);
+    renderTax(d.tax);
+  }catch{document.getElementById('pnl-unrealized').innerHTML='<div class="empty"><i>⚠️</i>Failed to load P&L</div>';}
+}
+
+function renderUnrealized(u){
+  const el=document.getElementById('pnl-unrealized');
+  if(!u||!u.items.length){el.innerHTML='<div class="empty"><i>📭</i>No holdings found</div>';return;}
+  const totalCls=u.totalPnl>=0?'var(--grn)':'var(--red)';
+  let html='<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:2px solid var(--b2);margin-bottom:8px">';
+  html+='<div><span style="font-size:11px;color:var(--t3)">Invested</span><div style="font-weight:700;color:var(--t1)">₹'+fmt(u.totalInvested)+'</div></div>';
+  html+='<div style="text-align:center"><span style="font-size:11px;color:var(--t3)">Current</span><div style="font-weight:700;color:var(--t1)">₹'+fmt(u.totalCurrent)+'</div></div>';
+  html+='<div style="text-align:right"><span style="font-size:11px;color:var(--t3)">P&L</span><div style="font-weight:700;color:'+totalCls+'">₹'+fmt(u.totalPnl)+'</div></div></div>';
+  for(const i of u.items){
+    const cls=i.pnl>=0?'var(--grn)':'var(--red)',sign=i.pnl>=0?'+':'';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--b1)">';
+    html+='<div><div style="font-weight:700;font-size:13px;color:var(--t1)">'+i.symbol+'</div>';
+    html+='<div style="font-family:var(--mono);font-size:10px;color:var(--t3)">'+i.qty+' × ₹'+fmt(i.buyPrice)+' → ₹'+fmt(i.currentPrice)+'</div></div>';
+    html+='<div style="text-align:right"><div style="font-weight:700;color:'+cls+'">'+sign+'₹'+fmt(i.pnl)+'</div>';
+    html+='<div style="font-family:var(--mono);font-size:10px;color:'+cls+'">'+sign+i.pnlPct+'%</div></div></div>';
+  }
+  el.innerHTML=html;
+}
+
+function renderRealized(trades,total){
+  const sumEl=document.getElementById('pnl-realized-summary');
+  const tblEl=document.getElementById('pnl-trades-table');
+  if(!trades||!trades.length){
+    sumEl.innerHTML='';
+    tblEl.innerHTML='<div class="empty"><i>📭</i>No closed trades yet — add one above</div>';
+    return;
+  }
+  const cls=total>=0?'var(--grn)':'var(--red)',sign=total>=0?'+':'';
+  sumEl.innerHTML='<div style="display:flex;justify-content:space-between;padding:10px;background:var(--s3);border-radius:var(--rs);margin-bottom:8px">'
+    +'<span style="color:var(--t3);font-size:12px">Total Realized P&L</span>'
+    +'<span style="font-weight:800;color:'+cls+'">'+sign+'₹'+fmt(total)+'</span></div>';
+  let html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">';
+  html+='<thead><tr style="border-bottom:2px solid var(--b2);color:var(--t3);font-family:var(--mono);font-size:9px;text-transform:uppercase">'
+    +'<th style="text-align:left;padding:8px 4px">Date</th><th style="text-align:left;padding:8px 4px">Stock</th>'
+    +'<th style="text-align:right;padding:8px 4px">Qty</th><th style="text-align:right;padding:8px 4px">Buy</th>'
+    +'<th style="text-align:right;padding:8px 4px">Sell</th><th style="text-align:right;padding:8px 4px">P&L</th>'
+    +'<th style="text-align:right;padding:8px 4px">Days</th><th style="text-align:center;padding:8px 4px">Tax</th>'
+    +'<th style="text-align:center;padding:8px 4px"></th></tr></thead><tbody>';
+  for(const t of trades){
+    const c=t.pnl>=0?'var(--grn)':'var(--red)',s=t.pnl>=0?'+':'';
+    const taxBg=t.taxType==='LTCG'?'var(--grn)':'var(--ora)';
+    html+='<tr style="border-bottom:1px solid var(--b1)">'
+      +'<td style="padding:6px 4px;color:var(--t2)">'+t.sellDate+'</td>'
+      +'<td style="padding:6px 4px;font-weight:700;color:var(--t1)">'+t.symbol+'</td>'
+      +'<td style="padding:6px 4px;text-align:right;color:var(--t2)">'+t.qty+'</td>'
+      +'<td style="padding:6px 4px;text-align:right;color:var(--t2)">₹'+fmt(t.buyPrice)+'</td>'
+      +'<td style="padding:6px 4px;text-align:right;color:var(--t2)">₹'+fmt(t.sellPrice)+'</td>'
+      +'<td style="padding:6px 4px;text-align:right;font-weight:700;color:'+c+'">'+s+'₹'+fmt(t.pnl)+'</td>'
+      +'<td style="padding:6px 4px;text-align:right;color:var(--t3);font-family:var(--mono)">'+t.holdingDays+'d</td>'
+      +'<td style="padding:6px 4px;text-align:center"><span style="font-size:9px;padding:2px 6px;border-radius:4px;background:'+taxBg+';color:#000;font-weight:700">'+t.taxType+'</span></td>'
+      +'<td style="padding:6px 4px;text-align:center"><button onclick="deleteTrade(\''+t.id+'\')" style="background:none;border:none;cursor:pointer;font-size:12px">🗑</button></td></tr>';
+  }
+  html+='</tbody></table></div>';
+  tblEl.innerHTML=html;
+}
+
+function renderTax(tax){
+  const el=document.getElementById('pnl-tax');
+  if(!tax||(!tax.stcgTotal&&!tax.ltcgTotal)){el.innerHTML='<div class="empty"><i>🏛️</i>Add closed trades with profits to see tax estimate</div>';return;}
+  const row=(label,val,color)=>'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--b1)"><span style="color:var(--t2);font-size:12px">'+label+'</span><span style="font-weight:700;color:'+(color||'var(--t1)')+'">₹'+fmt(val)+'</span></div>';
+  let html='';
+  html+=row('Short-Term Capital Gains (STCG)',''+tax.stcgTotal);
+  html+=row('STCG Tax @ 20%',''+tax.stcgTax,'var(--red)');
+  html+='<div style="height:8px"></div>';
+  html+=row('Long-Term Capital Gains (LTCG)',''+tax.ltcgTotal);
+  html+=row('LTCG Exemption (₹1.25L)',''+tax.ltcgExemption,'var(--grn)');
+  html+=row('Taxable LTCG',''+tax.taxableLtcg);
+  html+=row('LTCG Tax @ 12.5%',''+tax.ltcgTax,'var(--red)');
+  html+='<div style="margin-top:12px;padding:12px;background:var(--s3);border-radius:var(--rs);display:flex;justify-content:space-between;align-items:center">';
+  html+='<span style="font-weight:700;color:var(--t1)">Total Estimated Tax</span>';
+  html+='<span style="font-size:18px;font-weight:800;color:var(--red)">₹'+fmt(tax.totalTax)+'</span></div>';
+  el.innerHTML=html;
+}
+
+// ══════════════════════════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════════════════════════
 const PAGE_NAMES={home:'Home',markets:'Markets',portfolio:'Portfolio',insights:'Insights',more:'More'};
@@ -2027,7 +2165,7 @@ function initNav(){
   // Markets sub-tabs
   document.querySelectorAll('#mkt-tabs .fc').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('#mkt-tabs .fc').forEach(x=>x.classList.remove('on'));btn.classList.add('on');curMktTab=btn.dataset.mt;['stocks','sectors','global','gainers','penny'].forEach(t=>{const el=document.getElementById('mt-'+t);if(el)el.style.display=t===curMktTab?'block':'none';});if(curMktTab==='gainers')renderGainersLosers();});});
   // Portfolio sub-tabs
-  document.querySelectorAll('#pf-tabs .fc').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('#pf-tabs .fc').forEach(x=>x.classList.remove('on'));btn.classList.add('on');curPfTab=btn.dataset.pt;['holdings','zerodha','options','overview'].forEach(t=>{const el=document.getElementById('pt-'+t);if(el)el.style.display=t===curPfTab?'block':'none';});if(curPfTab==='zerodha')loadZerodhaData();if(curPfTab==='options')renderOpts();});});
+  document.querySelectorAll('#pf-tabs .fc').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('#pf-tabs .fc').forEach(x=>x.classList.remove('on'));btn.classList.add('on');curPfTab=btn.dataset.pt;['holdings','zerodha','options','overview','pnl'].forEach(t=>{const el=document.getElementById('pt-'+t);if(el)el.style.display=t===curPfTab?'block':'none';});if(curPfTab==='zerodha')loadZerodhaData();if(curPfTab==='options')renderOpts();if(curPfTab==='pnl')loadPnlStatement();});});
   renderGlossary();
   renderEconCal();
   renderHomeEvents();
