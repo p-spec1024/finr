@@ -400,8 +400,8 @@ app.get('/api/options-recommend', async (req, res) => {
     const bankNifty = liveIndices['Nifty Bank'];
     // Build top movers and signals summary
     const stocks = Object.values(liveStocks).filter(s => !s.isMock && s.price);
-    const topGainers = [...stocks].sort((a,b) => b.changePct - a.changePct).slice(0,5);
-    const topLosers  = [...stocks].sort((a,b) => a.changePct - b.changePct).slice(0,5);
+    const topGainers = [...stocks].sort((a,b) => b.changePct - a.changePct).slice(0,10);
+    const topLosers  = [...stocks].sort((a,b) => a.changePct - b.changePct).slice(0,10);
     const strongSignals = Object.values(signalCache).filter(s => s.score >= 65).sort((a,b) => b.score - a.score).slice(0,8);
 
     const stockSummary = stocks.slice(0,30).map(s => {

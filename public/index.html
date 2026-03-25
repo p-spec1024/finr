@@ -426,6 +426,7 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
       </div>
       <div class="tb-r">
         <div class="stpill"><div class="sd off" id="sd"></div><span id="stxt" style="font-family:var(--mono);font-size:10px">LOADING</span></div>
+        <button class="thbtn-top" onclick="refreshAll()" id="refresh-btn" title="Refresh all data" style="font-size:16px;background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:8px;transition:transform .3s">🔄</button>
         <button class="thbtn-top" onclick="toggleTheme()" id="th-top">☀️</button>
       </div>
     </div>
@@ -991,6 +992,25 @@ function applyTheme(t) {
   ['th-sb','th-top'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent=icon; });
 }
 function toggleTheme() { applyTheme(document.documentElement.getAttribute('data-theme')==='dark' ? 'light' : 'dark'); }
+
+function refreshAll() {
+  const btn = document.getElementById('refresh-btn');
+  if (btn) { btn.style.transform='rotate(360deg)'; setTimeout(()=>btn.style.transform='',600); }
+  toast('Refreshing all data...');
+  // Re-fetch status
+  fetchStatus();
+  // Re-render all visible sections
+  renderGainersLosers();
+  renderSectors();
+  renderGlobalMarkets();
+  renderSignals();
+  if (typeof renderPenny==='function' && pennyLoaded) renderPenny();
+  // Re-fetch market context
+  if (typeof fetchMarketContext==='function') fetchMarketContext();
+  // Re-fetch news
+  if (typeof fetchNews==='function') fetchNews();
+  setTimeout(()=>toast('Data refreshed ✅'),800);
+}
 applyTheme(localStorage.getItem('finr-t') || 'dark');
 
 // ══════════════════════════════════════════════════════════
@@ -1462,8 +1482,8 @@ function renderGainersLosers() {
   // Seed reason by symbol hash for consistency within a session
   const symHash = s => s.symbol.split('').reduce((a,c)=>a+c.charCodeAt(0),0);
   const getReason = s => { const r=REASONS[s.sector]||REASONS.DEFAULT; return r[symHash(s)%r.length]; };
-  const gainers = [...arr].sort((a,b)=>b.changePct-a.changePct).slice(0,8);
-  const losers  = [...arr].sort((a,b)=>a.changePct-b.changePct).slice(0,8);
+  const gainers = [...arr].sort((a,b)=>b.changePct-a.changePct).slice(0,10);
+  const losers  = [...arr].sort((a,b)=>a.changePct-b.changePct).slice(0,10);
   const gRow = (s,idx) => `<div class="arow"><div style="font-family:var(--mono);font-size:11px;color:var(--t4);min-width:18px">${idx+1}</div><div style="flex:1"><div class="asym">${s.symbol}</div><div class="areason">${getReason(s)}</div></div><div style="text-align:right"><div class="aprice">₹${fmt(s.price)}</div><div class="aup" style="color:${s.changePct>=0?'var(--grn)':'var(--red)'}">${s.changePct>=0?'+':''}${(s.changePct||0).toFixed(2)}%</div></div></div>`;
   const gEl=document.getElementById('g-gainers');if(gEl)gEl.innerHTML=gainers.map(gRow).join('');
   const lEl=document.getElementById('g-losers');if(lEl)lEl.innerHTML=losers.map(gRow).join('');
