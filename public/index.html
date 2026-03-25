@@ -495,17 +495,20 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
         <!-- Stocks sub-tab -->
         <div id="mt-stocks">
           <div style="font-family:var(--mono);font-size:10px;color:var(--t3);margin-bottom:10px" id="mkt-st-sub"></div>
-          <div class="frow" id="stock-frow">
-            <button class="fc on" data-f="all">All</button>
-            <button class="fc" data-f="STRONG BUY">Strong Buy</button>
-            <button class="fc" data-f="BUY">Buy</button>
-            <button class="fc" data-f="WATCH">Watch</button>
-            <button class="fc" data-f="Banking">Banking</button>
-            <button class="fc" data-f="IT">IT</button>
-            <button class="fc" data-f="Pharma">Pharma</button>
-            <button class="fc" data-f="Energy">Energy</button>
-            <button class="fc" data-f="Defence">Defence</button>
-            <button class="fc" data-f="Power">Power</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <select id="sector-filter" onchange="flt=this.value||'all';document.getElementById('signal-filter').value='';renderStocks();" style="background:var(--s2);color:var(--t1);border:1px solid var(--b1);border-radius:8px;padding:6px 12px;font-size:12px;font-family:var(--mono);cursor:pointer;min-width:130px">
+              <option value="all">All Sectors</option>
+            </select>
+            <select id="signal-filter" onchange="flt=this.value||'all';document.getElementById('sector-filter').value='all';renderStocks();" style="background:var(--s2);color:var(--t1);border:1px solid var(--b1);border-radius:8px;padding:6px 12px;font-size:12px;font-family:var(--mono);cursor:pointer;min-width:130px">
+              <option value="">All Signals</option>
+              <option value="STRONG BUY">Strong Buy</option>
+              <option value="BUY">Buy</option>
+              <option value="WATCH">Watch</option>
+              <option value="HOLD">Hold</option>
+              <option value="SELL">Sell</option>
+              <option value="STRONG SELL">Strong Sell</option>
+            </select>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--t3)" id="stock-count"></span>
           </div>
           <div class="card" style="padding:0;overflow:hidden">
             <div class="twrap">
@@ -526,15 +529,10 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
 
         <!-- Sectors sub-tab -->
         <div id="mt-sectors" style="display:none">
-          <div class="card"><div class="card-t">Performance vs Nifty</div><div id="sect-list"></div></div>
+          <div class="card"><div class="card-t">📊 Live Sector Performance <span style="font-size:10px;color:var(--t3);font-weight:400">(click to expand top movers)</span></div><div id="sect-list"></div></div>
           <div class="card">
-            <div class="card-t">2026 Macro Strategy</div>
-            <div style="font-size:12px;color:var(--t2);line-height:1.9">
-              <strong style="color:var(--grn)">OVERWEIGHT:</strong> Defence, Power, Infra, PSU Banks, Manufacturing PLI<br>
-              <strong style="color:var(--t2)">NEUTRAL:</strong> Banking, FMCG (defensive), Energy, Telecom<br>
-              <strong style="color:#ff9f0a)">UNDERWEIGHT:</strong> IT (tariff headwind), Auto (EV transition risk)<br>
-              <strong style="color:var(--red)">AVOID:</strong> Aviation, OMC (margin squeeze), Chemicals (China competition)
-            </div>
+            <div class="card-t">Sector Strategy Summary</div>
+            <div id="sect-strategy" style="font-size:12px;color:var(--t2);line-height:1.9"></div>
           </div>
         </div>
 
@@ -554,7 +552,7 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
           <div class="risk-warn">⚠️ <strong>Penny Stock Warning:</strong> These are high-risk, low-liquidity stocks frequently targeted for pump-and-dump manipulation. Large operators buy quietly, spread fake tips, then dump at peak leaving retail investors trapped. Never invest more than 5% of portfolio. Always check volume spike before buying.</div>
           <div id="penny-list" style="display:none"></div>
           <div id="penny-load-wrap" style="text-align:center;padding:24px 0">
-            <button id="btn-load-penny" onclick="loadPennyStocks()" style="background:var(--ora);color:#000;border:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--mono)">🔓 Load 46 Penny Stocks</button>
+            <button id="btn-load-penny" onclick="loadPennyStocks()" style="background:var(--ora);color:#000;border:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--mono)">🔓 Load 48 Penny Stocks</button>
             <div style="font-size:10px;color:var(--t3);margin-top:8px">High-risk, speculative stocks — tap to reveal</div>
           </div>
         </div>
@@ -1204,6 +1202,7 @@ function renderAll() {
   renderGauge();
   renderBreadth();
   renderAdvisor();
+  populateSectorDropdown();
   renderStocks();
   renderTicker();
   renderVix();
@@ -1396,10 +1395,20 @@ function renderAdvisor() {
 // ══════════════════════════════════════════════════════════
 // STOCKS TABLE
 // ══════════════════════════════════════════════════════════
+function populateSectorDropdown() {
+  const dd = document.getElementById('sector-filter'); if (!dd) return;
+  const sectors = [...new Set(Object.values(S).map(s=>s.sector).filter(Boolean))].sort();
+  const cur = dd.value;
+  dd.innerHTML = '<option value="all">All Sectors</option>' + sectors.map(s => `<option value="${s}"${cur===s?' selected':''}>${s}</option>`).join('');
+}
 function renderStocks() {
   let arr = Object.values(S); if(!arr.length) return;
-  if(flt!=='all') arr=arr.filter(s=>{const sig=SIG[s.symbol];if(['STRONG BUY','BUY','WATCH','HOLD','SELL'].includes(flt))return sig?.signal===flt;return s.sector===flt;});
+  const SIGNALS = ['STRONG BUY','BUY','WATCH','HOLD','SELL','STRONG SELL'];
+  if(flt!=='all' && flt!=='') arr=arr.filter(s=>{const sig=SIG[s.symbol];if(SIGNALS.includes(flt))return sig?.signal===flt;return s.sector===flt;});
   arr.sort((a,b)=>{let av,bv;if(srt==='score'){av=SIG[a.symbol]?.score||0;bv=SIG[b.symbol]?.score||0;}else if(srt==='upside'){av=SIG[a.symbol]?.upside||0;bv=SIG[b.symbol]?.upside||0;}else if(srt==='downside'){av=SIG[a.symbol]?.downside||0;bv=SIG[b.symbol]?.downside||0;}else{av=a[srt]||0;bv=b[srt]||0;}return sasc?av-bv:bv-av;});
+  // Update stock count
+  const cntEl = document.getElementById('stock-count');
+  if (cntEl) cntEl.textContent = arr.length + ' stocks' + (flt && flt!=='all' ? ' · filtered' : '');
   const body=document.getElementById('stbody');if(!body)return;
   body.innerHTML=arr.length?arr.map(s=>{
     const sig=SIG[s.symbol]||{score:0,signal:'--',upside:0,downside:0};
@@ -1418,7 +1427,6 @@ function renderStocks() {
   for(const s of arr){const prev=pp[s.symbol];if(prev&&prev!==s.price){const c=document.getElementById('pc-'+s.symbol);if(c){c.classList.remove('fu','fd');void c.offsetWidth;c.classList.add(s.price>prev?'fu':'fd');}}pp[s.symbol]=s.price;}
 }
 function sortBy(k){if(srt===k)sasc=!sasc;else{srt=k;sasc=false;}renderStocks();}
-document.querySelectorAll('#stock-frow .fc').forEach(c=>{c.addEventListener('click',()=>{document.querySelectorAll('#stock-frow .fc').forEach(x=>x.classList.remove('on'));c.classList.add('on');flt=c.dataset.f;renderStocks();});});
 
 // ══════════════════════════════════════════════════════════
 // TICKER
@@ -1490,13 +1498,85 @@ function renderGainersLosers() {
 }
 
 // ══════════════════════════════════════════════════════════
-// SECTORS
+// SECTORS (live computed from stock data)
 // ══════════════════════════════════════════════════════════
-const SECTS=[{n:'Defence',c:5.8,r:'OVERWEIGHT'},{n:'Power',c:4.2,r:'OVERWEIGHT'},{n:'Manufacturing',c:3.9,r:'OVERWEIGHT'},{n:'Pharma',c:2.8,r:'OVERWEIGHT'},{n:'PSU Banks',c:2.4,r:'OVERWEIGHT'},{n:'Infra',c:2.1,r:'OVERWEIGHT'},{n:'Mining',c:1.8,r:'OVERWEIGHT'},{n:'Healthcare',c:1.5,r:'OVERWEIGHT'},{n:'FMCG',c:.9,r:'NEUTRAL'},{n:'Telecom',c:.6,r:'NEUTRAL'},{n:'Energy',c:.4,r:'NEUTRAL'},{n:'Real Estate',c:.2,r:'NEUTRAL'},{n:'Banking',c:-.3,r:'NEUTRAL'},{n:'IT',c:-1.8,r:'UNDERWEIGHT'},{n:'NBFC',c:-2.1,r:'UNDERWEIGHT'},{n:'Auto',c:-2.4,r:'UNDERWEIGHT'},{n:'Chemicals',c:-2.9,r:'AVOID'},{n:'Paints',c:-3.5,r:'AVOID'},{n:'OMC',c:-3.8,r:'AVOID'},{n:'Aviation',c:-4.6,r:'AVOID'}];
+function computeLiveSectors() {
+  const stocks = Object.values(S);
+  if (!stocks.length) return [];
+  const sectorMap = {};
+  for (const s of stocks) {
+    if (!s.sector) continue;
+    if (!sectorMap[s.sector]) sectorMap[s.sector] = { total:0, count:0, stocks:[] };
+    sectorMap[s.sector].total += (s.changePct || 0);
+    sectorMap[s.sector].count++;
+    sectorMap[s.sector].stocks.push(s);
+  }
+  const sects = Object.entries(sectorMap).map(([name, d]) => {
+    const avg = +(d.total / d.count).toFixed(2);
+    let rating;
+    if (avg > 2) rating = 'OVERWEIGHT';
+    else if (avg > 0.5) rating = 'NEUTRAL';
+    else if (avg > -1) rating = 'UNDERWEIGHT';
+    else rating = 'AVOID';
+    // Sort sector stocks by changePct desc for top movers
+    d.stocks.sort((a,b) => b.changePct - a.changePct);
+    return { n:name, c:avg, r:rating, count:d.count, top:d.stocks.slice(0,5) };
+  });
+  sects.sort((a,b) => b.c - a.c);
+  return sects;
+}
+
+let sectExpanded = {};
 function renderSectors() {
-  const mx=Math.max(...SECTS.map(s=>Math.abs(s.c)));
-  const el=document.getElementById('sect-list');if(!el)return;
-  el.innerHTML=SECTS.map(s=>{const clr=s.c>0?'#30d158':'#ff453a',pct=(Math.abs(s.c)/mx)*100,rc=s.r==='OVERWEIGHT'?'ow':s.r==='AVOID'?'av':s.r==='UNDERWEIGHT'?'uw':'ne';return`<div class="sect-row"><div class="sect-nm">${s.n}</div><div class="sect-tr"><div class="sect-fl" style="width:${pct}%;background:${clr}"></div></div><div class="sect-pc" style="color:${clr}">${s.c>=0?'+':''}${s.c}%</div><div class="sect-r ${rc}">${s.r}</div></div>`;}).join('');
+  const SECTS = computeLiveSectors();
+  if (!SECTS.length) return;
+  const mx = Math.max(...SECTS.map(s => Math.abs(s.c)), 0.1);
+  const el = document.getElementById('sect-list'); if (!el) return;
+  el.innerHTML = SECTS.map(s => {
+    const clr = s.c > 0 ? '#30d158' : '#ff453a';
+    const pct = (Math.abs(s.c) / mx) * 100;
+    const rc = s.r==='OVERWEIGHT'?'ow':s.r==='AVOID'?'av':s.r==='UNDERWEIGHT'?'uw':'ne';
+    const isOpen = sectExpanded[s.n];
+    let topHtml = '';
+    if (isOpen && s.top && s.top.length) {
+      topHtml = '<div class="sect-top" style="padding:6px 0 2px 0;border-top:1px solid var(--b1);margin-top:6px">'
+        + s.top.map((st,i) => {
+          const sig = SIG[st.symbol] || {};
+          const chClr = (st.changePct||0) >= 0 ? 'var(--grn)' : 'var(--red)';
+          const chSign = (st.changePct||0) >= 0 ? '+' : '';
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:11px;cursor:pointer" onclick="event.stopPropagation();openMod('${st.symbol}')">
+            <span style="color:var(--t2);font-family:var(--mono);min-width:20px">${i+1}.</span>
+            <span style="flex:1;color:var(--t1);font-weight:600">${st.symbol}</span>
+            <span style="font-family:var(--mono);color:var(--t2);margin-right:8px">₹${fmt(st.price)}</span>
+            <span style="font-family:var(--mono);color:${chClr};min-width:55px;text-align:right">${chSign}${(st.changePct||0).toFixed(2)}%</span>
+            ${sig.signal ? '<span style="margin-left:6px;font-size:9px">'+bdg(sig.signal)+'</span>' : ''}
+          </div>`;
+        }).join('') + '</div>';
+    }
+    return `<div class="sect-row" style="cursor:pointer;padding:8px 4px;border-radius:6px;transition:background .2s" onclick="sectExpanded['${s.n}']=!sectExpanded['${s.n}'];renderSectors();" onmouseenter="this.style.background='var(--s2)'" onmouseleave="this.style.background=''">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="sect-nm" style="min-width:100px">${s.n} <span style="font-size:9px;color:var(--t3)">(${s.count})</span></div>
+        <div class="sect-tr"><div class="sect-fl" style="width:${pct}%;background:${clr}"></div></div>
+        <div class="sect-pc" style="color:${clr};min-width:55px;text-align:right">${s.c>=0?'+':''}${s.c.toFixed(2)}%</div>
+        <div class="sect-r ${rc}" style="min-width:90px;text-align:center">${s.r}</div>
+        <span style="font-size:10px;color:var(--t3)">${isOpen?'▲':'▼'}</span>
+      </div>
+      ${topHtml}
+    </div>`;
+  }).join('');
+  // Dynamic strategy summary
+  const stratEl = document.getElementById('sect-strategy');
+  if (stratEl) {
+    const ow = SECTS.filter(s=>s.r==='OVERWEIGHT').map(s=>s.n);
+    const ne = SECTS.filter(s=>s.r==='NEUTRAL').map(s=>s.n);
+    const uw = SECTS.filter(s=>s.r==='UNDERWEIGHT').map(s=>s.n);
+    const av = SECTS.filter(s=>s.r==='AVOID').map(s=>s.n);
+    stratEl.innerHTML = (ow.length ? `<strong style="color:var(--grn)">OVERWEIGHT:</strong> ${ow.join(', ')}<br>` : '')
+      + (ne.length ? `<strong style="color:var(--t2)">NEUTRAL:</strong> ${ne.join(', ')}<br>` : '')
+      + (uw.length ? `<strong style="color:#ff9f0a">UNDERWEIGHT:</strong> ${uw.join(', ')}<br>` : '')
+      + (av.length ? `<strong style="color:var(--red)">AVOID:</strong> ${av.join(', ')}` : '')
+      + '<div style="font-size:10px;color:var(--t3);margin-top:8px">Based on live avg change% of stocks in each sector</div>';
+  }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2592,7 +2672,7 @@ function goPage(p){
 function initNav(){
   document.querySelectorAll('.si[data-p],.bn[data-p]').forEach(el=>{el.addEventListener('click',()=>goPage(el.dataset.p));});
   // Markets sub-tabs
-  document.querySelectorAll('#mkt-tabs .fc').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('#mkt-tabs .fc').forEach(x=>x.classList.remove('on'));btn.classList.add('on');curMktTab=btn.dataset.mt;['stocks','sectors','global','gainers','penny'].forEach(t=>{const el=document.getElementById('mt-'+t);if(el)el.style.display=t===curMktTab?'block':'none';});if(curMktTab==='gainers')renderGainersLosers();});});
+  document.querySelectorAll('#mkt-tabs .fc').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('#mkt-tabs .fc').forEach(x=>x.classList.remove('on'));btn.classList.add('on');curMktTab=btn.dataset.mt;['stocks','sectors','global','gainers','penny'].forEach(t=>{const el=document.getElementById('mt-'+t);if(el)el.style.display=t===curMktTab?'block':'none';});if(curMktTab==='gainers')renderGainersLosers();if(curMktTab==='sectors')renderSectors();if(curMktTab==='stocks'){populateSectorDropdown();renderStocks();}});});
   // Portfolio sub-tabs
   document.querySelectorAll('#pf-tabs .fc').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('#pf-tabs .fc').forEach(x=>x.classList.remove('on'));btn.classList.add('on');curPfTab=btn.dataset.pt;['holdings','zerodha','options','overview','pnl'].forEach(t=>{const el=document.getElementById('pt-'+t);if(el)el.style.display=t===curPfTab?'block':'none';});if(curPfTab==='zerodha')loadZerodhaData();if(curPfTab==='options')renderOpts();if(curPfTab==='pnl')loadPnlStatement();});});
   // Insights sub-tabs
