@@ -982,12 +982,28 @@ function recalcSignals() {
 // ══════════════════════════════════════════════════════════════════════════════
 // UPSTOX WEBSOCKET
 // ══════════════════════════════════════════════════════════════════════════════
-function connectUpstoxWs() {
+async function connectUpstoxWs() {
   if (!accessToken || !STOCK_UNIVERSE.length) return;
   if (upstoxWs && [WebSocket.OPEN, WebSocket.CONNECTING].includes(upstoxWs.readyState)) return;
-  upstoxWs = new WebSocket('wss://api.upstox.com/v2/feed/market-data-streamer', {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
+
+  // Step 1: Get authorized WebSocket URL from Upstox REST API
+  let wsUrl;
+  try {
+    const authRes = await axios.get('https://api.upstox.com/v2/feed/market-data-feed/authorize', {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
+    });
+    wsUrl = authRes.data?.data?.authorizedRedirectUri;
+    if (!wsUrl) { log('ERR', 'Upstox WS authorize returned no URL: ' + JSON.stringify(authRes.data)); return; }
+    log('OK', 'Upstox WS authorized — connecting to streamer');
+  } catch (e) {
+    log('ERR', 'Upstox WS authorize failed: ' + (e.response?.data?.message || e.message));
+    setTimeout(connectUpstoxWs, wsReconnectMs);
+    wsReconnectMs = Math.min(wsReconnectMs * 2, 30000);
+    return;
+  }
+
+  // Step 2: Connect to the authorized WebSocket URL
+  upstoxWs = new WebSocket(wsUrl);
   upstoxWs.on('open', () => {
     log('OK', 'Upstox WebSocket connected');
     connectionStatus = 'live'; wsReconnectMs = 1000; broadcastStatus();
