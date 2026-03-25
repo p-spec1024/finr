@@ -410,49 +410,50 @@ app.get('/api/options-recommend', async (req, res) => {
       return `${s.symbol}: ₹${s.price} (${s.changePct>=0?'+':''}${s.changePct.toFixed(2)}%) PE:${fund?.pe||'?'} Signal:${sig?.signal||'--'} Score:${sig?.score||0}`;
     }).join('\n');
 
-    const prompt = `You are an expert NSE F&O options strategist for Indian retail investors. Analyse the current market and recommend the TOP 5 stocks best suited for options trading RIGHT NOW. For each stock, suggest whether to take CE (Call) or PE (Put) and give a specific strategy.
+    const prompt = `NSE F&O options strategist. Recommend TOP 5 stocks/indices for options trading NOW with CE or PE.
 
-CURRENT MARKET SNAPSHOT:
-- Nifty 50: ${nifty?.price || 'N/A'} (${nifty?.changePct >= 0 ? '+' : ''}${nifty?.changePct || 0}%)
-- Bank Nifty: ${bankNifty?.price || 'N/A'} (${bankNifty?.changePct >= 0 ? '+' : ''}${bankNifty?.changePct || 0}%)
-- India VIX: ${vixData.value} (${vixData.trend}) — ${vixData.value > 20 ? 'HIGH VOLATILITY' : vixData.value < 13 ? 'LOW VOLATILITY' : 'MODERATE'}
-- FII Flow: ₹${fiiDiiData.fii}Cr | DII Flow: ₹${fiiDiiData.dii}Cr
-- Market: ${isMarketOpen() ? 'OPEN' : 'CLOSED'} | IST: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+MARKET: Nifty=${nifty?.price||'?'}(${nifty?.changePct>=0?'+':''}${nifty?.changePct||0}%) BankNifty=${bankNifty?.price||'?'}(${bankNifty?.changePct>=0?'+':''}${bankNifty?.changePct||0}%) VIX=${vixData.value}(${vixData.trend}) FII=₹${fiiDiiData.fii}Cr DII=₹${fiiDiiData.dii}Cr ${isMarketOpen()?'OPEN':'CLOSED'}
+GAINERS: ${topGainers.map(s=>`${s.symbol}(${s.changePct>=0?'+':''}${s.changePct.toFixed(1)}%)`).join(',')}
+LOSERS: ${topLosers.map(s=>`${s.symbol}(${s.changePct.toFixed(1)}%)`).join(',')}
+STOCKS: ${stocks.slice(0,35).map(s=>{const sig=signalCache[s.symbol];return `${s.symbol}:₹${s.price}(${s.changePct>=0?'+':''}${s.changePct.toFixed(1)}%)S${sig?.score||0}`;}).join(' ')}
 
-TOP GAINERS: ${topGainers.map(s => `${s.symbol}(${s.changePct>=0?'+':''}${s.changePct.toFixed(2)}%)`).join(', ')}
-TOP LOSERS: ${topLosers.map(s => `${s.symbol}(${s.changePct.toFixed(2)}%)`).join(', ')}
+Reply ONLY valid JSON array, NO markdown fences, NO text before/after:
+[{"symbol":"NAME","direction":"CE or PE","confidence":"HIGH/MED/LOW","strategy":"specific strike & expiry","reasoning":"why this stock, trend, support/resistance","entry":"price or condition","target":"target price/% for the option","stopLoss":"SL level","riskLevel":"LOW/MED/HIGH","timeframe":"Intraday/Weekly/Monthly"}]
+Keep reasoning under 40 words per stock. Include NIFTY or BANKNIFTY if favorable.`;
 
-STOCK DATA:
-${stockSummary}
-
-Respond ONLY with valid JSON array — no markdown fences, no preamble:
-[{"symbol":"STOCKNAME","direction":"CE","confidence":"HIGH","strategy":"Brief strategy name (e.g. Buy 24500 CE weekly)","reasoning":"2-3 line analysis covering trend, volatility, support/resistance, why CE or PE","entry":"Specific entry condition or price range","target":"Target profit % or price","stopLoss":"Stop loss level or %","riskLevel":"LOW/MEDIUM/HIGH","timeframe":"Intraday/Weekly/Monthly"},...]
-
-RULES:
-- Only recommend F&O eligible stocks (large-cap, high liquidity)
-- direction must be CE or PE only
-- confidence must be HIGH, MEDIUM, or LOW
-- Consider VIX for strategy selection (high VIX = sell options, low VIX = buy options)
-- Consider FII/DII flows for market direction
-- Give specific strike guidance where possible
-- Include at least one index option (NIFTY or BANKNIFTY) if conditions are favorable`;
-
-    const g = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 2500, timeout: 45000 });
+    const g = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 4000, timeout: 45000 });
     const raw = g.text || '[]';
-    log('OK', `Gemini options recommendations generated (${g.model})`);
-    // Try to parse as JSON, fallback to raw
+    log('OK', `Gemini options recommendations generated (${g.model}), ${raw.length} chars`);
+    // Robust JSON parsing with multiple fallback strategies
     let recs = [];
-    try {
-      const cleaned = raw.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
-      recs = JSON.parse(cleaned);
-    } catch(pe) {
-      // Try regex extraction for each recommendation object
-      const objRegex = /\{[^{}]*"symbol"[^{}]*\}/g;
-      const matches = raw.match(objRegex);
+    const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+    // Strategy 1: direct parse
+    try { recs = JSON.parse(cleaned); } catch(_) {}
+    // Strategy 2: find the array in the text
+    if (!recs.length) {
+      const arrStart = cleaned.indexOf('['), arrEnd = cleaned.lastIndexOf(']');
+      if (arrStart >= 0 && arrEnd > arrStart) {
+        try { recs = JSON.parse(cleaned.slice(arrStart, arrEnd + 1)); } catch(_) {}
+      }
+    }
+    // Strategy 3: extract individual JSON objects via regex
+    if (!recs.length) {
+      const objRegex = /\{[^{}]*"symbol"\s*:\s*"[^"]+"[^{}]*\}/g;
+      const matches = cleaned.match(objRegex);
       if (matches) {
-        for (const m of matches) {
-          try { recs.push(JSON.parse(m)); } catch(_) {}
-        }
+        for (const m of matches) { try { recs.push(JSON.parse(m)); } catch(_) {} }
+      }
+    }
+    // Strategy 4: fix truncated JSON — add missing ] and try
+    if (!recs.length && cleaned.includes('"symbol"')) {
+      try {
+        let fixed = cleaned;
+        if (!fixed.endsWith(']')) fixed = fixed.replace(/,?\s*$/, '') + ']';
+        if (!fixed.startsWith('[')) fixed = '[' + fixed;
+        recs = JSON.parse(fixed);
+      } catch(_) {
+        // Last resort: try adding closing brace+bracket
+        try { recs = JSON.parse(cleaned.replace(/,?\s*$/, '') + '}]'); } catch(_2) {}
       }
     }
     res.json({ recommendations: recs, raw: recs.length ? undefined : raw, configured: true });
