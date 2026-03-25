@@ -1080,15 +1080,16 @@ function processUpstoxQuote(key, val) {
   // Response keys use COLON format: "NSE_EQ:RELIANCE", not pipe format
   const price = val.last_price;
   if (!price) return false;
-  // Use Upstox pre-calculated values if available, else compute from close_price/ohlc.close
+  // Upstox gives net_change (absolute) but no percentage_change or close_price
+  // Previous close = last_price - net_change
   let change, pct;
-  if (val.net_change !== undefined && val.net_change !== null) {
+  if (val.net_change !== undefined && val.net_change !== null && val.net_change !== 0) {
     change = val.net_change;
-    pct = val.percentage_change || (val.close_price ? (change / val.close_price) * 100 : 0);
-  } else {
-    const prevClose = val.close_price || val.previous_close || val.prev_close || val.ohlc?.close || price;
-    change = price - prevClose;
+    const prevClose = price - change;
     pct = prevClose ? (change / prevClose) * 100 : 0;
+  } else {
+    change = 0;
+    pct = 0;
   }
   const iToken = val.instrument_token || ''; // pipe format: NSE_EQ|INE...
 
