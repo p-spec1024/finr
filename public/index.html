@@ -241,6 +241,18 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
 .sm-act.pledge{background:rgba(255,214,10,.15);color:var(--acc);}
 
 /* ─── PENNY ─── */
+/* ─── MORE ACCORDION ─── */
+.acc-item{background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);margin-bottom:8px;overflow:hidden;}
+.acc-hdr{display:flex;align-items:center;padding:14px 16px;cursor:pointer;user-select:none;transition:background .15s;}
+.acc-hdr:active{background:var(--s3);}
+.acc-ico{font-size:18px;width:32px;flex-shrink:0;}
+.acc-lbl{flex:1;font-size:14px;font-weight:600;color:var(--t1);}
+.acc-desc{font-family:var(--mono);font-size:10px;color:var(--t3);margin-top:2px;}
+.acc-chev{font-size:12px;color:var(--t3);transition:transform .2s;flex-shrink:0;}
+.acc-item.open .acc-chev{transform:rotate(90deg);}
+.acc-body{display:none;padding:0 16px 16px;animation:fu .2s ease;}
+.acc-item.open .acc-body{display:block;}
+
 .penny-card{background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);padding:14px;margin-bottom:10px;border-left:4px solid var(--ora);}
 .risk-badge{padding:2px 9px;border-radius:50px;font-family:var(--mono);font-size:9px;font-weight:600;}
 .risk-badge.HIGH{background:rgba(255,69,58,.15);color:var(--red);}
@@ -756,112 +768,127 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
       <!-- ══ MORE ══ -->
       <div class="pg" id="pg-more">
 
-        <!-- Options P&L Calculator -->
-        <div class="card">
-          <div class="card-t">🧮 Options P&amp;L Calculator</div>
-          <div class="g2" style="margin-bottom:10px">
-            <div class="ig"><label>Buy Price (Premium ₹)</label><input type="number" id="op-buy" placeholder="120" oninput="calcOptionsPnl()"></div>
-            <div class="ig"><label>Current Price (₹)</label><input type="number" id="op-cur" placeholder="180" oninput="calcOptionsPnl()"></div>
-            <div class="ig"><label>Lots</label><input type="number" id="op-lots" placeholder="2" value="1" oninput="calcOptionsPnl()"></div>
-            <div class="ig"><label>Lot Size</label><select id="op-lotsize" onchange="calcOptionsPnl()" style="background:var(--s3);border:1px solid var(--b2);border-radius:var(--rs);padding:10px 12px;color:var(--t1);font-family:var(--mono);font-size:12px;outline:none;width:100%">
-              <option value="50">Nifty — 50</option>
-              <option value="15">Bank Nifty — 15</option>
-              <option value="35">Fin Nifty — 35</option>
-              <option value="25">Sensex — 25</option>
-              <option value="40">Midcap Nifty — 40</option>
-              <option value="300">Reliance — 300</option>
-              <option value="200">TCS — 200</option>
-              <option value="700">Infosys — 700</option>
-              <option value="175">HDFC Bank — 175</option>
-            </select></div>
-          </div>
-          <div id="op-result" style="display:none;background:var(--s3);border-radius:var(--rs);padding:14px;border:1px solid var(--b2)">
-            <div class="g2" id="op-grid"></div>
-            <div style="font-family:var(--mono);font-size:10px;color:var(--t3);margin-top:8px" id="op-note"></div>
-          </div>
-        </div>
+        <!-- Tools -->
+        <div style="font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;padding-left:4px">Tools</div>
 
-
-        <!-- Economic Calendar -->
-        <div class="card">
-          <div class="card-t">📅 Economic Calendar — High Impact Events</div>
-          <div id="econ-cal"></div>
-        </div>
-
-        <!-- Notes -->
-        <div class="card">
-          <div class="card-t">📝 Research Notes <span id="ncnt" style="color:var(--t3);font-weight:400;font-size:11px"></span></div>
-          <div class="ncomp">
-            <div class="ig"><label>New Note</label><textarea id="ntxt" placeholder="Research idea, trade thesis, observation..."></textarea></div>
-            <div class="nfoot">
-              <select class="ncatsel" id="ncat"><option>Research</option><option>Strategy</option><option>Trade Idea</option><option>Risk</option><option>General</option></select>
-              <button class="nsave" onclick="saveNote()">Save</button>
+        <div class="acc-item" onclick="toggleAcc(this)">
+          <div class="acc-hdr"><span class="acc-ico">🧮</span><div style="flex:1"><div class="acc-lbl">Options P&amp;L Calculator</div><div class="acc-desc">Calculate F&amp;O profit/loss</div></div><span class="acc-chev">▶</span></div>
+          <div class="acc-body">
+            <div class="g2" style="margin-bottom:10px">
+              <div class="ig"><label>Buy Price (Premium ₹)</label><input type="number" id="op-buy" placeholder="120" oninput="calcOptionsPnl()"></div>
+              <div class="ig"><label>Current Price (₹)</label><input type="number" id="op-cur" placeholder="180" oninput="calcOptionsPnl()"></div>
+              <div class="ig"><label>Lots</label><input type="number" id="op-lots" placeholder="2" value="1" oninput="calcOptionsPnl()"></div>
+              <div class="ig"><label>Lot Size</label><select id="op-lotsize" onchange="calcOptionsPnl()" style="background:var(--s3);border:1px solid var(--b2);border-radius:var(--rs);padding:10px 12px;color:var(--t1);font-family:var(--mono);font-size:12px;outline:none;width:100%">
+                <option value="50">Nifty — 50</option><option value="15">Bank Nifty — 15</option><option value="35">Fin Nifty — 35</option><option value="25">Sensex — 25</option><option value="40">Midcap Nifty — 40</option><option value="300">Reliance — 300</option><option value="200">TCS — 200</option><option value="700">Infosys — 700</option><option value="175">HDFC Bank — 175</option>
+              </select></div>
+            </div>
+            <div id="op-result" style="display:none;background:var(--s3);border-radius:var(--rs);padding:14px;border:1px solid var(--b2)">
+              <div class="g2" id="op-grid"></div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--t3);margin-top:8px" id="op-note"></div>
             </div>
           </div>
-          <div id="nlist"></div>
         </div>
 
-        <!-- Glossary -->
-        <div class="card">
-          <div class="card-t">📖 Glossary</div>
-          <input class="gsrch" id="gsrch" placeholder="🔍 Search terms..." oninput="filterG()">
-          <div id="glist"></div>
+        <div class="acc-item" onclick="toggleAcc(this)">
+          <div class="acc-hdr"><span class="acc-ico">📅</span><div style="flex:1"><div class="acc-lbl">Economic Calendar</div><div class="acc-desc">High impact events</div></div><span class="acc-chev">▶</span></div>
+          <div class="acc-body"><div id="econ-cal"></div></div>
+        </div>
+
+        <div class="acc-item" onclick="toggleAcc(this)">
+          <div class="acc-hdr"><span class="acc-ico">📝</span><div style="flex:1"><div class="acc-lbl">Research Notes</div><div class="acc-desc">Trade ideas &amp; observations</div></div><span id="ncnt" style="font-family:var(--mono);font-size:10px;color:var(--t3);margin-right:8px"></span><span class="acc-chev">▶</span></div>
+          <div class="acc-body">
+            <div class="ncomp">
+              <div class="ig"><label>New Note</label><textarea id="ntxt" placeholder="Research idea, trade thesis, observation..."></textarea></div>
+              <div class="nfoot">
+                <select class="ncatsel" id="ncat"><option>Research</option><option>Strategy</option><option>Trade Idea</option><option>Risk</option><option>General</option></select>
+                <button class="nsave" onclick="saveNote()">Save</button>
+              </div>
+            </div>
+            <div id="nlist"></div>
+          </div>
+        </div>
+
+        <div class="acc-item" onclick="toggleAcc(this)">
+          <div class="acc-hdr"><span class="acc-ico">📖</span><div style="flex:1"><div class="acc-lbl">Glossary</div><div class="acc-desc">Stock market terms</div></div><span class="acc-chev">▶</span></div>
+          <div class="acc-body">
+            <input class="gsrch" id="gsrch" placeholder="🔍 Search terms..." oninput="filterG()">
+            <div id="glist"></div>
+          </div>
         </div>
 
         <!-- Settings -->
-        <div class="card" id="settings-card">
-          <div class="card-t">⚙️ Settings</div>
-          <div class="card" style="background:var(--s3);padding:12px;margin-bottom:10px">
-            <div style="font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Upstox API</div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 8px;padding-left:4px">Settings</div>
+
+        <div class="acc-item" onclick="toggleAcc(this)">
+          <div class="acc-hdr"><span class="acc-ico">🔗</span><div style="flex:1"><div class="acc-lbl">Upstox API</div><div class="acc-desc">Live market data connection</div></div><span class="acc-chev">▶</span></div>
+          <div class="acc-body">
             <div class="ig"><label>API Key</label><input type="text" id="sk" placeholder="Upstox API Key" autocomplete="off"></div>
             <div class="ig"><label>API Secret</label><input type="password" id="ss" placeholder="Upstox API Secret"></div>
             <div class="ig"><label>App PIN (4 digits)</label><input type="password" id="sp" placeholder="4-digit PIN" maxlength="4"></div>
             <div class="ig"><label>Callback URL</label><input type="text" id="sc" placeholder="https://finr-production.up.railway.app/callback"></div>
-            <button class="btn btn-p" onclick="doRefresh()" style="margin-bottom:8px">🔄 Refresh Upstox Token</button>
+            <button class="btn btn-p" onclick="doRefresh()" style="margin-top:4px">🔄 Refresh Token</button>
           </div>
-          <div class="card" style="background:var(--s3);padding:12px;margin-bottom:10px">
-            <div style="font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Zerodha API</div>
+        </div>
+
+        <div class="acc-item" onclick="toggleAcc(this)">
+          <div class="acc-hdr"><span class="acc-ico">🦓</span><div style="flex:1"><div class="acc-lbl">Zerodha API</div><div class="acc-desc">Holdings &amp; positions sync</div></div><span class="acc-chev">▶</span></div>
+          <div class="acc-body">
             <div class="ig"><label>API Key</label><input type="text" id="zk" placeholder="Zerodha API Key" autocomplete="off"></div>
             <div class="ig"><label>API Secret</label><input type="password" id="zs" placeholder="Zerodha API Secret"></div>
-            <div class="ig"><label>Zerodha Callback URL</label><input type="text" id="zc" placeholder="https://finr-production.up.railway.app/zerodha/callback"></div>
-            <button class="btn btn-p" onclick="doZerodhaRefresh()" style="margin-bottom:8px">🔄 Refresh Zerodha Token</button>
+            <div class="ig"><label>Callback URL</label><input type="text" id="zc" placeholder="https://finr-production.up.railway.app/zerodha/callback"></div>
+            <button class="btn btn-p" onclick="doZerodhaRefresh()" style="margin-top:4px">🔄 Refresh Token</button>
           </div>
-          <div class="card" style="background:var(--s3);padding:12px;margin-bottom:10px">
-            <div style="font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Gemini AI</div>
+        </div>
+
+        <div class="acc-item" onclick="toggleAcc(this)">
+          <div class="acc-hdr"><span class="acc-ico">🤖</span><div style="flex:1"><div class="acc-lbl">Gemini AI</div><div class="acc-desc">Options trade validator</div></div><span class="acc-chev">▶</span></div>
+          <div class="acc-body">
             <div class="ig"><label>Gemini API Key</label><input type="text" id="gk" placeholder="AIzaSy..." autocomplete="off"></div>
-            <button class="btn btn-o" onclick="testGemini()" id="gemini-test-btn" style="margin-top:4px">🧪 Test Gemini Connection</button>
+            <button class="btn btn-o" onclick="testGemini()" id="gemini-test-btn" style="margin-top:4px">🧪 Test Connection</button>
             <div id="gemini-test-result" style="font-family:var(--mono);font-size:10px;margin-top:6px;line-height:1.6"></div>
           </div>
-          <button class="btn btn-dk" onclick="saveSettings()">💾 Save All Settings</button>
-          <button class="btn btn-o" onclick="checkStatus()">↻ Recheck Status</button>
         </div>
 
-        <!-- System Health -->
-        <div class="card">
-          <div class="card-t">🔌 System Health</div>
-          <div id="sys-health"></div>
-          <button class="btn btn-o" onclick="loadHealth()" style="margin-top:4px">↻ Refresh Status</button>
+        <div style="display:flex;gap:8px;margin:12px 0">
+          <button class="btn btn-dk" onclick="saveSettings()" style="flex:1">💾 Save All Settings</button>
+          <button class="btn btn-o" onclick="checkStatus()" style="flex:1">↻ Recheck Status</button>
         </div>
 
-        <!-- Logs -->
-        <div class="card">
-          <div class="card-t">📋 System Logs<span class="ct-r" onclick="loadLogs()">Refresh</span></div>
-          <div id="log-list" style="max-height:260px;overflow-y:auto;border-radius:var(--rs);background:var(--s3);border:1px solid var(--b1)">
-            <div class="empty"><i>📋</i>Click Refresh to load logs</div>
+        <!-- System -->
+        <div style="font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 8px;padding-left:4px">System</div>
+
+        <div class="acc-item" onclick="toggleAcc(this)">
+          <div class="acc-hdr"><span class="acc-ico">🔌</span><div style="flex:1"><div class="acc-lbl">System Health</div><div class="acc-desc">Connection status &amp; uptime</div></div><span class="acc-chev">▶</span></div>
+          <div class="acc-body">
+            <div id="sys-health"></div>
+            <button class="btn btn-o" onclick="loadHealth()" style="margin-top:8px">↻ Refresh</button>
           </div>
         </div>
 
-        <!-- Unit Tests -->
-        <div class="card">
-          <div class="card-t">🧪 Unit Tests</div>
-          <div id="test-results"><div class="empty"><i>🧪</i>Loading test results...</div></div>
+        <div class="acc-item" onclick="toggleAcc(this)">
+          <div class="acc-hdr"><span class="acc-ico">📋</span><div style="flex:1"><div class="acc-lbl">System Logs</div><div class="acc-desc">Server activity log</div></div><span class="acc-chev">▶</span></div>
+          <div class="acc-body">
+            <button class="btn btn-o" onclick="loadLogs()" style="margin-bottom:8px">↻ Load Logs</button>
+            <div id="log-list" style="max-height:260px;overflow-y:auto;border-radius:var(--rs);background:var(--s3);border:1px solid var(--b1)">
+              <div class="empty"><i>📋</i>Click Load Logs</div>
+            </div>
+          </div>
         </div>
 
-        <!-- Danger -->
-        <div class="card" style="background:rgba(255,69,58,.05);border-color:rgba(255,69,58,.15)">
-          <div style="font-family:var(--mono);font-size:9px;color:var(--red);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Danger Zone</div>
-          <button class="btn btn-d" onclick="clearAll()">🗑️ Clear All Data &amp; Keys</button>
+        <div class="acc-item" onclick="toggleAcc(this)">
+          <div class="acc-hdr"><span class="acc-ico">🧪</span><div style="flex:1"><div class="acc-lbl">Unit Tests</div><div class="acc-desc">Automated test results</div></div><span class="acc-chev">▶</span></div>
+          <div class="acc-body">
+            <div id="test-results"><div class="empty"><i>🧪</i>Loading...</div></div>
+          </div>
         </div>
+
+        <div class="acc-item" onclick="toggleAcc(this)" style="border-color:rgba(255,69,58,.2)">
+          <div class="acc-hdr"><span class="acc-ico">⚠️</span><div style="flex:1"><div class="acc-lbl" style="color:var(--red)">Danger Zone</div><div class="acc-desc">Clear all data &amp; keys</div></div><span class="acc-chev">▶</span></div>
+          <div class="acc-body">
+            <button class="btn btn-d" onclick="clearAll()">🗑️ Clear All Data &amp; Keys</button>
+          </div>
+        </div>
+
         <div style="text-align:center;font-family:var(--mono);font-size:10px;color:var(--t3);padding:16px;line-height:2">FINR v2.0 · AES-256 · Gemini AI · Railway · 🇮🇳</div>
       </div>
 
@@ -2143,6 +2170,16 @@ function renderTax(tax){
   html+='<span style="font-weight:700;color:var(--t1)">Total Estimated Tax</span>';
   html+='<span style="font-size:18px;font-weight:800;color:var(--red)">₹'+fmt(tax.totalTax)+'</span></div>';
   el.innerHTML=html;
+}
+
+// ══════════════════════════════════════════════════════════
+// MORE PAGE ACCORDION
+// ══════════════════════════════════════════════════════════
+function toggleAcc(el){
+  // Don't toggle if click was on an input/button/select/textarea inside body
+  const tag=event?.target?.tagName;
+  if(['INPUT','BUTTON','SELECT','TEXTAREA','OPTION','LABEL'].includes(tag))return;
+  el.classList.toggle('open');
 }
 
 // ══════════════════════════════════════════════════════════
