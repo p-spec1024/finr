@@ -986,29 +986,35 @@ function recalcSignals() {
 let pricePoller = null;
 let pollErrors = 0;
 
+let pollFirstLog = true;
+
 function processUpstoxQuote(key, val) {
-  // val format from /v2/market-quote/quotes
+  // Response keys use COLON format: "NSE_EQ:RELIANCE", not pipe format
   const price = val.last_price;
   if (!price) return false;
-  const close = val.ohlc?.close || val.close_price || price;
+  const close = val.ohlc?.close || price;
   const change = price - close, pct = close ? (change / close) * 100 : 0;
+  const iToken = val.instrument_token || ''; // pipe format: NSE_EQ|INE...
 
   if (key.includes('NSE_INDEX')) {
-    const name = key.split('|')[1];
-    if (name === 'India VIX') {
+    const name = key.split(':').slice(1).join(':'); // "Nifty 50" from "NSE_INDEX:Nifty 50"
+    if (name === 'India VIX' || name === 'INDIA VIX') {
       vixData.value = price; vixData.change = +pct.toFixed(2);
       vixData.trend = pct > 0.5 ? 'rising' : pct < -0.5 ? 'falling' : 'stable';
     } else {
       liveIndices[name] = { price, change: +change.toFixed(2), changePct: +pct.toFixed(2), name };
     }
+    return true;
   } else {
-    const s = STOCK_UNIVERSE.find(x => x.instrumentKey === key);
+    // Match by instrument_token (pipe) OR by symbol extracted from colon key
+    const symFromKey = key.split(':')[1]; // "RELIANCE" from "NSE_EQ:RELIANCE"
+    const s = STOCK_UNIVERSE.find(x => x.instrumentKey === iToken || x.symbol === symFromKey);
     if (s) {
       liveStocks[s.symbol] = {
         symbol: s.symbol, name: s.name, sector: s.sector, price,
         change: +change.toFixed(2), changePct: +pct.toFixed(2), lastUpdate: Date.now(),
-        high52: val.ohlc?.high || fundamentals[s.symbol]?.high52 || +(price * 1.35).toFixed(2),
-        low52: val.ohlc?.low || fundamentals[s.symbol]?.low52 || +(price * 0.72).toFixed(2)
+        high52: fundamentals[s.symbol]?.high52 || +(price * 1.35).toFixed(2),
+        low52: fundamentals[s.symbol]?.low52 || +(price * 0.72).toFixed(2)
       };
       const sig = calcSignal(s.symbol, price);
       if (sig) signalCache[s.symbol] = { ...sig, symbol: s.symbol };
@@ -1037,10 +1043,17 @@ async function pollUpstoxPrices() {
       });
       const data = res.data?.data;
       if (data) {
+        if (pollFirstLog) {
+          const keys = Object.keys(data).slice(0, 3);
+          log('OK', `Upstox REST first response — ${Object.keys(data).length} instruments, sample keys: ${keys.join(', ')}`);
+          pollFirstLog = false;
+        }
         for (const [key, val] of Object.entries(data)) {
           if (processUpstoxQuote(key, val)) updated = true;
         }
         pollErrors = 0;
+      } else {
+        if (pollFirstLog) { log('WARN', `Upstox REST response has no data field: ${JSON.stringify(res.data).slice(0,200)}`); }
       }
     } catch (e) {
       pollErrors++;

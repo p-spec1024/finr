@@ -2003,7 +2003,7 @@ async function loadHealth(){
     const el=document.getElementById('sys-health');if(!el)return;
     const row=(name,det,status)=>`<div class="sh-row"><div><div class="sh-name">${name}</div><div class="sh-det">${det}</div></div><div class="sh-badge ${status==='ok'?'ok':status==='warn'?'warn':'err'}">${status.toUpperCase()}</div></div>`;
     el.innerHTML=
-      row('Upstox WebSocket', d.upstox.connected?`Live · ${d.server.stocksLoaded} stocks`:`Status: ${d.upstox.status}`, d.upstox.connected?'ok':'err')+
+      row('Upstox Live Feed', d.upstox.connected?`Live · ${d.server.stocksLoaded} stocks`:`Status: ${d.upstox.status}`, d.upstox.connected?'ok':'err')+
       row('Upstox Token', d.upstox.tokenValid?`Valid · expires in ${d.upstox.expiresIn}min`:'Expired or not set', d.upstox.tokenValid?'ok':'err')+
       row('Zerodha API', d.zerodha.connected?`${d.zerodha.holdingsCount} holdings · ${d.zerodha.positionsCount} positions`:'Not connected — Refresh token', d.zerodha.connected?'ok':'warn')+
       row('Gemini AI', d.gemini.configured?'API key configured · Ready':'Not configured — Add GEMINI_API_KEY', d.gemini.configured?'ok':'warn')+
