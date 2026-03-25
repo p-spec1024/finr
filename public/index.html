@@ -142,6 +142,23 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
 .ctag{padding:3px 10px;border-radius:50px;font-family:var(--mono);font-size:9px;font-weight:500;}
 .ctag.b{background:rgba(48,209,88,.12);color:var(--grn);border:1px solid rgba(48,209,88,.2);}
 .ctag.a{background:rgba(255,69,58,.12);color:var(--red);border:1px solid rgba(255,69,58,.2);}
+/* News cards */
+.news-item{background:var(--s2);border:1px solid var(--s4);border-radius:12px;padding:12px 14px;cursor:pointer;transition:all .2s;}
+.news-item:hover{border-color:var(--acc);background:var(--s3);}
+.news-hd{display:flex;align-items:flex-start;gap:10px;}
+.news-icon{font-size:20px;flex-shrink:0;margin-top:1px;}
+.news-meta{flex:1;min-width:0;}
+.news-title{font-size:13px;font-weight:600;color:var(--t1);line-height:1.4;}
+.news-sub{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;}
+.news-badge{padding:2px 8px;border-radius:50px;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.5px;}
+.news-badge.high{background:rgba(255,69,58,.15);color:var(--red);border:1px solid rgba(255,69,58,.25);}
+.news-badge.medium{background:rgba(255,214,10,.15);color:#ffd60a;border:1px solid rgba(255,214,10,.25);}
+.news-badge.low{background:rgba(48,209,88,.12);color:var(--grn);border:1px solid rgba(48,209,88,.2);}
+.news-sent{font-family:var(--mono);font-size:10px;color:var(--t3);}
+.news-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--s4);display:none;}
+.news-detail.open{display:block;}
+.news-impact{font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:8px;}
+.news-sectors{display:flex;flex-wrap:wrap;gap:5px;}
 
 /* ─── SIGNAL BADGE ─── */
 .bdg{display:inline-flex;align-items:center;padding:3px 9px;border-radius:50px;font-family:var(--mono);font-size:9px;font-weight:500;white-space:nowrap;}
@@ -448,6 +465,17 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
         </div>
         <div class="idx-row" id="h-idx"></div>
         <div id="h-ctx"></div>
+
+        <!-- Live Market News -->
+        <div class="card" id="news-card">
+          <div class="card-t" style="display:flex;align-items:center;justify-content:space-between">
+            <span>📰 Live Market News</span>
+            <span id="news-ts" style="font-size:10px;color:var(--t3);font-family:var(--mono)"></span>
+          </div>
+          <div id="news-list" style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto;padding:2px"></div>
+          <div id="news-loading" style="text-align:center;padding:18px;color:var(--t3);font-size:13px">Loading news...</div>
+        </div>
+
         <div class="card">
           <div class="card-t">Market Health</div>
           <div class="gauge-wrap">
@@ -1073,6 +1101,7 @@ async function initApp() {
   loadHealth();
   // Market context — fetched from server
   fetchMarketContext();
+  fetchNews();
   // Market hours display
   const ist = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
   const mins = ist.getHours()*60+ist.getMinutes();
@@ -1089,6 +1118,8 @@ async function initApp() {
   setInterval(checkStatus, 60000);
   // Auto-refresh market context every 5 minutes
   setInterval(fetchMarketContext, 300000);
+  // Auto-refresh news every 10 minutes
+  setInterval(fetchNews, 600000);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1354,6 +1385,69 @@ function renderMarketContext() {
   }).join('');
 }
 
+
+// ══════════════════════════════════════════════════════════
+// LIVE NEWS
+// ══════════════════════════════════════════════════════════
+let NEWS_ITEMS = [];
+async function fetchNews() {
+  try {
+    const d = await fetch('/api/news').then(r=>r.json());
+    if (d.news && d.news.length) {
+      NEWS_ITEMS = d.news;
+      const ts = d.generated ? new Date(d.generated).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'}) : '';
+      const tsEl = document.getElementById('news-ts');
+      if (tsEl) tsEl.textContent = d.cached ? 'Cached · '+ts : 'Updated · '+ts;
+    }
+  } catch(e) {
+    console.warn('News fetch failed:', e);
+  }
+  renderNews();
+}
+
+function renderNews() {
+  const list = document.getElementById('news-list');
+  const loading = document.getElementById('news-loading');
+  if (!list) return;
+  if (loading) loading.style.display = NEWS_ITEMS.length ? 'none' : 'block';
+  if (!NEWS_ITEMS.length) { list.innerHTML=''; return; }
+
+  const sentEmoji = s => s==='bullish'?'🟢':s==='bearish'?'🔴':'🟡';
+  list.innerHTML = NEWS_ITEMS.map((n,i) => {
+    const pcls = (n.priority||'medium').toLowerCase();
+    const buy = (n.sectors?.buy||[]).filter(Boolean);
+    const avoid = (n.sectors?.avoid||[]).filter(Boolean);
+    let secHtml = '';
+    if (buy.length||avoid.length) {
+      secHtml = '<div class="news-sectors">';
+      buy.forEach(t=>{ secHtml+='<span class="ctag b">✅ '+t+'</span>'; });
+      avoid.forEach(t=>{ secHtml+='<span class="ctag a">❌ '+t+'</span>'; });
+      secHtml += '</div>';
+    }
+    return '<div class="news-item" onclick="toggleNewsDetail('+i+')">'
+      +'<div class="news-hd">'
+      +'<span class="news-icon">'+(n.icon||'📰')+'</span>'
+      +'<div class="news-meta">'
+      +'<div class="news-title">'+n.title+'</div>'
+      +'<div class="news-sub">'
+      +'<span class="news-badge '+pcls+'">'+n.priority+'</span>'
+      +'<span class="news-sent">'+sentEmoji(n.sentiment)+' '+(n.sentiment||'neutral')+'</span>'
+      +(n.source?'<span class="news-sent">'+n.source+'</span>':'')
+      +'</div>'
+      +'</div>'
+      +'</div>'
+      +'<div class="news-detail" id="news-d-'+i+'">'
+      +'<div class="news-impact">'+(n.detail||n.impact||'')+'</div>'
+      +secHtml
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function toggleNewsDetail(i) {
+  const el = document.getElementById('news-d-'+i);
+  if (el) el.classList.toggle('open');
+}
 
 // ══════════════════════════════════════════════════════════
 // ADVISOR ROWS

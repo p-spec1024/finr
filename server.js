@@ -714,6 +714,65 @@ app.get('/api/market-context', (req, res) => {
   res.json({ events: getMarketContext(), generated: new Date().toISOString() });
 });
 
+// ── Live Market News via Gemini ─────────────────────────────────────────────
+let newsCache = { items: [], lastFetch: 0 };
+const NEWS_CACHE_MS = 10 * 60 * 1000; // Cache 10 minutes
+
+app.get('/api/news', async (req, res) => {
+  // Return cache if fresh
+  if (newsCache.items.length && (Date.now() - newsCache.lastFetch) < NEWS_CACHE_MS) {
+    return res.json({ news: newsCache.items, cached: true, generated: new Date(newsCache.lastFetch).toISOString() });
+  }
+  if (!appConfig.geminiKey) return res.json({ news: [], configured: false, error: 'Gemini API key not configured' });
+  try {
+    const nifty = liveIndices['Nifty 50'];
+    const vix = vixData.value;
+    const topG = Object.values(liveStocks).filter(s=>s.price).sort((a,b)=>b.changePct-a.changePct).slice(0,5).map(s=>`${s.symbol}(${s.changePct>=0?'+':''}${s.changePct.toFixed(1)}%)`).join(',');
+    const topL = Object.values(liveStocks).filter(s=>s.price).sort((a,b)=>a.changePct-b.changePct).slice(0,5).map(s=>`${s.symbol}(${s.changePct.toFixed(1)}%)`).join(',');
+
+    const prompt = `You are a senior Indian stock market analyst. Generate exactly 8 of the most important NEWS events happening RIGHT NOW (today/this week) that can impact the Indian stock market (NSE/BSE). These should be REAL current events, not generic advice.
+
+CURRENT MARKET: Nifty=${nifty?.price||'?'}(${nifty?.changePct>=0?'+':''}${nifty?.changePct||0}%) VIX=${vix} FII=₹${fiiDiiData.fii}Cr DII=₹${fiiDiiData.dii}Cr
+TOP GAINERS: ${topG}
+TOP LOSERS: ${topL}
+
+For each news item, provide:
+1. A specific, factual headline (not vague)
+2. Priority: HIGH (market-moving), MEDIUM (sector impact), LOW (watch)
+3. Market impact analysis: how it affects Indian stocks specifically
+4. Affected sectors (buy/avoid)
+5. Sentiment: BULLISH, BEARISH, or NEUTRAL
+6. Source type: RBI, GOVT, GLOBAL, CORPORATE, ECONOMIC, GEOPOLITICAL
+
+Reply ONLY valid JSON array, NO markdown fences:
+[{"title":"Specific headline here","priority":"HIGH/MEDIUM/LOW","impact":"How this affects Indian market in 30 words","sentiment":"BULLISH/BEARISH/NEUTRAL","source":"RBI/GOVT/GLOBAL/CORPORATE/ECONOMIC/GEOPOLITICAL","icon":"relevant emoji","sectors":{"buy":["sector1"],"avoid":["sector2"]},"detail":"50-word deeper analysis with specific stocks/indices affected and expected price action"}]
+
+Be specific, factual, and relevant to current Indian market conditions. Include global events (US Fed, crude oil, China) that impact India.`;
+
+    const g = await callGemini(prompt, { temperature: 0.5, maxOutputTokens: 4000, timeout: 45000 });
+    const raw = g.text || '[]';
+    log('OK', `Gemini news generated (${g.model}), ${raw.length} chars`);
+
+    let items = [];
+    const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+    try { items = JSON.parse(cleaned); } catch(_) {}
+    if (!items.length) {
+      const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
+      if (s >= 0 && e > s) { try { items = JSON.parse(cleaned.slice(s, e+1)); } catch(_) {} }
+    }
+    if (!items.length) {
+      const m = cleaned.match(/\{[^{}]*"title"\s*:\s*"[^"]+"[^{}]*\}/g);
+      if (m) { for (const x of m) { try { items.push(JSON.parse(x)); } catch(_) {} } }
+    }
+
+    newsCache = { items, lastFetch: Date.now() };
+    res.json({ news: items, cached: false, generated: new Date().toISOString() });
+  } catch(e) {
+    log('ERR', 'Gemini news failed: ' + e.message);
+    res.status(500).json({ error: 'News fetch failed: ' + e.message });
+  }
+});
+
 app.get('/api/signals', (req, res) => {
   const sorted = Object.entries(signalCache)
     .map(([sym, s]) => ({ symbol: sym, ...s, price: liveStocks[sym]?.price, name: liveStocks[sym]?.name, sector: liveStocks[sym]?.sector, changePct: liveStocks[sym]?.changePct }))
