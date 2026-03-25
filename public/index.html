@@ -749,19 +749,6 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
           </div>
         </div>
 
-        <!-- SIP Calculator -->
-        <div class="card">
-          <div class="card-t">📈 SIP Returns Calculator</div>
-          <div class="g2" style="margin-bottom:10px">
-            <div class="ig"><label>Monthly SIP (₹)</label><input type="number" id="sip-amt" placeholder="5000" value="5000" oninput="calcSip()"></div>
-            <div class="ig"><label>Expected Return (%/yr)</label><input type="number" id="sip-rate" placeholder="14" value="14" oninput="calcSip()"></div>
-            <div class="ig"><label>Duration (Years)</label><input type="number" id="sip-yrs" placeholder="10" value="10" oninput="calcSip()"></div>
-            <div class="ig"><label>Step-up (%/yr)</label><input type="number" id="sip-step" placeholder="10" value="0" oninput="calcSip()"></div>
-          </div>
-          <div id="sip-result" style="background:var(--s3);border-radius:var(--rs);padding:14px;border:1px solid var(--b2)">
-            <div class="g2" id="sip-grid"></div>
-          </div>
-        </div>
 
         <!-- Economic Calendar -->
         <div class="card">
@@ -2019,30 +2006,6 @@ function calcOptionsPnl() {
     lots+'L × '+lotSize+' = '+(lots*lotSize)+' qty · Entry ₹'+buy+' · Current ₹'+cur;
 }
 
-function calcSip() {
-  const monthly=parseFloat(document.getElementById('sip-amt').value)||5000;
-  const rate=parseFloat(document.getElementById('sip-rate').value)||14;
-  const years=parseFloat(document.getElementById('sip-yrs').value)||10;
-  const stepup=parseFloat(document.getElementById('sip-step').value)||0;
-  const r=rate/100/12;
-  let fv=0, invested=0, currentSip=monthly;
-  for(let y=0;y<years;y++){
-    for(let m=0;m<12;m++){
-      fv=(fv+currentSip)*(1+r);
-      invested+=currentSip;
-    }
-    currentSip=+(currentSip*(1+stepup/100)).toFixed(0);
-  }
-  const gains=fv-invested;
-  const xirr=((fv/invested)-1)/years*100;
-  const grid=document.getElementById('sip-grid');
-  if(!grid)return;
-  grid.innerHTML=
-    '<div class="pfm"><div class="v">₹'+fmtK(invested)+'</div><div class="l">Total Invested</div></div>'
-    +'<div class="pfm"><div class="v" style="color:var(--grn)">₹'+fmtK(fv)+'</div><div class="l">Maturity Value</div></div>'
-    +'<div class="pfm"><div class="v" style="color:var(--grn)">₹'+fmtK(gains)+'</div><div class="l">Est. Gains</div></div>'
-    +'<div class="pfm"><div class="v" style="color:var(--grn)">'+((fv/invested-1)*100).toFixed(0)+'%</div><div class="l">Total Return</div></div>';
-}
 
 // ══════════════════════════════════════════════════════════
 // NAVIGATION
@@ -2056,7 +2019,7 @@ function goPage(p){
   const tt=document.getElementById('tb-title');if(tt)tt.textContent=PAGE_NAMES[p]||p;
   document.getElementById('content').scrollTop=0;
   if(p==='portfolio'){renderPF();checkStatus();loadZerodhaData();}
-  if(p==='more'){loadHealth();loadTestResults();calcSip();}
+  if(p==='more'){loadHealth();loadTestResults();}
   if(p==='insights'){renderAdvisor();loadAlertsList();}
 }
 function initNav(){
