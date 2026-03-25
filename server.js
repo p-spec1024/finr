@@ -1067,6 +1067,8 @@ async function pollUpstoxPrices() {
     }
   }
   if (updated) {
+    // Kill mock ticks once real data is flowing
+    if (mockInterval) { clearInterval(mockInterval); mockInterval = null; log('OK', 'Mock ticks stopped — real data active'); }
     connectionStatus = 'live'; broadcastStatus();
     broadcastLiveData();
   }
@@ -1203,7 +1205,13 @@ async function initLiveData() {
   initMockData();
   if (accessToken) {
     connectUpstoxWs();
-    setTimeout(() => { if (Object.keys(liveStocks).length < 5 && isMarketOpen()) startMockTicks(); }, 5000);
+    // Only fall back to mock ticks if REST poller fails to deliver data after 10s
+    setTimeout(() => {
+      if (Object.keys(liveStocks).length < 5 && !pricePoller && isMarketOpen()) {
+        log('WARN', 'REST poller not delivering data — starting mock ticks as fallback');
+        startMockTicks();
+      }
+    }, 10000);
   } else if (isMarketOpen()) {
     startMockTicks();
   } else {

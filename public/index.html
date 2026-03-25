@@ -1381,11 +1381,36 @@ document.querySelectorAll('#stock-frow .fc').forEach(c=>{c.addEventListener('cli
 // ══════════════════════════════════════════════════════════
 // TICKER
 // ══════════════════════════════════════════════════════════
+let tickerBuilt=false;
 function renderTicker() {
   const items=[...Object.values(IDX).map(i=>({symbol:i.name,price:i.price,changePct:i.changePct})),...Object.values(S).slice(0,16)];
   if(!items.length)return;
-  const html=items.map(s=>{const cls=s.changePct>=0?'up':'dn',sign=s.changePct>=0?'▲':'▼';return`<span class="ti"><span class="ts">${s.symbol}</span><span class="tp">₹${fmt(s.price)}</span><span class="tc ${cls}">${sign}${Math.abs(s.changePct||0).toFixed(2)}%</span></span>`;}).join('');
-  const el=document.getElementById('ti-wrap');if(el)el.innerHTML=html+html;
+  const el=document.getElementById('ti-wrap');if(!el)return;
+
+  if(!tickerBuilt||el.children.length===0){
+    // First render — build full HTML (duplicated for seamless scroll)
+    const html=items.map((s,i)=>{const cls=s.changePct>=0?'up':'dn',sign=s.changePct>=0?'▲':'▼';return`<span class="ti" data-ti="${i}"><span class="ts">${s.symbol}</span><span class="tp">₹${fmt(s.price)}</span><span class="tc ${cls}">${sign}${Math.abs(s.changePct||0).toFixed(2)}%</span></span>`;}).join('');
+    el.innerHTML=html+html.replace(/data-ti="/g,'data-ti="d');
+    tickerBuilt=true;
+  } else {
+    // Subsequent renders — update values in-place (no DOM rebuild, no animation reset)
+    items.forEach((s,i)=>{
+      const cls=s.changePct>=0?'up':'dn',sign=s.changePct>=0?'▲':'▼';
+      const spans=el.querySelectorAll(`[data-ti="${i}"]`);
+      spans.forEach(span=>{
+        const tp=span.querySelector('.tp');if(tp)tp.textContent='₹'+fmt(s.price);
+        const tc=span.querySelector('.tc');
+        if(tc){tc.className='tc '+cls;tc.textContent=sign+Math.abs(s.changePct||0).toFixed(2)+'%';}
+      });
+      // Also update the duplicate set
+      const dSpans=el.querySelectorAll(`[data-ti="d${i}"]`);
+      dSpans.forEach(span=>{
+        const tp=span.querySelector('.tp');if(tp)tp.textContent='₹'+fmt(s.price);
+        const tc=span.querySelector('.tc');
+        if(tc){tc.className='tc '+cls;tc.textContent=sign+Math.abs(s.changePct||0).toFixed(2)+'%';}
+      });
+    });
+  }
 }
 
 // ══════════════════════════════════════════════════════════
