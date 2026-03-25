@@ -1,310 +1,138 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html class="dark" lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>FINR — Stock Intelligence</title>
 <meta name="theme-color" content="#0a0a0a">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Manrope:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "surface": "#131313",
+        "surface-dim": "#131313",
+        "surface-bright": "#3a3939",
+        "surface-container-lowest": "#0e0e0e",
+        "surface-container-low": "#1c1b1b",
+        "surface-container": "#201f1f",
+        "surface-container-high": "#2a2a2a",
+        "surface-container-highest": "#353534",
+        "surface-variant": "#353534",
+        "background": "#131313",
+        "on-surface": "#e5e2e1",
+        "on-surface-variant": "#d0c6ab",
+        "on-background": "#e5e2e1",
+        "primary": "#fff5dc",
+        "primary-container": "#ffd60a",
+        "primary-fixed": "#ffe171",
+        "primary-fixed-dim": "#e9c400",
+        "on-primary": "#3b2f00",
+        "on-primary-container": "#705d00",
+        "on-primary-fixed": "#221b00",
+        "secondary": "#47e266",
+        "secondary-container": "#09bf49",
+        "secondary-fixed": "#6cff82",
+        "secondary-fixed-dim": "#47e266",
+        "on-secondary": "#003910",
+        "on-secondary-container": "#004615",
+        "error": "#ffb4ab",
+        "error-container": "#93000a",
+        "on-error": "#690005",
+        "on-error-container": "#ffdad6",
+        "tertiary": "#fff3f1",
+        "tertiary-container": "#ffcec8",
+        "tertiary-fixed-dim": "#ffb4aa",
+        "on-tertiary": "#690004",
+        "outline": "#999077",
+        "outline-variant": "#4d4632",
+        "inverse-surface": "#e5e2e1",
+        "inverse-on-surface": "#313030",
+        "inverse-primary": "#705d00",
+        "surface-tint": "#e9c400",
+      },
+      fontFamily: {
+        "headline": ["Manrope", "sans-serif"],
+        "body": ["Inter", "sans-serif"],
+        "label": ["Inter", "sans-serif"],
+        "mono": ["DM Mono", "monospace"],
+      },
+      borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+    },
+  },
+}
+</script>
 <style>
-/* ─── TOKENS ─── */
-:root{
-  --bg:#0a0a0a;--s1:#141414;--s2:#1c1c1e;--s3:#242426;--s4:#2c2c2e;
-  --b1:rgba(255,255,255,.07);--b2:rgba(255,255,255,.12);
-  --t1:#f2f2f7;--t2:#aeaeb2;--t3:#636366;--t4:#3a3a3c;
-  --grn:#30d158;--red:#ff453a;--acc:#ffd60a;--blue:#0a84ff;--ora:#ff9f0a;--pur:#bf5af2;
-  --ui:'Inter',sans-serif;--mono:'DM Mono',monospace;
-  --sh:0 2px 12px rgba(0,0,0,.5);--sh2:0 4px 24px rgba(0,0,0,.6);
-  --r:16px;--rs:10px;
-}
-[data-theme="light"]{
-  --bg:#f2f2f7;--s1:#fff;--s2:#f2f2f7;--s3:#e5e5ea;--s4:#d1d1d6;
-  --b1:rgba(0,0,0,.07);--b2:rgba(0,0,0,.13);
-  --t1:#000;--t2:#3c3c43;--t3:#8e8e93;--t4:#c7c7cc;
-  --grn:#34c759;--red:#ff3b30;--acc:#ff9500;--blue:#007aff;
-  --sh:0 2px 8px rgba(0,0,0,.08);--sh2:0 4px 20px rgba(0,0,0,.1);
-}
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{height:100%;background:var(--bg);overflow:hidden;}
-body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing:antialiased;transition:background .2s,color .2s;}
-::-webkit-scrollbar{width:3px;height:3px;}
-::-webkit-scrollbar-thumb{background:var(--b2);border-radius:4px;}
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;background:#0a0a0a;overflow:hidden;}
+  body{color:#e5e2e1;font-family:'Inter',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;}
+  ::-webkit-scrollbar{width:3px;height:3px;}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:4px;}
+  .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;vertical-align:middle;}
+  .no-scrollbar::-webkit-scrollbar{display:none;}
+  .no-scrollbar{-ms-overflow-style:none;scrollbar-width:none;}
+  .tnum{font-variant-numeric:tabular-nums;}
+  .glass-blur{background:rgba(19,19,19,0.7);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}
 
-/* ─── PIN ─── */
-#pin{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;}
-#pin.off{display:none;}
-.pin-logo .nm{font-size:52px;font-weight:900;letter-spacing:-2px;line-height:1;}
-.pin-logo .nm b{color:var(--acc);}
-.pin-logo .tg{font-family:var(--mono);font-size:10px;letter-spacing:3px;color:var(--t3);text-transform:uppercase;margin-top:5px;text-align:center;}
-.pin-dots{display:flex;gap:14px;}
-.pdot{width:13px;height:13px;border-radius:50%;border:2px solid var(--b2);transition:.18s;}
-.pdot.on{background:var(--acc);border-color:var(--acc);transform:scale(1.1);}
-.pin-err{height:16px;font-family:var(--mono);font-size:11px;color:var(--red);text-align:center;}
-.pin-pad{display:grid;grid-template-columns:repeat(3,76px);gap:9px;}
-.pk{height:66px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;font-size:24px;font-weight:700;color:var(--t1);cursor:pointer;transition:.12s;display:flex;align-items:center;justify-content:center;}
-.pk:active{background:var(--acc);color:#000;transform:scale(.93);}
-.pk.z{grid-column:2;}
-#pin-skip{font-family:var(--mono);font-size:11px;color:var(--t3);cursor:pointer;text-decoration:underline;text-underline-offset:3px;display:none;}
+  /* Ticker animation */
+  .ticker-wrap{width:100%;overflow:hidden;background:#000;height:24px;display:flex;align-items:center;}
+  .ticker{display:flex;white-space:nowrap;animation:ticker 60s linear infinite;}
+  .ticker-item{padding:0 1.5rem;font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.3px;}
+  @keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 
-/* ─── LAYOUT ─── */
-#app{display:flex;height:100dvh;overflow:hidden;}
-#main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+  /* Gauge clip */
+  .gauge-clip{clip-path:inset(0 0 50% 0);}
 
-/* ─── TICKER ─── */
-#ticker{height:26px;background:#000;overflow:hidden;flex-shrink:0;display:flex;align-items:center;border-bottom:1px solid rgba(255,255,255,.04);}
-[data-theme="light"] #ticker{background:var(--t1);}
-.ti-wrap{display:flex;align-items:center;white-space:nowrap;animation:ticker 90s linear infinite;}
-@keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-.ti{display:inline-flex;align-items:center;gap:5px;padding:0 16px;font-family:var(--mono);font-size:10px;border-right:1px solid rgba(255,255,255,.05);}
-.ts{color:rgba(255,255,255,.3);}.tp{color:rgba(255,255,255,.8);}
-.tc.up{color:#30d158;}.tc.dn{color:#ff453a;}
+  /* Page transitions */
+  .pg{display:none;animation:fu .2s ease;}
+  .pg.on{display:block;}
+  @keyframes fu{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
-/* ─── TOP BAR ─── */
-#topbar{height:52px;background:var(--s1);display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid var(--b1);flex-shrink:0;}
-.tb-l{display:flex;align-items:center;gap:10px;}
-.tb-logo{font-size:19px;font-weight:900;letter-spacing:-.5px;color:var(--t1);}
-.tb-logo b{color:var(--acc);}
-.tb-title{font-size:16px;font-weight:700;color:var(--t1);}
-.tb-r{display:flex;align-items:center;gap:8px;}
-.stpill{display:flex;align-items:center;gap:6px;padding:5px 11px;background:var(--s2);border:1px solid var(--b1);border-radius:50px;font-family:var(--mono);font-size:10px;color:var(--t3);}
-.sd{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
-.sd.live{background:var(--grn);animation:blink 2s infinite;}
-.sd.demo{background:var(--acc);}.sd.off{background:var(--red);}
-.sd.rc{background:var(--ora);animation:blink .8s infinite;}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-.thbtn-top{width:34px;height:34px;border-radius:10px;background:var(--s2);border:1px solid var(--b1);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;}
+  /* Sub-tab content */
+  .stab-content{display:none;animation:fu .2s ease;}
+  .stab-content.on{display:block;}
 
-/* ─── CONTENT ─── */
-#content{flex:1;overflow-y:auto;overflow-x:hidden;}
-.pg{display:none;padding:18px 18px 90px;animation:fu .2s ease;}
-.pg.on{display:block;}
-@keyframes fu{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-@media(min-width:769px){.pg{padding:22px 28px 40px;}}
+  /* PIN overlay */
+  #pin{position:fixed;inset:0;z-index:9999;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;}
+  #pin.off{display:none;}
+  .pin-logo .nm{font-family:'Manrope',sans-serif;font-size:52px;font-weight:900;letter-spacing:-2px;line-height:1;color:#e5e2e1;}
+  .pin-logo .nm b{color:#ffd60a;}
+  .pin-logo .tg{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:3px;color:#636366;text-transform:uppercase;margin-top:5px;text-align:center;}
+  .pin-dots{display:flex;gap:14px;}
+  .pdot{width:13px;height:13px;border-radius:50%;border:2px solid rgba(255,255,255,.12);transition:.18s;}
+  .pdot.on{background:#ffd60a;border-color:#ffd60a;transform:scale(1.1);}
+  .pin-err{height:16px;font-family:'DM Mono',monospace;font-size:11px;color:#ffb4ab;text-align:center;}
+  .pin-pad{display:grid;grid-template-columns:repeat(3,76px);gap:9px;}
+  .pk{height:66px;background:#1c1b1b;border:1px solid rgba(255,255,255,.07);border-radius:14px;font-size:24px;font-weight:700;color:#e5e2e1;cursor:pointer;transition:.12s;display:flex;align-items:center;justify-content:center;}
+  .pk:active{background:#ffd60a;color:#000;transform:scale(.93);}
+  .pk.z{grid-column:2;}
+  #pin-skip{font-family:'DM Mono',monospace;font-size:11px;color:#636366;cursor:pointer;text-decoration:underline;text-underline-offset:3px;display:none;}
 
-/* ─── CARDS ─── */
-.card{background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);padding:16px;margin-bottom:12px;box-shadow:var(--sh);}
-.card-t{font-size:12px;font-weight:600;color:var(--t1);margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;letter-spacing:.2px;}
-.card-t .ct-r{font-size:11px;font-weight:500;color:var(--t3);cursor:pointer;}
-.card-t .ct-r:hover{color:var(--acc);}
+  /* Bottom sheet modal */
+  .bottom-sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:none;align-items:flex-end;justify-content:center;}
+  .bottom-sheet-overlay.on{display:flex;}
+  .bottom-sheet{width:100%;max-width:460px;max-height:80vh;background:#1c1c1e;border-radius:20px 20px 0 0;overflow:hidden;animation:sheetUp .3s ease;display:flex;flex-direction:column;}
+  @keyframes sheetUp{from{transform:translateY(100%)}to{transform:none}}
+  .bottom-sheet .drag-handle{width:40px;height:4px;background:#3a3939;border-radius:2px;margin:12px auto;}
 
-/* ─── HERO ─── */
-.hero{margin-bottom:16px;}
-.hero-lbl{font-size:12px;color:var(--t3);margin-bottom:4px;font-family:var(--mono);}
-.hero-num{font-size:46px;font-weight:800;letter-spacing:-2px;line-height:1;color:var(--t1);}
-.hero-num .dc{font-size:26px;font-weight:600;color:var(--t2);}
-.hero-row{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;}
-.hbdg{display:inline-flex;align-items:center;gap:4px;padding:4px 11px;border-radius:50px;font-family:var(--mono);font-size:11px;font-weight:500;}
-.hbdg.up{background:rgba(48,209,88,.15);color:#30d158;}
-.hbdg.dn{background:rgba(255,69,58,.15);color:#ff453a;}
-.hero-mkt{font-family:var(--mono);font-size:10px;color:var(--t3);}
+  /* Toast */
+  .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#e5e2e1;color:#0a0a0a;padding:9px 20px;border-radius:50px;font-family:'DM Mono',monospace;font-size:12px;z-index:400;opacity:0;transition:.3s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 24px rgba(0,0,0,.6);}
+  .toast.on{opacity:1;}
 
-/* ─── INDEX CHIPS ─── */
-.idx-row{display:flex;gap:9px;overflow-x:auto;margin-bottom:16px;scrollbar-width:none;padding-bottom:2px;}
-.idx-row::-webkit-scrollbar{display:none;}
-.ichip{flex:0 0 auto;background:var(--s2);border:1px solid var(--b1);border-radius:13px;padding:11px 15px;min-width:118px;cursor:default;transition:.15s;}
-.ichip:hover{border-color:var(--b2);transform:translateY(-1px);}
-.ichip .in{font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;}
-.ichip .ip{font-size:19px;font-weight:800;letter-spacing:-.5px;color:var(--t1);line-height:1;}
-.ichip .ic{font-family:var(--mono);font-size:11px;margin-top:3px;}
-.up{color:var(--grn);}.dn{color:var(--red);}
-
-/* ─── GAUGE ─── */
-.gauge-wrap{display:flex;align-items:center;gap:18px;}
-.gauge-grid{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
-.gbox{background:var(--s3);border:1px solid var(--b1);border-radius:10px;padding:9px 6px;text-align:center;}
-.gn{font-size:22px;font-weight:800;line-height:1;}
-.gl{font-family:var(--mono);font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;}
-
-/* ─── NEWS ─── */
-.news-item{background:var(--s2);border:1px solid var(--s4);border-radius:12px;padding:12px 14px;cursor:pointer;transition:all .2s;}
-.news-item:hover{border-color:var(--acc);background:var(--s3);}
-.news-hd{display:flex;align-items:flex-start;gap:10px;}
-.news-icon{font-size:20px;flex-shrink:0;margin-top:1px;}
-.news-meta{flex:1;min-width:0;}
-.news-title{font-size:13px;font-weight:600;color:var(--t1);line-height:1.4;}
-.news-sub{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;}
-.news-badge{padding:2px 8px;border-radius:50px;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.5px;}
-.news-badge.high{background:rgba(255,69,58,.15);color:var(--red);border:1px solid rgba(255,69,58,.25);}
-.news-badge.medium{background:rgba(255,214,10,.15);color:#ffd60a;border:1px solid rgba(255,214,10,.25);}
-.news-badge.low{background:rgba(48,209,88,.12);color:var(--grn);border:1px solid rgba(48,209,88,.2);}
-.news-sent{font-family:var(--mono);font-size:10px;color:var(--t3);}
-.news-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--s4);display:none;}
-.news-detail.open{display:block;}
-.news-impact{font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:8px;}
-
-/* ─── SIGNAL BADGE ─── */
-.bdg{display:inline-flex;align-items:center;padding:3px 9px;border-radius:50px;font-family:var(--mono);font-size:9px;font-weight:500;white-space:nowrap;}
-.bdg.sb{background:rgba(48,209,88,.15);color:#30d158;}
-.bdg.b{background:rgba(10,132,255,.15);color:#0a84ff;}
-.bdg.w{background:rgba(255,214,10,.15);color:#ffd60a;}
-.bdg.h{background:rgba(255,159,10,.15);color:#ff9f0a;}
-.bdg.s{background:rgba(255,69,58,.15);color:#ff453a;}
-.bdg.ss{background:rgba(191,90,242,.15);color:#bf5af2;}
-
-/* ─── STOCK CARDS ─── */
-.stock-card{background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);padding:14px;margin-bottom:10px;border-left:4px solid var(--b1);}
-.stock-card.up{border-left-color:var(--grn);}
-.stock-card.dn{border-left-color:var(--red);}
-.stock-hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
-.stock-sym{font-size:16px;font-weight:800;color:var(--t1);}
-.stock-nm{font-family:var(--mono);font-size:9px;color:var(--t3);margin-top:2px;}
-.stock-price{text-align:right;}
-.stock-p{font-size:16px;font-weight:800;color:var(--t1);}
-.stock-pchg{font-family:var(--mono);font-size:10px;margin-top:2px;}
-.stock-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--b1);}
-.sg{background:var(--s3);border-radius:8px;padding:8px;}
-.sg-l{font-family:var(--mono);font-size:8px;color:var(--t3);text-transform:uppercase;margin-bottom:3px;}
-.sg-v{font-size:14px;font-weight:700;color:var(--t1);}
-.stock-reason{font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:8px;max-height:3em;overflow:hidden;}
-.stock-reason.exp{max-height:none;}
-.stock-exp{font-family:var(--mono);font-size:9px;color:var(--acc);cursor:pointer;margin-bottom:10px;}
-.stock-tags{display:flex;flex-wrap:wrap;gap:4px;}
-.tag{padding:2px 8px;border-radius:50px;font-family:var(--mono);font-size:8px;background:rgba(255,214,10,.1);color:var(--acc);}
-
-/* ─── OPTIONS CARDS ─── */
-.opt-card{background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);padding:14px;margin-bottom:10px;}
-.opt-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--b1);}
-.opt-sym{font-size:15px;font-weight:700;color:var(--t1);}
-.opt-dir{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 8px;border-radius:50px;margin-left:8px;}
-.opt-dir.ce{background:rgba(48,209,88,.15);color:var(--grn);}
-.opt-dir.pe{background:rgba(255,69,58,.15);color:var(--red);}
-.opt-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--b1);}
-.og{background:var(--s3);border-radius:8px;padding:8px;}
-.og-l{font-family:var(--mono);font-size:8px;color:var(--t3);text-transform:uppercase;margin-bottom:3px;}
-.og-v{font-size:13px;font-weight:700;color:var(--t1);}
-.opt-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--b1);}
-.om-it{font-size:11px;}
-.om-it .l{font-family:var(--mono);font-size:8px;color:var(--t3);}
-.om-it .v{font-size:13px;font-weight:700;color:var(--t1);margin-top:2px;}
-
-/* ─── FORM INPUTS ─── */
-.ig{margin-bottom:10px;}
-.ig label{font-family:var(--mono);font-size:9px;color:var(--t3);display:block;margin-bottom:5px;letter-spacing:.5px;text-transform:uppercase;}
-.ig input,.ig select,.ig textarea{width:100%;background:var(--s3);border:1px solid var(--b2);border-radius:var(--rs);padding:10px 12px;color:var(--t1);font-family:var(--mono);font-size:12px;outline:none;transition:.15s;}
-.ig input:focus,.ig select:focus,.ig textarea:focus{border-color:var(--acc);}
-.ig textarea{resize:none;height:80px;font-family:var(--ui);font-size:13px;}
-
-/* ─── BUTTONS ─── */
-.btn{width:100%;padding:12px;border-radius:50px;font-size:13px;font-weight:700;border:none;cursor:pointer;margin-bottom:9px;font-family:var(--ui);transition:.12s;}
-.btn:active{opacity:.8;}
-.btn-p{background:var(--acc);color:#000;}
-.btn-dk{background:var(--t1);color:var(--bg);}
-[data-theme="light"] .btn-dk{background:#000;color:#fff;}
-.btn-o{background:var(--s3);color:var(--t2);border:1px solid var(--b2);}
-.btn-d{background:rgba(255,69,58,.1);color:var(--red);border:1px solid rgba(255,69,58,.2);}
-
-/* ─── FILTER CHIPS ─── */
-.frow{display:flex;gap:7px;overflow-x:auto;padding-bottom:12px;scrollbar-width:none;}
-.frow::-webkit-scrollbar{display:none;}
-.fc{flex:0 0 auto;padding:6px 15px;border-radius:50px;font-size:11px;font-weight:600;border:1px solid var(--b2);background:var(--s2);color:var(--t2);cursor:pointer;transition:.12s;}
-.fc.on{background:var(--t1);color:var(--bg);border-color:var(--t1);}
-[data-theme="light"] .fc.on{background:#000;color:#fff;}
-
-/* ─── SUB-TABS ─── */
-.subtabs{display:flex;gap:8px;margin-bottom:14px;border-bottom:1px solid var(--b1);padding-bottom:0;}
-.stab{padding:10px 16px;font-size:13px;font-weight:600;color:var(--t3);cursor:pointer;transition:.15s;border-bottom:2px solid transparent;margin-bottom:-1px;}
-.stab.on{color:var(--acc);border-bottom-color:var(--acc);}
-.stab:hover{color:var(--t1);}
-.stab-content{display:none;animation:fu .2s ease;}
-.stab-content.on{display:block;}
-
-/* ─── SUMMARY CARDS ─── */
-.sum-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;}
-@media(min-width:769px){.sum-grid{grid-template-columns:repeat(4,1fr);}}
-.sumcard{background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);padding:14px;text-align:center;}
-.sumcard .v{font-size:24px;font-weight:800;color:var(--t1);line-height:1;}
-.sumcard .l{font-family:var(--mono);font-size:9px;color:var(--t3);margin-top:6px;text-transform:uppercase;}
-
-/* ─── EVENT CALENDAR ─── */
-.evt{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--b1);}
-.evt:last-child{border:none;padding-bottom:0;}
-.evt-pri{width:6px;border-radius:3px;flex-shrink:0;margin-top:3px;}
-.evt-high{background:var(--red);}
-.evt-med{background:var(--ora);}
-.evt-low{background:var(--grn);}
-.evt-date{font-family:var(--mono);font-size:9px;color:var(--t3);min-width:52px;margin-top:2px;}
-.evt-title{font-size:13px;font-weight:600;color:var(--t1);}
-.evt-desc{font-size:11px;color:var(--t3);margin-top:2px;line-height:1.5;}
-
-/* ─── SMART MONEY ─── */
-.sm-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--b1);}
-.sm-row:last-child{border:none;padding-bottom:0;}
-.sm-sym{font-size:13px;font-weight:700;color:var(--t1);}
-.sm-det{font-family:var(--mono);font-size:9px;color:var(--t3);margin-top:2px;}
-.sm-act{font-family:var(--mono);font-size:10px;font-weight:600;padding:3px 10px;border-radius:50px;}
-.sm-act.buy{background:rgba(48,209,88,.15);color:var(--grn);}
-.sm-act.sell{background:rgba(255,69,58,.15);color:var(--red);}
-
-/* ─── FII/DII ─── */
-.fii-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--b1);}
-.fii-row:last-child{border:none;}
-.fii-nm{font-size:12px;color:var(--t2);}
-.fii-val{font-family:var(--mono);font-size:13px;font-weight:700;}
-.fii-val.pos{color:var(--grn);}
-.fii-val.neg{color:var(--red);}
-
-/* ─── SETTINGS ACCORDION ─── */
-.acc-item{background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);margin-bottom:8px;overflow:hidden;}
-.acc-hdr{display:flex;align-items:center;padding:14px 16px;cursor:pointer;user-select:none;transition:background .15s;}
-.acc-hdr:active{background:var(--s3);}
-.acc-ico{font-size:18px;width:32px;flex-shrink:0;}
-.acc-lbl{flex:1;font-size:14px;font-weight:600;color:var(--t1);}
-.acc-desc{font-family:var(--mono);font-size:10px;color:var(--t3);margin-top:2px;}
-.acc-chev{font-size:12px;color:var(--t3);transition:transform .2s;flex-shrink:0;}
-.acc-item.open .acc-chev{transform:rotate(90deg);}
-.acc-body{display:none;padding:0 16px 16px;animation:fu .2s ease;}
-.acc-item.open .acc-body{display:block;}
-
-/* ─── SYSTEM HEALTH ─── */
-.sh-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--rs);margin-bottom:8px;}
-.sh-name{font-size:13px;font-weight:600;color:var(--t1);}
-.sh-det{font-family:var(--mono);font-size:10px;color:var(--t3);margin-top:2px;}
-.sh-badge{padding:3px 11px;border-radius:50px;font-family:var(--mono);font-size:10px;font-weight:600;}
-.sh-badge.ok{background:rgba(48,209,88,.15);color:var(--grn);}
-.sh-badge.warn{background:rgba(255,214,10,.15);color:var(--acc);}
-.sh-badge.err{background:rgba(255,69,58,.15);color:var(--red);}
-.log-line{font-family:var(--mono);font-size:10px;padding:5px 10px;border-bottom:1px solid var(--b1);line-height:1.5;}
-.log-line.OK{color:var(--grn);}
-.log-line.WARN{color:var(--acc);}
-.log-line.ERR{color:var(--red);}
-.log-line.INFO{color:var(--t3);}
-
-/* ─── EMPTY STATE ─── */
-.empty{text-align:center;padding:24px 16px;color:var(--t3);font-family:var(--mono);font-size:11px;line-height:1.8;}
-.empty i{font-size:32px;display:block;margin-bottom:8px;font-style:normal;}
-
-/* ─── TOAST ─── */
-.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--t1);color:var(--bg);padding:9px 20px;border-radius:50px;font-family:var(--mono);font-size:12px;z-index:400;opacity:0;transition:.3s;pointer-events:none;white-space:nowrap;box-shadow:var(--sh2);}
-.toast.on{opacity:1;}
-
-/* ─── BOTTOM NAV ─── */
-#bnav{height:64px;background:var(--s1);border-top:1px solid var(--b1);display:flex;align-items:center;justify-content:space-around;padding:4px 6px 10px;flex-shrink:0;}
-.bn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 12px;border-radius:13px;cursor:pointer;font-size:9px;font-weight:600;color:var(--t3);transition:.15s;flex:1;}
-.bn .bni{font-size:22px;line-height:1;}
-.bn.on{color:var(--acc);}
-
-/* ─── MODAL ─── */
-#mod{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;display:none;align-items:center;justify-content:center;overflow-y:auto;}
-#mod.on{display:flex;}
-.mbox{background:var(--s1);border:1px solid var(--b2);border-radius:20px;width:calc(100% - 24px);max-width:460px;padding:20px;margin:10px;box-shadow:0 12px 40px rgba(0,0,0,.7);animation:fu .2s ease;}
-.mcls{float:right;background:none;border:none;color:var(--t3);font-size:22px;cursor:pointer;}
-
-/* ─── RESPONSIVE ─── */
-@media(min-width:769px){
-  .sum-grid{grid-template-columns:repeat(4,1fr);}
-}
-@media(max-width:768px){
-  .bn.label{display:none;}
-  #bnav .bn .bni{font-size:20px;}
-}
+  /* Calendar date picker indicator */
+  input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);}
 </style>
 </head>
 <body>
 
-<!-- PIN -->
+<!-- ═══════ PIN SCREEN ═══════ -->
 <div id="pin">
   <div class="pin-logo"><div class="nm">FIN<b>R</b></div><div class="tg">Smart Stock Intelligence</div></div>
   <div class="pin-dots"><div class="pdot" id="pd0"></div><div class="pdot" id="pd1"></div><div class="pdot" id="pd2"></div><div class="pdot" id="pd3"></div></div>
@@ -318,309 +146,609 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
   <div id="pin-skip">No PIN set — tap to enter</div>
 </div>
 
-<!-- APP -->
-<div id="app">
-  <div id="main">
-    <!-- TICKER -->
-    <div id="ticker"><div class="ti-wrap" id="ti-wrap"><span class="ti"><span class="ts">FINR</span><span class="tp">Starting...</span></span></div></div>
+<!-- ═══════ APP SHELL ═══════ -->
+<div id="app" class="flex flex-col h-[100dvh] overflow-hidden">
 
-    <!-- TOPBAR -->
-    <div id="topbar">
-      <div class="tb-l">
-        <div class="tb-logo" id="tb-logo-m">FIN<b>R</b></div>
-        <div class="tb-title" id="tb-title">Home</div>
+  <!-- TICKER STRIP -->
+  <div id="ticker" class="ticker-wrap fixed top-0 left-0 w-full z-[60]">
+    <div class="ticker" id="ti-wrap">
+      <span class="ticker-item"><span class="text-[#636366]">FINR</span> <span class="text-[#d0c6ab]">Starting...</span></span>
+    </div>
+  </div>
+
+  <!-- TOP APP BAR -->
+  <header id="topbar" class="fixed top-6 w-full z-50 glass-blur shadow-[0_0_32px_rgba(229,226,225,0.08)]">
+    <div class="flex items-center justify-between px-5 h-14">
+      <div class="flex items-center gap-3">
+        <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:22px">analytics</span>
+        <h1 class="font-headline font-bold text-xl tracking-tighter text-[#e5e2e1]">FIN<span class="text-[#ffd60a]">R</span></h1>
+        <span class="font-headline text-sm font-semibold text-[#d0c6ab] ml-1 hidden" id="tb-title-alt"></span>
       </div>
-      <div class="tb-r">
-        <div class="stpill"><div class="sd off" id="sd"></div><span id="stxt" style="font-family:var(--mono);font-size:10px">LOADING</span></div>
-        <button class="thbtn-top" onclick="refreshAll()" id="refresh-btn" title="Refresh all data" style="font-size:16px;background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:8px;transition:transform .3s">🔄</button>
-        <button class="thbtn-top" onclick="toggleTheme()" id="th-top">☀️</button>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full" id="status-pill" style="background:rgba(71,226,102,.1)">
+          <span class="w-1.5 h-1.5 rounded-full animate-pulse" id="sd" style="background:#636366"></span>
+          <span class="font-mono text-[10px] font-bold uppercase tracking-widest" id="stxt" style="color:#636366">LOADING</span>
+        </div>
+        <button class="active:scale-95 duration-200 p-1" onclick="refreshAll()" id="refresh-btn">
+          <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:20px">refresh</span>
+        </button>
+      </div>
+    </div>
+    <!-- Dynamic sub-nav rendered per page -->
+    <div id="sub-nav" class="px-5 pb-2 hidden"></div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <main id="content" class="flex-1 overflow-y-auto overflow-x-hidden pt-[96px] pb-24">
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- TAB 1: HOME                                    -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="pg on" id="pg-home">
+      <div class="px-4 pb-6 max-w-[460px] mx-auto space-y-5">
+
+        <!-- Hero -->
+        <section class="flex flex-col items-center py-3">
+          <span class="text-[#d0c6ab] font-mono text-[10px] uppercase tracking-[0.2em] mb-2 font-bold">Nifty 50</span>
+          <h2 class="font-headline font-extrabold text-[3.2rem] tracking-tighter tnum leading-none" id="h-nifty">--<span class="text-[1.6rem] font-semibold text-[#d0c6ab]">.--</span></h2>
+          <div class="flex items-center gap-2 mt-3">
+            <span id="demo-badge" style="display:none" class="text-[9px] font-mono font-bold text-[#ffd60a] bg-[#ffd60a]/10 border border-[#ffd60a]/25 px-2 py-0.5 rounded-full tracking-wider">DEMO DATA</span>
+            <div class="bg-[#47e266]/10 text-[#47e266] px-3 py-1 rounded-md flex items-center gap-1" id="h-chg">
+              <span class="material-symbols-outlined text-sm" style="font-variation-settings:'FILL' 1">arrow_drop_up</span>
+              <span class="font-bold text-xs tnum">--</span>
+            </div>
+            <span class="text-[#d0c6ab] font-mono text-[10px] font-medium uppercase tracking-wider" id="h-mkt"></span>
+          </div>
+        </section>
+
+        <!-- Index Chips -->
+        <section class="overflow-x-auto no-scrollbar flex gap-3 -mx-4 px-4 pb-1" id="h-idx"></section>
+
+        <!-- Live Market News -->
+        <section class="bg-[#1c1b1b] rounded-xl p-4" id="news-card">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xs font-black uppercase tracking-widest text-[#e5e2e1]">Live Market News</h3>
+            <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="news-ts"></span>
+          </div>
+          <div id="news-list" class="space-y-3 max-h-[420px] overflow-y-auto"></div>
+          <div id="news-loading" class="text-center py-5 text-[#636366] text-sm">Loading news...</div>
+        </section>
+
+        <!-- Market Health -->
+        <section class="bg-[#1c1b1b] rounded-xl p-4 flex gap-4">
+          <div class="w-1/2 flex flex-col items-center justify-center border-r border-[#353534] pr-4">
+            <svg viewBox="0 0 130 76" style="width:120px;height:68px;flex-shrink:0">
+              <path d="M12 72 A55 55 0 0 1 118 72" fill="none" stroke="#353534" stroke-width="10" stroke-linecap="round"/>
+              <path id="garc" d="M12 72 A55 55 0 0 1 118 72" fill="none" stroke="#ffd60a" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 173"/>
+              <text id="gnum" x="65" y="59" text-anchor="middle" font-family="Manrope,sans-serif" font-size="22" font-weight="900" fill="#e5e2e1">--</text>
+              <text x="65" y="72" text-anchor="middle" font-family="DM Mono,monospace" font-size="7" fill="#636366">/100</text>
+            </svg>
+            <span class="text-[10px] font-bold text-[#d0c6ab] uppercase text-center leading-tight mt-1">Overall Market Health</span>
+          </div>
+          <div class="w-1/2 grid grid-cols-2 gap-y-3 gap-x-2" id="ggrid"></div>
+        </section>
+
+        <!-- Market Breadth -->
+        <section class="bg-[#1c1b1b] rounded-xl p-4" id="breadth-card">
+          <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1] mb-3">Market Breadth</h3>
+          <div id="breadth-bar"></div>
+        </section>
+
+        <!-- Upcoming Events -->
+        <section class="bg-[#1c1b1b] rounded-xl p-4">
+          <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1] mb-4">Economic Calendar</h3>
+          <div id="h-events" class="space-y-3"></div>
+        </section>
+
+        <!-- FII/DII Flow -->
+        <section class="bg-[#1c1b1b] rounded-xl p-4">
+          <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1] mb-4">Flows & Macros</h3>
+          <div id="home-fii-dii" class="space-y-2"></div>
+        </section>
+
       </div>
     </div>
 
-    <!-- CONTENT -->
-    <div id="content">
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- TAB 2: INSIGHTS (AI Picks main view)           -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="pg" id="pg-insights">
+      <div class="px-4 pb-6 max-w-[460px] mx-auto">
 
-      <!-- ══ HOME ══ -->
-      <div class="pg on" id="pg-home">
-        <div class="hero">
-          <div class="hero-lbl">Nifty 50</div>
-          <div class="hero-num" id="h-nifty">--<span class="dc">.--</span></div>
-          <div class="hero-row">
-            <span id="demo-badge" style="display:none;font-family:var(--mono);font-size:9px;color:var(--acc);background:rgba(255,214,10,.12);border:1px solid rgba(255,214,10,.25);padding:2px 8px;border-radius:50px;letter-spacing:.5px">DEMO DATA</span>
-            <div class="hbdg up" id="h-chg">--</div>
-            <div class="hero-mkt" id="h-mkt"></div>
-          </div>
-        </div>
-        <div class="idx-row" id="h-idx"></div>
-
-        <!-- Live Market News -->
-        <div class="card" id="news-card">
-          <div class="card-t" style="display:flex;align-items:center;justify-content:space-between">
-            <span>📰 Live Market News</span>
-            <span id="news-ts" style="font-size:10px;color:var(--t3);font-family:var(--mono)"></span>
-          </div>
-          <div id="news-list" style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto;padding:2px"></div>
-          <div id="news-loading" style="text-align:center;padding:18px;color:var(--t3);font-size:13px">Loading news...</div>
+        <!-- Sub-tabs hidden — used for JS compatibility -->
+        <div id="ins-tabs" style="display:none">
+          <button class="stab on" data-it="picks"></button>
+          <button class="stab" data-it="options"></button>
+          <button class="stab" data-it="verify"></button>
         </div>
 
-        <!-- Market Health -->
-        <div class="card">
-          <div class="card-t">Market Health</div>
-          <div class="gauge-wrap">
-            <svg viewBox="0 0 130 76" style="width:138px;height:80px;flex-shrink:0">
-              <path d="M12 72 A55 55 0 0 1 118 72" fill="none" stroke="var(--s4)" stroke-width="10" stroke-linecap="round"/>
-              <path id="garc" d="M12 72 A55 55 0 0 1 118 72" fill="none" stroke="var(--acc)" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 173"/>
-              <text id="gnum" x="65" y="61" text-anchor="middle" font-family="Inter,sans-serif" font-size="24" font-weight="900" fill="var(--t1)">--</text>
-              <text x="65" y="72" text-anchor="middle" font-family="DM Mono,monospace" font-size="7" fill="var(--t3)">/100</text>
-            </svg>
-            <div class="gauge-grid" id="ggrid"></div>
-          </div>
-        </div>
+        <!-- Navigation pills for Insights -->
+        <nav class="flex overflow-x-auto no-scrollbar gap-2 mb-5">
+          <button class="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[#ffd60a] bg-[#353534] font-bold font-headline uppercase tracking-[0.05em] text-[0.6875rem] whitespace-nowrap border-b-2 border-[#ffd60a]" id="nav-picks" onclick="goSubTab('ins-tabs','picks');loadAiPicks()">
+            <span class="material-symbols-outlined text-sm">psychology</span> AI Picks
+          </button>
+          <button class="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[#d0c6ab] font-headline uppercase tracking-[0.05em] text-[0.6875rem] whitespace-nowrap hover:text-white transition-all" id="nav-options" onclick="goPage('options-lab')">
+            <span class="material-symbols-outlined text-sm">query_stats</span> Options Lab
+          </button>
+          <button class="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[#d0c6ab] font-headline uppercase tracking-[0.05em] text-[0.6875rem] whitespace-nowrap hover:text-white transition-all" id="nav-verify" onclick="goPage('verify-pick')">
+            <span class="material-symbols-outlined text-sm">verified</span> Verify Pick
+          </button>
+        </nav>
 
-        <!-- Market Breadth -->
-        <div class="card" id="breadth-card">
-          <div class="card-t">📊 Market Breadth</div>
-          <div id="breadth-bar"></div>
-        </div>
-
-        <!-- Upcoming Events -->
-        <div class="card">
-          <div class="card-t">📅 Upcoming Events</div>
-          <div id="h-events"></div>
-        </div>
-
-        <!-- FII/DII Flow -->
-        <div class="card">
-          <div class="card-t">FII / DII Flow</div>
-          <div id="home-fii-dii"></div>
-        </div>
-      </div>
-
-      <!-- ══ INSIGHTS ══ -->
-      <div class="pg" id="pg-insights">
-        <div class="subtabs" id="ins-tabs">
-          <button class="stab on" data-it="picks">🎯 AI Picks</button>
-          <button class="stab" data-it="options">📊 Options Lab</button>
-          <button class="stab" data-it="verify">✓ Verify Pick</button>
-        </div>
-
-        <!-- AI Long-Term Picks -->
+        <!-- AI Picks Content -->
         <div class="stab-content on" id="stab-picks">
-          <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;justify-content:space-between">
-            <div style="font-family:var(--mono);font-size:10px;color:var(--t3)">Cache updated: <span id="picks-ts">--</span></div>
-            <button class="btn btn-o" onclick="loadAiPicks()" style="margin:0;width:auto;padding:6px 14px;font-size:11px">🔄 Refresh</button>
+          <div class="flex justify-between items-center mb-5">
+            <span class="text-[0.6875rem] text-[#d0c6ab] font-medium font-mono">Cache updated: <span id="picks-ts">--</span></span>
+            <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#4d4632] text-[0.75rem] font-bold text-[#d0c6ab] active:scale-95 duration-200" onclick="loadAiPicks()">
+              <span class="material-symbols-outlined text-sm">refresh</span> Refresh
+            </button>
           </div>
-          <div id="picks-list"></div>
+          <div id="picks-list" class="space-y-4"></div>
         </div>
 
-        <!-- Options Lab -->
-        <div class="stab-content" id="stab-options">
-          <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;justify-content:space-between">
-            <div style="font-family:var(--mono);font-size:10px;color:var(--t3)">Options trades: <span id="opts-ts">--</span></div>
-            <button class="btn btn-o" onclick="loadOptionsLab()" style="margin:0;width:auto;padding:6px 14px;font-size:11px">🔄 Refresh</button>
-          </div>
+        <!-- Hidden containers for sub-tab JS compatibility -->
+        <div class="stab-content" id="stab-options" style="display:none">
+          <div id="opts-ts" style="display:none">--</div>
           <div id="opts-list"></div>
         </div>
-
-        <!-- Verify Pick -->
-        <div class="stab-content" id="stab-verify">
-          <div class="card">
-            <div style="display:flex;gap:8px;margin-bottom:14px">
-              <input type="text" id="verify-sym" placeholder="Enter stock symbol (e.g., RELIANCE)" style="flex:1;background:var(--s3);border:1px solid var(--b2);border-radius:var(--rs);padding:10px 12px;color:var(--t1);font-family:var(--ui);font-size:13px;outline:none" />
-              <button class="btn btn-p" onclick="verifyPick()" style="margin:0;width:auto;padding:0 20px">Analyse</button>
-            </div>
-            <div id="verify-result"></div>
-          </div>
+        <div class="stab-content" id="stab-verify" style="display:none">
+          <div id="verify-sym-hidden"></div>
+          <div id="verify-result-hidden"></div>
         </div>
       </div>
+    </div>
 
-      <!-- ══ P&L TRACKER ══ -->
-      <div class="pg" id="pg-pnl">
-        <div class="subtabs" id="pnl-tabs">
-          <button class="stab on" data-pt="dashboard">📊 Dashboard</button>
-          <button class="stab" data-pt="add">➕ Add Trade</button>
-          <button class="stab" data-pt="import">📥 Import CSV</button>
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- PAGE: OPTIONS LAB (Standalone)                 -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="pg" id="pg-options-lab">
+      <div class="px-4 pb-6 max-w-[460px] mx-auto">
+
+        <!-- Back arrow header -->
+        <div class="flex items-center gap-3 mb-5">
+          <button class="material-symbols-outlined text-[#ffd60a] active:scale-95 duration-200" onclick="goTab('insights')" style="font-size:22px">arrow_back</button>
+          <h2 class="font-headline font-bold text-lg tracking-tight text-[#ffd60a]">Options Lab</h2>
+        </div>
+
+        <!-- Header section -->
+        <section class="mb-5 space-y-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xl">📊</span>
+              <h3 class="text-[16px] font-bold text-white">AI Options Scanner</h3>
+            </div>
+            <p class="text-[12px] text-[#d0c6ab] mt-1 leading-relaxed">AI scans the market and recommends the best option trades right now</p>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-[12px] text-[#d0c6ab] font-mono">Last scanned: <span id="opts-ts-page">--</span></span>
+            <button class="flex items-center gap-2 border border-[#ffd60a] text-[#ffd60a] px-4 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-transform" onclick="loadOptionsLab()">
+              <span class="material-symbols-outlined text-xs">refresh</span> Scan Now
+            </button>
+          </div>
+        </section>
+
+        <!-- Options cards -->
+        <div id="opts-list-page" class="space-y-4"></div>
+
+        <!-- Risk warning -->
+        <footer class="mt-6 text-center">
+          <p class="text-[10px] text-[#d0c6ab] px-4 leading-normal italic">⚠ Options involve risk. These are AI suggestions, not financial advice.</p>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- PAGE: VERIFY PICK (Standalone)                 -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="pg" id="pg-verify-pick">
+      <div class="px-4 pb-6 max-w-[460px] mx-auto space-y-4">
+
+        <!-- Back arrow header -->
+        <div class="flex items-center gap-3 mb-4">
+          <button class="material-symbols-outlined text-[#ffd60a] active:scale-95 duration-200" onclick="goTab('insights')" style="font-size:22px">arrow_back</button>
+          <h2 class="font-headline font-bold text-lg tracking-tight text-[#e5e2e1]">Verify Pick</h2>
+        </div>
+
+        <!-- Search -->
+        <section class="space-y-3">
+          <div>
+            <h3 class="text-base font-bold text-[#e5e2e1] flex items-center gap-2">
+              <span class="material-symbols-outlined text-sm">search</span> Check any stock
+            </h3>
+            <p class="text-xs text-[#d0c6ab]">Get unbiased AI analysis before you invest</p>
+          </div>
+          <div class="flex gap-2 h-12">
+            <input type="text" id="verify-sym" class="flex-1 bg-[#242426] border-none rounded-xl px-4 font-headline font-bold text-[#e5e2e1] focus:ring-1 focus:ring-[#ffd60a] outline-none" placeholder="RELIANCE" oninput="this.value=this.value.toUpperCase()">
+            <button class="bg-[#ffd60a] text-[#3b2f00] px-6 rounded-xl font-bold active:scale-95 transition-all" onclick="verifyPick()">Analyse</button>
+          </div>
+        </section>
+
+        <!-- Result -->
+        <div id="verify-result"></div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- TAB 3: P&L TRACKER                             -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="pg" id="pg-pnl">
+      <div class="px-4 pb-6 max-w-[460px] mx-auto">
+
+        <!-- Sub-tabs -->
+        <div id="pnl-tabs" class="flex flex-row gap-6 px-1 py-3 mb-4 overflow-x-auto no-scrollbar">
+          <button class="stab on flex items-center gap-2 text-[#ffd60a] border-b-2 border-[#ffd60a] pb-1 font-headline text-sm uppercase tracking-widest transition-all whitespace-nowrap" data-pt="dashboard">
+            <span class="material-symbols-outlined text-xs">dashboard</span> Dashboard
+          </button>
+          <button class="stab flex items-center gap-2 text-[#d0c6ab] font-headline text-sm uppercase tracking-widest hover:text-white transition-all whitespace-nowrap" data-pt="add">
+            <span class="material-symbols-outlined text-xs">add_circle</span> Add Trade
+          </button>
+          <button class="stab flex items-center gap-2 text-[#d0c6ab] font-headline text-sm uppercase tracking-widest hover:text-white transition-all whitespace-nowrap" data-pt="import">
+            <span class="material-symbols-outlined text-xs">file_upload</span> Import CSV
+          </button>
         </div>
 
         <!-- Dashboard -->
         <div class="stab-content on" id="ptab-dashboard">
-          <div class="sum-grid">
-            <div class="sumcard">
-              <div class="v" id="pnl-total">₹0</div>
-              <div class="l">Total P&L</div>
+          <section class="grid grid-cols-2 gap-3 mb-5">
+            <div class="bg-[#1c1b1b] p-4 rounded-xl">
+              <p class="font-headline text-2xl font-bold text-[#47e266] tnum" id="pnl-total">₹0</p>
+              <p class="text-[10px] text-[#d0c6ab] uppercase tracking-widest mt-1 font-mono">Net P&L</p>
             </div>
-            <div class="sumcard">
-              <div class="v" id="pnl-winrate">0%</div>
-              <div class="l">Win Rate</div>
+            <div class="bg-[#1c1b1b] p-4 rounded-xl">
+              <p class="font-headline text-2xl font-bold text-[#47e266] tnum" id="pnl-winrate">0%</p>
+              <p class="text-[10px] text-[#d0c6ab] uppercase tracking-widest mt-1 font-mono">Win Rate</p>
             </div>
-            <div class="sumcard">
-              <div class="v" id="pnl-trades">0</div>
-              <div class="l">Total Trades</div>
+            <div class="bg-[#1c1b1b] p-4 rounded-xl">
+              <p class="font-headline text-2xl font-bold text-[#e5e2e1] tnum" id="pnl-trades">0</p>
+              <p class="text-[10px] text-[#d0c6ab] uppercase tracking-widest mt-1 font-mono">Total Trades</p>
             </div>
-            <div class="sumcard">
-              <div class="v" id="pnl-charges">₹0</div>
-              <div class="l">Charges Paid</div>
+            <div class="bg-[#1c1b1b] p-4 rounded-xl">
+              <p class="font-headline text-2xl font-bold text-[#ffb4ab] tnum" id="pnl-charges">₹0</p>
+              <p class="text-[10px] text-[#d0c6ab] uppercase tracking-widest mt-1 font-mono">Brokerage + STT</p>
             </div>
-          </div>
-          <div class="card">
-            <div class="card-t">Trade List</div>
-            <div id="pnl-tradelist"><div class="empty"><i>📊</i>No trades yet</div></div>
-          </div>
+          </section>
+          <section class="bg-[#1c1b1b] rounded-xl p-4 overflow-hidden">
+            <h3 class="font-headline text-sm font-bold text-[#e5e2e1] mb-4 uppercase tracking-wider">Recent Activity</h3>
+            <div id="pnl-tradelist"><div class="text-center py-6 text-[#636366] font-mono text-xs">📊 No trades yet</div></div>
+          </section>
         </div>
 
         <!-- Add Trade -->
         <div class="stab-content" id="ptab-add">
-          <div class="card">
-            <div style="font-size:15px;font-weight:700;margin-bottom:12px;color:var(--t1)">Add New Trade</div>
-            <div class="ig"><label>Symbol *</label><input type="text" id="trade-sym" placeholder="RELIANCE" oninput="this.value=this.value.toUpperCase()"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <div class="ig"><label>Quantity *</label><input type="number" id="trade-qty" placeholder="10"></div>
-              <div class="ig"><label>Type *</label><select id="trade-type"><option value="equity">Equity</option><option value="options">Options</option><option value="spread">Spread</option></select></div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <div class="ig"><label>Buy Price ₹ *</label><input type="number" id="trade-buyprice" placeholder="2800"></div>
-              <div class="ig"><label>Sell Price ₹ *</label><input type="number" id="trade-sellprice" placeholder="3000"></div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <div class="ig"><label>Buy Date *</label><input type="date" id="trade-buydate"></div>
-              <div class="ig"><label>Sell Date *</label><input type="date" id="trade-selldate"></div>
-            </div>
-            <div id="spread-fields" style="display:none">
-              <div style="font-size:12px;font-weight:600;color:var(--t1);margin:10px 0 8px">Leg 1 (Buy)</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                <div class="ig"><label>Type</label><select id="leg1-type"><option value="CE">CE</option><option value="PE">PE</option></select></div>
-                <div class="ig"><label>Strike</label><input type="number" id="leg1-strike" placeholder="18000"></div>
+          <section class="bg-[#1c1b1b] rounded-xl p-5 border border-[#4d4632]/10">
+            <h3 class="text-[15px] font-bold text-[#e5e2e1] mb-5 font-headline">Add New Trade</h3>
+            <form class="space-y-3" onsubmit="event.preventDefault()">
+              <div class="space-y-1.5">
+                <label class="block text-[11px] font-medium text-[#d0c6ab] uppercase tracking-wider">Symbol</label>
+                <input type="text" id="trade-sym" class="w-full bg-[#353534] border-none rounded-lg p-3 text-[#e5e2e1] placeholder:text-[#636366] focus:ring-2 focus:ring-[#ffd60a] transition-all outline-none font-mono" placeholder="RELIANCE" oninput="this.value=this.value.toUpperCase()">
               </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                <div class="ig"><label>Premium ₹</label><input type="number" id="leg1-prem"></div>
-                <div class="ig"><label>Qty</label><input type="number" id="leg1-qty" placeholder="1"></div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="space-y-1.5">
+                  <label class="block text-[11px] font-medium text-[#d0c6ab] uppercase tracking-wider">Quantity</label>
+                  <input type="number" id="trade-qty" class="w-full bg-[#353534] border-none rounded-lg p-3 text-[#e5e2e1] focus:ring-2 focus:ring-[#ffd60a] transition-all outline-none font-mono" placeholder="0">
+                </div>
+                <div class="space-y-1.5">
+                  <label class="block text-[11px] font-medium text-[#d0c6ab] uppercase tracking-wider">Type</label>
+                  <select id="trade-type" class="w-full bg-[#353534] border-none rounded-lg p-3 text-[#e5e2e1] focus:ring-2 focus:ring-[#ffd60a] transition-all outline-none appearance-none">
+                    <option value="equity">Equity</option>
+                    <option value="options">Options</option>
+                    <option value="spread">Spread</option>
+                  </select>
+                </div>
               </div>
-              <div style="font-size:12px;font-weight:600;color:var(--t1);margin:10px 0 8px">Leg 2 (Sell)</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                <div class="ig"><label>Type</label><select id="leg2-type"><option value="CE">CE</option><option value="PE">PE</option></select></div>
-                <div class="ig"><label>Strike</label><input type="number" id="leg2-strike" placeholder="19000"></div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="space-y-1.5">
+                  <label class="block text-[11px] font-medium text-[#d0c6ab] uppercase tracking-wider">Buy Price ₹</label>
+                  <input type="number" id="trade-buyprice" class="w-full bg-[#353534] border-none rounded-lg p-3 text-[#e5e2e1] focus:ring-2 focus:ring-[#ffd60a] transition-all outline-none font-mono" step="0.05" placeholder="2800">
+                </div>
+                <div class="space-y-1.5">
+                  <label class="block text-[11px] font-medium text-[#d0c6ab] uppercase tracking-wider">Sell Price ₹</label>
+                  <input type="number" id="trade-sellprice" class="w-full bg-[#353534] border-none rounded-lg p-3 text-[#e5e2e1] focus:ring-2 focus:ring-[#ffd60a] transition-all outline-none font-mono" step="0.05" placeholder="3000">
+                </div>
               </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                <div class="ig"><label>Premium ₹</label><input type="number" id="leg2-prem"></div>
-                <div class="ig"><label>Qty</label><input type="number" id="leg2-qty" placeholder="1"></div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="space-y-1.5">
+                  <label class="block text-[11px] font-medium text-[#d0c6ab] uppercase tracking-wider">Buy Date</label>
+                  <input type="date" id="trade-buydate" class="w-full bg-[#353534] border-none rounded-lg p-3 text-[#e5e2e1] focus:ring-2 focus:ring-[#ffd60a] transition-all outline-none">
+                </div>
+                <div class="space-y-1.5">
+                  <label class="block text-[11px] font-medium text-[#d0c6ab] uppercase tracking-wider">Sell Date</label>
+                  <input type="date" id="trade-selldate" class="w-full bg-[#353534] border-none rounded-lg p-3 text-[#e5e2e1] focus:ring-2 focus:ring-[#ffd60a] transition-all outline-none">
+                </div>
               </div>
-            </div>
-            <div style="background:var(--s3);border-radius:var(--rs);padding:12px;margin:12px 0;font-size:11px;color:var(--t2);line-height:1.8">
-              <div style="margin-bottom:6px"><strong>Charges (Auto-calculated):</strong></div>
-              <div>Brokerage: <span id="calc-brokerage">₹0</span></div>
-              <div>STT: <span id="calc-stt">₹0</span></div>
-              <div>Exchange: <span id="calc-exch">₹0</span></div>
-              <div>GST (18%): <span id="calc-gst">₹0</span></div>
-              <div style="border-top:1px solid var(--b1);margin-top:6px;padding-top:6px;font-weight:600">Net P&L: <span id="calc-netpnl">₹0</span></div>
-            </div>
-            <button class="btn btn-p" onclick="saveTrade()">💾 Save Trade</button>
-          </div>
+              <!-- Spread fields -->
+              <div id="spread-fields" style="display:none" class="border-t border-[#4d4632]/20 pt-3 mt-3 space-y-3">
+                <label class="text-[12px] font-bold text-[#ffd60a] mb-2 block">Leg 1 (Buy)</label>
+                <div class="grid grid-cols-2 gap-3">
+                  <select id="leg1-type" class="bg-[#353534] border-none rounded-lg p-3 text-xs text-[#e5e2e1] outline-none"><option>CE</option><option>PE</option></select>
+                  <input id="leg1-strike" type="number" class="bg-[#353534] border-none rounded-lg p-3 text-xs text-[#e5e2e1] outline-none" placeholder="Strike">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <input id="leg1-prem" type="number" class="bg-[#353534] border-none rounded-lg p-3 text-xs text-[#e5e2e1] outline-none" placeholder="Premium ₹">
+                  <input id="leg1-qty" type="number" class="bg-[#353534] border-none rounded-lg p-3 text-xs text-[#e5e2e1] outline-none" placeholder="Quantity">
+                </div>
+                <label class="text-[12px] font-bold text-[#ffd60a] mb-2 block">Leg 2 (Sell)</label>
+                <div class="grid grid-cols-2 gap-3">
+                  <select id="leg2-type" class="bg-[#353534] border-none rounded-lg p-3 text-xs text-[#e5e2e1] outline-none"><option>CE</option><option>PE</option></select>
+                  <input id="leg2-strike" type="number" class="bg-[#353534] border-none rounded-lg p-3 text-xs text-[#e5e2e1] outline-none" placeholder="Strike">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <input id="leg2-prem" type="number" class="bg-[#353534] border-none rounded-lg p-3 text-xs text-[#e5e2e1] outline-none" placeholder="Premium ₹">
+                  <input id="leg2-qty" type="number" class="bg-[#353534] border-none rounded-lg p-3 text-xs text-[#e5e2e1] outline-none" placeholder="Quantity">
+                </div>
+              </div>
+              <!-- Charges box -->
+              <div class="bg-[#353534] rounded-xl p-4 mt-4">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="material-symbols-outlined text-sm text-[#d0c6ab]">calculate</span>
+                  <h4 class="text-sm font-bold text-[#e5e2e1]">Charges (Auto-calculated)</h4>
+                </div>
+                <div class="space-y-1.5">
+                  <div class="flex justify-between text-[11px] text-[#d0c6ab]"><span>Brokerage</span><span class="font-mono" id="calc-brokerage">₹0.00</span></div>
+                  <div class="flex justify-between text-[11px] text-[#d0c6ab]"><span>STT</span><span class="font-mono" id="calc-stt">₹0.00</span></div>
+                  <div class="flex justify-between text-[11px] text-[#d0c6ab]"><span>Exchange+SEBI+Stamp</span><span class="font-mono" id="calc-exch">₹0.00</span></div>
+                  <div class="flex justify-between text-[11px] text-[#d0c6ab]"><span>GST (18%)</span><span class="font-mono" id="calc-gst">₹0.00</span></div>
+                </div>
+                <div class="border-t border-[#4d4632]/20 my-2"></div>
+                <div class="flex justify-between items-center">
+                  <span class="text-sm font-bold text-[#e5e2e1]">Net P&L</span>
+                  <span class="text-lg font-black font-mono" id="calc-netpnl" style="color:#47e266">₹0.00</span>
+                </div>
+              </div>
+              <button type="button" class="w-full bg-[#ffd60a] text-[#0e0e0e] font-black py-4 rounded-xl mt-4 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-lg" onclick="saveTrade()">
+                <span class="material-symbols-outlined">save</span> SAVE TRADE
+              </button>
+            </form>
+          </section>
         </div>
 
         <!-- Import CSV -->
         <div class="stab-content" id="ptab-import">
-          <div class="card">
-            <div style="font-size:15px;font-weight:700;margin-bottom:12px;color:var(--t1)">Import Trades from CSV</div>
-            <div style="border:2px dashed var(--b2);border-radius:var(--rs);padding:24px;text-align:center;cursor:pointer;transition:.2s;margin-bottom:12px" id="csv-dropzone" onclick="document.getElementById('csv-file').click()">
-              <div style="font-size:32px;margin-bottom:8px">📁</div>
-              <div style="font-size:13px;font-weight:600;color:var(--t1)">Drop CSV or click to upload</div>
-              <div style="font-family:var(--mono);font-size:10px;color:var(--t3);margin-top:4px">Columns: Symbol, Qty, BuyPrice, SellPrice, BuyDate, SellDate</div>
+          <section class="bg-[#1c1b1b] rounded-xl p-5 border border-[#353534]/30">
+            <h3 class="text-[15px] font-bold text-white mb-5 flex items-center gap-2">Import Trades from CSV</h3>
+            <div class="border-2 border-dashed border-[#636366] rounded-xl p-8 flex flex-col items-center justify-center text-center bg-[#242426]/50 mb-5 hover:border-[#ffd60a]/50 transition-colors cursor-pointer" id="csv-dropzone" onclick="document.getElementById('csv-file').click()">
+              <div class="w-14 h-14 bg-[#ffd60a]/10 rounded-full flex items-center justify-center mb-3">
+                <span class="material-symbols-outlined text-[28px] text-[#ffd60a]">folder_zip</span>
+              </div>
+              <p class="text-[13px] font-semibold text-white mb-1">Drop CSV file here or click to upload</p>
+              <p class="text-[11px] text-[#999077] mb-2">Supports: Zerodha Tradebook, Custom CSV</p>
+              <code class="text-[10px] font-mono text-[#ffd60a]/80 bg-black/40 px-2 py-1 rounded">Columns: Symbol, Qty, BuyPrice, SellPrice, BuyDate, SellDate</code>
             </div>
             <input type="file" id="csv-file" accept=".csv" style="display:none" onchange="handleCsvUpload(event)">
-            <div class="ig"><label>Or paste CSV data</label><textarea id="csv-textarea" placeholder="symbol,qty,buyprice,sellprice,buydate,selldate&#10;RELIANCE,10,2800,3000,2024-01-15,2024-01-20"></textarea></div>
-            <button class="btn btn-p" onclick="importCsv()">📥 Import Trades</button>
-            <div id="import-result" style="margin-top:12px"></div>
-          </div>
+            <div class="relative flex items-center justify-center mb-5">
+              <div class="w-full h-px bg-[#353534]"></div>
+              <span class="absolute px-3 bg-[#1c1b1b] text-[9px] font-bold text-[#d0c6ab] uppercase tracking-widest">OR PASTE CSV DATA</span>
+            </div>
+            <textarea id="csv-textarea" class="w-full bg-[#242426] border-none rounded-lg p-4 font-mono text-xs text-white placeholder:text-[#636366] focus:ring-1 focus:ring-[#ffd60a] outline-none mb-5" rows="5" placeholder="symbol,qty,buyprice,sellprice,buydate,selldate&#10;RELIANCE,10,2800,3000,2024-01-15,2024-01-20"></textarea>
+            <button class="w-full bg-[#ffd60a] text-[#3b2f00] font-bold py-4 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-transform" onclick="importCsv()">
+              <span class="material-symbols-outlined">file_upload</span> Import Trades
+            </button>
+            <div id="import-result" class="mt-4"></div>
+          </section>
         </div>
+
       </div>
+    </div>
 
-      <!-- ══ MORE ══ -->
-      <div class="pg" id="pg-more">
-        <!-- Settings -->
-        <div style="font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;margin:0 0 8px;padding-left:4px">Settings</div>
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- TAB 4: MORE (Command Centre)                   -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="pg" id="pg-more">
+      <div class="px-4 pb-6 max-w-[460px] mx-auto space-y-6">
 
-        <div class="acc-item" onclick="toggleAcc(this)">
-          <div class="acc-hdr"><span class="acc-ico">🔐</span><div style="flex:1"><div class="acc-lbl">Upstox API</div><div class="acc-desc">Real-time data & webhooks</div></div><span class="acc-chev">▶</span></div>
-          <div class="acc-body">
-            <div class="ig"><label>API Key</label><input type="text" id="uk" placeholder="Upstox API Key" autocomplete="off"></div>
-            <div class="ig"><label>API Secret</label><input type="password" id="us" placeholder="Upstox API Secret"></div>
-            <div class="ig"><label>Redirect URI</label><input type="text" id="uc" placeholder="https://finr-production.up.railway.app/upstox/callback"></div>
-            <button class="btn btn-p" onclick="testUpstox()" style="margin-top:4px">🧪 Test Connection</button>
+        <!-- SECTION: COMMAND CENTRE -->
+        <section>
+          <div class="flex items-center gap-2 mb-4">
+            <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-[#d0c6ab] uppercase">COMMAND CENTRE</span>
+            <div class="h-[1px] flex-grow bg-[#353534]"></div>
           </div>
-        </div>
 
-        <div class="acc-item" onclick="toggleAcc(this)">
-          <div class="acc-hdr"><span class="acc-ico">🦓</span><div style="flex:1"><div class="acc-lbl">Zerodha API</div><div class="acc-desc">Holdings & positions sync</div></div><span class="acc-chev">▶</span></div>
-          <div class="acc-body">
-            <div class="ig"><label>API Key</label><input type="text" id="zk" placeholder="Zerodha API Key" autocomplete="off"></div>
-            <div class="ig"><label>API Secret</label><input type="password" id="zs" placeholder="Zerodha API Secret"></div>
-            <div class="ig"><label>Callback URL</label><input type="text" id="zc" placeholder="https://finr-production.up.railway.app/zerodha/callback"></div>
-            <button class="btn btn-p" onclick="doZerodhaRefresh()" style="margin-top:4px">🔄 Refresh Token</button>
-          </div>
-        </div>
+          <!-- Connect All -->
+          <button class="w-full bg-[#ffd60a] text-[#131313] font-bold py-4 rounded-xl flex items-center justify-center gap-2 mb-5 active:scale-95 duration-200 shadow-[0_4px_20px_rgba(255,214,10,0.2)]" onclick="saveSettings()">
+            <span class="material-symbols-outlined">link</span> Connect All
+          </button>
 
-        <div class="acc-item" onclick="toggleAcc(this)">
-          <div class="acc-hdr"><span class="acc-ico">🤖</span><div style="flex:1"><div class="acc-lbl">Gemini AI</div><div class="acc-desc">Options trade validator</div></div><span class="acc-chev">▶</span></div>
-          <div class="acc-body">
-            <div class="ig"><label>Gemini API Key</label><input type="text" id="gk" placeholder="AIzaSy..." autocomplete="off"></div>
-            <button class="btn btn-o" onclick="testGemini()" id="gemini-test-btn" style="margin-top:4px">🧪 Test Connection</button>
-            <div id="gemini-test-result" style="font-family:var(--mono);font-size:10px;margin-top:6px;line-height:1.6"></div>
-          </div>
-        </div>
+          <div class="space-y-4">
+            <!-- Upstox API -->
+            <div class="bg-[#1c1b1b] p-4 rounded-xl space-y-3">
+              <div class="flex justify-between items-start">
+                <div class="flex gap-3">
+                  <div class="w-10 h-10 rounded-lg bg-[#353534] flex items-center justify-center">
+                    <span class="material-symbols-outlined text-[#ffd60a]" style="font-variation-settings:'FILL' 1">lock</span>
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-sm text-[#e5e2e1]">Upstox API</h3>
+                    <p class="text-[11px] text-[#d0c6ab]">Real-time market data</p>
+                  </div>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <div class="space-y-1"><label class="text-[10px] font-bold text-[#d0c6ab] ml-1 uppercase tracking-tight">API Key</label><input id="uk" type="password" class="w-full bg-[#242426] border-none rounded-lg text-xs py-3 px-4 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none" placeholder="Upstox API Key"></div>
+                <div class="space-y-1"><label class="text-[10px] font-bold text-[#d0c6ab] ml-1 uppercase tracking-tight">API Secret</label><input id="us" type="password" class="w-full bg-[#242426] border-none rounded-lg text-xs py-3 px-4 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none" placeholder="Upstox API Secret"></div>
+                <div class="space-y-1"><label class="text-[10px] font-bold text-[#d0c6ab] ml-1 uppercase tracking-tight">Redirect URI</label><input id="uc" type="text" class="w-full bg-[#242426] border-none rounded-lg text-xs py-3 px-4 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none" placeholder="https://finr-production.up.railway.app/upstox/callback"></div>
+              </div>
+              <div class="flex gap-2 pt-1">
+                <button class="px-4 py-2 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-xs font-bold hover:bg-[#ffd60a]/10 transition-colors" onclick="testUpstox()">
+                  <span class="material-symbols-outlined text-xs mr-1">link</span> Connect
+                </button>
+                <button class="px-4 py-2 rounded-lg bg-[#353534] text-[#d0c6ab] text-xs font-bold" onclick="testUpstox()">
+                  <span class="material-symbols-outlined text-xs mr-1">lab_research</span> Test
+                </button>
+              </div>
+            </div>
 
-        <div style="display:flex;gap:8px;margin:12px 0">
-          <button class="btn btn-dk" onclick="saveSettings()" style="flex:1">💾 Save All Settings</button>
-          <button class="btn btn-o" onclick="checkStatus()" style="flex:1">↻ Recheck Status</button>
-        </div>
+            <!-- Zerodha API -->
+            <div class="bg-[#1c1b1b] p-4 rounded-xl space-y-3">
+              <div class="flex justify-between items-start">
+                <div class="flex gap-3">
+                  <div class="w-10 h-10 rounded-lg bg-[#353534] flex items-center justify-center">
+                    <span class="material-symbols-outlined text-[#ffd60a]">rebase_edit</span>
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-sm text-[#e5e2e1]">Zerodha API</h3>
+                    <p class="text-[11px] text-[#d0c6ab]">Holdings & positions sync</p>
+                  </div>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <div class="space-y-1"><label class="text-[10px] font-bold text-[#d0c6ab] ml-1 uppercase tracking-tight">API Key</label><input id="zk" type="text" class="w-full bg-[#242426] border-none rounded-lg text-xs py-3 px-4 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none" placeholder="Zerodha API Key"></div>
+                <div class="space-y-1"><label class="text-[10px] font-bold text-[#d0c6ab] ml-1 uppercase tracking-tight">API Secret</label><input id="zs" type="password" class="w-full bg-[#242426] border-none rounded-lg text-xs py-3 px-4 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none" placeholder="Zerodha API Secret"></div>
+                <div class="space-y-1"><label class="text-[10px] font-bold text-[#d0c6ab] ml-1 uppercase tracking-tight">Callback URL</label><input id="zc" type="text" class="w-full bg-[#242426] border-none rounded-lg text-xs py-3 px-4 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none" placeholder="https://finr-production.up.railway.app/zerodha/callback"></div>
+              </div>
+              <div class="flex gap-2 pt-1">
+                <button class="px-4 py-2 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-xs font-bold" onclick="doZerodhaRefresh()">
+                  <span class="material-symbols-outlined text-xs mr-1">link</span> Connect
+                </button>
+                <button class="px-4 py-2 rounded-lg bg-[#353534] text-[#d0c6ab] text-xs font-bold" onclick="doZerodhaRefresh()">
+                  <span class="material-symbols-outlined text-xs mr-1">sync</span> Refresh Token
+                </button>
+              </div>
+            </div>
 
-        <!-- System -->
-        <div style="font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 8px;padding-left:4px">System</div>
-
-        <div class="acc-item" onclick="toggleAcc(this)">
-          <div class="acc-hdr"><span class="acc-ico">🔌</span><div style="flex:1"><div class="acc-lbl">System Health</div><div class="acc-desc">Connection status & uptime</div></div><span class="acc-chev">▶</span></div>
-          <div class="acc-body">
-            <div id="sys-health"></div>
-            <button class="btn btn-o" onclick="loadHealth()" style="margin-top:8px">↻ Refresh</button>
-          </div>
-        </div>
-
-        <div class="acc-item" onclick="toggleAcc(this)">
-          <div class="acc-hdr"><span class="acc-ico">📋</span><div style="flex:1"><div class="acc-lbl">System Logs</div><div class="acc-desc">Server activity log</div></div><span class="acc-chev">▶</span></div>
-          <div class="acc-body">
-            <button class="btn btn-o" onclick="loadLogs()" style="margin-bottom:8px">↻ Load Logs</button>
-            <div id="log-list" style="max-height:260px;overflow-y:auto;border-radius:var(--rs);background:var(--s3);border:1px solid var(--b1)">
-              <div class="empty"><i>📋</i>Click Load Logs</div>
+            <!-- Gemini AI -->
+            <div class="bg-[#1c1b1b] p-4 rounded-xl space-y-3">
+              <div class="flex justify-between items-start">
+                <div class="flex gap-3">
+                  <div class="w-10 h-10 rounded-lg bg-[#353534] flex items-center justify-center">
+                    <span class="material-symbols-outlined text-[#ffd60a]">smart_toy</span>
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-sm text-[#e5e2e1]">Gemini AI</h3>
+                    <p class="text-[11px] text-[#d0c6ab]">AI analysis engine</p>
+                  </div>
+                </div>
+              </div>
+              <div class="space-y-1"><label class="text-[10px] font-bold text-[#d0c6ab] ml-1 uppercase tracking-tight">API Key</label><input id="gk" type="password" class="w-full bg-[#242426] border-none rounded-lg text-xs py-3 px-4 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none" placeholder="AIzaSy..."></div>
+              <div id="gemini-test-result" class="font-mono text-[10px] text-[#d0c6ab]"></div>
+              <div class="flex gap-2 pt-1">
+                <button class="px-4 py-2 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-xs font-bold" onclick="testGemini()" id="gemini-test-btn">
+                  <span class="material-symbols-outlined text-xs mr-1">link</span> Connect
+                </button>
+                <button class="px-4 py-2 rounded-lg bg-[#353534] text-[#d0c6ab] text-xs font-bold" onclick="testGemini()">
+                  <span class="material-symbols-outlined text-xs mr-1">lab_research</span> Test
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Event Calendar -->
-        <div style="font-family:var(--mono);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 8px;padding-left:4px">Market</div>
+          <!-- Global buttons -->
+          <div class="grid grid-cols-2 gap-3 mt-5">
+            <button class="bg-[#353534] text-[#ffd60a] font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2 active:scale-95 duration-150" onclick="saveSettings()">
+              <span class="material-symbols-outlined text-sm">save</span> Save All
+            </button>
+            <button class="border border-[#353534] text-[#d0c6ab] font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2 active:scale-95 duration-150" onclick="checkStatus()">
+              <span class="material-symbols-outlined text-sm">refresh</span> Recheck All
+            </button>
+          </div>
+        </section>
 
-        <div class="acc-item" onclick="toggleAcc(this)">
-          <div class="acc-hdr"><span class="acc-ico">📅</span><div style="flex:1"><div class="acc-lbl">Event Calendar</div><div class="acc-desc">RBI, FOMC, earnings & holidays</div></div><span class="acc-chev">▶</span></div>
-          <div class="acc-body" id="event-cal-body"></div>
-        </div>
+        <!-- SECTION: SYSTEM -->
+        <section class="space-y-4">
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-[#d0c6ab] uppercase">SYSTEM</span>
+            <div class="h-[1px] flex-grow bg-[#353534]"></div>
+          </div>
 
-        <div style="text-align:center;font-family:var(--mono);font-size:10px;color:var(--t3);padding:16px;line-height:2">FINR v2.0 · AES-256 · Gemini AI · Railway · 🇮🇳</div>
+          <!-- System Health -->
+          <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5">
+            <div class="p-4 flex justify-between items-center cursor-pointer" onclick="this.parentElement.classList.toggle('sys-open');loadHealth()">
+              <div class="flex items-center gap-3">
+                <span class="material-symbols-outlined text-[#47e266]">health_and_safety</span>
+                <span class="font-bold text-sm">System Health</span>
+              </div>
+              <span class="material-symbols-outlined text-[#d0c6ab] transition-transform duration-200">expand_more</span>
+            </div>
+            <div id="sys-health" class="px-4 pb-4 hidden space-y-2"></div>
+          </div>
+
+          <!-- System Logs -->
+          <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5">
+            <div class="p-4 flex justify-between items-center">
+              <div class="flex items-center gap-3">
+                <span class="material-symbols-outlined text-[#ffd60a]">terminal</span>
+                <span class="font-bold text-sm">System Logs</span>
+              </div>
+              <button class="text-[10px] font-bold text-[#ffd60a] bg-[#ffd60a]/10 px-3 py-1 rounded uppercase" onclick="loadLogs()">Load Logs</button>
+            </div>
+            <div id="log-list" class="mx-4 mb-4 p-3 bg-black rounded-lg h-32 overflow-y-auto font-mono text-[10px] text-[#47e266]/80 space-y-1">
+              <p class="text-[#636366]">Click Load Logs to view server activity</p>
+            </div>
+          </div>
+
+          <!-- Event Calendar -->
+          <div class="flex items-center gap-2 mt-2">
+            <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-[#d0c6ab] uppercase">MARKET</span>
+            <div class="h-[1px] flex-grow bg-[#353534]"></div>
+          </div>
+
+          <!-- Event Calendar with Filter Chips -->
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-[#d0c6ab] uppercase">📅 Event Calendar</span>
+            </div>
+            <div class="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-3" id="event-filter-chips">
+              <button class="flex-shrink-0 px-4 py-2 bg-[#ffd60a] text-[#0a0a0a] font-bold text-xs rounded-lg active:scale-95 duration-200 evt-chip" data-filter="all" onclick="filterEvents('all')">All</button>
+              <button class="flex-shrink-0 px-4 py-2 bg-[#1c1b1b] border border-[#4d4632]/50 text-[#d0c6ab] font-medium text-xs rounded-lg active:scale-95 duration-200 evt-chip" data-filter="rbi" onclick="filterEvents('rbi')">RBI</button>
+              <button class="flex-shrink-0 px-4 py-2 bg-[#1c1b1b] border border-[#4d4632]/50 text-[#d0c6ab] font-medium text-xs rounded-lg active:scale-95 duration-200 evt-chip" data-filter="fomc" onclick="filterEvents('fomc')">FOMC</button>
+              <button class="flex-shrink-0 px-4 py-2 bg-[#1c1b1b] border border-[#4d4632]/50 text-[#d0c6ab] font-medium text-xs rounded-lg active:scale-95 duration-200 evt-chip" data-filter="earnings" onclick="filterEvents('earnings')">Earnings</button>
+              <button class="flex-shrink-0 px-4 py-2 bg-[#1c1b1b] border border-[#4d4632]/50 text-[#d0c6ab] font-medium text-xs rounded-lg active:scale-95 duration-200 evt-chip" data-filter="holidays" onclick="filterEvents('holidays')">Holidays</button>
+              <button class="flex-shrink-0 px-4 py-2 bg-[#1c1b1b] border border-[#4d4632]/50 text-[#d0c6ab] font-medium text-xs rounded-lg active:scale-95 duration-200 evt-chip" data-filter="ipo" onclick="filterEvents('ipo')">IPO</button>
+            </div>
+            <div id="event-cal-body" class="space-y-3"></div>
+          </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="pt-4 text-center space-y-2 opacity-40">
+          <p class="text-[10px] font-mono tracking-widest text-[#d0c6ab]">FINR v2.0 · AES-256 · Gemini AI · Railway</p>
+        </footer>
+
       </div>
-
-    </div><!-- /content -->
-
-    <!-- BOTTOM NAV -->
-    <div id="bnav">
-      <div class="bn on" data-p="home"><span class="bni">🏠</span><span>Home</span></div>
-      <div class="bn" data-p="insights"><span class="bni">💡</span><span>Insights</span></div>
-      <div class="bn" data-p="pnl"><span class="bni">📈</span><span>P&L</span></div>
-      <div class="bn" data-p="more"><span class="bni">⚙️</span><span>More</span></div>
     </div>
-  </div><!-- /main -->
-</div><!-- /app -->
 
-<!-- MODALS -->
-<div id="mod" onclick="closeMod(event)"><div class="mbox"><button class="mcls" onclick="closeModD()">✕</button><div id="mcont"></div></div></div>
+  </main>
+
+  <!-- ═══════ BOTTOM NAV BAR ═══════ -->
+  <nav class="fixed bottom-0 left-0 w-full flex justify-around items-center h-20 glass-blur z-50 px-4 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+    <div class="bn flex flex-col items-center justify-center rounded-lg px-3 py-1.5 active:scale-90 transition-transform duration-150 cursor-pointer on" data-p="home">
+      <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1">home</span>
+      <span class="font-label text-[10px] font-bold uppercase tracking-[0.05em] mt-0.5">Home</span>
+    </div>
+    <div class="bn flex flex-col items-center justify-center rounded-lg px-3 py-1.5 active:scale-90 transition-transform duration-150 cursor-pointer" data-p="insights">
+      <span class="material-symbols-outlined text-lg">lightbulb_circle</span>
+      <span class="font-label text-[10px] font-bold uppercase tracking-[0.05em] mt-0.5">Insights</span>
+    </div>
+    <div class="bn flex flex-col items-center justify-center rounded-lg px-3 py-1.5 active:scale-90 transition-transform duration-150 cursor-pointer" data-p="pnl">
+      <span class="material-symbols-outlined text-lg">show_chart</span>
+      <span class="font-label text-[10px] font-bold uppercase tracking-[0.05em] mt-0.5">P&L</span>
+    </div>
+    <div class="bn flex flex-col items-center justify-center rounded-lg px-3 py-1.5 active:scale-90 transition-transform duration-150 cursor-pointer" data-p="more">
+      <span class="material-symbols-outlined text-lg">more_horiz</span>
+      <span class="font-label text-[10px] font-bold uppercase tracking-[0.05em] mt-0.5">More</span>
+    </div>
+  </nav>
+</div>
+
+<!-- ═══════ NEWS BOTTOM SHEET MODAL ═══════ -->
+<div id="news-modal" class="bottom-sheet-overlay" onclick="if(event.target===this)closeNewsModal()">
+  <div class="bottom-sheet">
+    <div class="drag-handle"></div>
+    <div id="news-modal-content" class="flex-1 overflow-y-auto no-scrollbar px-5 pb-24"></div>
+  </div>
+</div>
+
+<!-- ═══════ LEGACY MODAL (for compatibility) ═══════ -->
+<div id="mod" style="position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;display:none;align-items:center;justify-content:center;overflow-y:auto" onclick="closeMod(event)">
+  <div class="bg-[#131313] border border-[#353534] rounded-[20px] w-[calc(100%-24px)] max-w-[460px] p-5 m-3 shadow-[0_12px_40px_rgba(0,0,0,.7)]" style="animation:fu .2s ease">
+    <button class="float-right bg-none border-none text-[#636366] text-xl cursor-pointer" onclick="closeModD()">✕</button>
+    <div id="mcont"></div>
+  </div>
+</div>
+
+<!-- ═══════ TOAST ═══════ -->
 <div class="toast" id="toast"></div>
 
+<!-- ═══════ JAVASCRIPT ═══════ -->
 <script>
 // ══════════════════════════════════════════════════════════
 // STATE
@@ -632,17 +760,13 @@ let srt='score', sasc=false, flt='all';
 let pp={}, ei=-1, pb='';
 let curTab='home', curInsTab='picks', curPnlTab='dashboard';
 let NEWS_ITEMS = [];
+let eventFilter = 'all';
 
 // ══════════════════════════════════════════════════════════
-// THEME
+// THEME (dark only for this design, but keep toggle for compat)
 // ══════════════════════════════════════════════════════════
-function applyTheme(t) {
-  document.documentElement.setAttribute('data-theme', t);
-  localStorage.setItem('finr-t', t);
-  const icon = t==='dark' ? '☀️' : '🌙';
-  ['th-top'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent=icon; });
-}
-function toggleTheme() { applyTheme(document.documentElement.getAttribute('data-theme')==='dark' ? 'light' : 'dark'); }
+function applyTheme(t) { /* Stitch design is dark-only */ }
+function toggleTheme() { /* noop for dark-only design */ }
 
 function refreshAll() {
   const btn = document.getElementById('refresh-btn');
@@ -657,7 +781,6 @@ function refreshAll() {
   renderHomeFiiDii();
   setTimeout(()=>toast('Data refreshed ✅'),800);
 }
-applyTheme(localStorage.getItem('finr-t') || 'dark');
 
 // ══════════════════════════════════════════════════════════
 // PIN
@@ -708,33 +831,61 @@ async function verPin() {
 // NAVIGATION
 // ══════════════════════════════════════════════════════════
 function goTab(tab) {
+  // Hide all pages including standalone pages
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
-  document.getElementById('pg-'+tab).classList.add('on');
-  document.querySelectorAll('.bn').forEach(b=>b.classList.remove('on'));
-  document.querySelector(`.bn[data-p="${tab}"]`).classList.add('on');
-  document.getElementById('tb-title').textContent = tab.charAt(0).toUpperCase()+tab.slice(1);
+  const pgEl = document.getElementById('pg-'+tab);
+  if (pgEl) pgEl.classList.add('on');
+  // Update bottom nav
+  document.querySelectorAll('.bn').forEach(b => {
+    b.classList.remove('on');
+    const icon = b.querySelector('.material-symbols-outlined');
+    if (icon) icon.style.fontVariationSettings = "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24";
+  });
+  const activeBtn = document.querySelector(`.bn[data-p="${tab}"]`);
+  if (activeBtn) {
+    activeBtn.classList.add('on');
+    const icon = activeBtn.querySelector('.material-symbols-outlined');
+    if (icon) icon.style.fontVariationSettings = "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24";
+  }
   curTab = tab;
+  // Scroll to top
+  document.getElementById('content').scrollTop = 0;
+}
+
+function goPage(page) {
+  // Navigate to standalone pages (options-lab, verify-pick)
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
+  document.getElementById('pg-'+page).classList.add('on');
+  if (page === 'options-lab') loadOptionsLab();
+  document.getElementById('content').scrollTop = 0;
 }
 
 function goSubTab(group, key) {
   const parentEl = document.getElementById(group);
   if (!parentEl) return;
-  // Find the content panel — try stab- prefix first, then ptab- prefix
   const panel = document.getElementById(`stab-${key}`) || document.getElementById(`ptab-${key}`);
-  // Hide all sibling content panels
   parentEl.parentElement.querySelectorAll('.stab-content').forEach(s=>s.classList.remove('on'));
-  parentEl.querySelectorAll('.stab').forEach(s=>s.classList.remove('on'));
+  parentEl.querySelectorAll('.stab').forEach(s=>{
+    s.classList.remove('on');
+    s.style.color='#d0c6ab';
+    s.style.borderBottomColor='transparent';
+  });
   if (panel) panel.classList.add('on');
   const tab = parentEl.querySelector(`.stab[data-it="${key}"]`) || parentEl.querySelector(`.stab[data-pt="${key}"]`);
-  if (tab) tab.classList.add('on');
+  if (tab) {
+    tab.classList.add('on');
+    tab.style.color='#ffd60a';
+    tab.style.borderBottomColor='#ffd60a';
+  }
 }
 
+// Bottom nav
 document.querySelectorAll('.bn').forEach(b => b.addEventListener('click', e => {
   const tab = e.currentTarget.dataset.p;
   goTab(tab);
 }));
 
-// Sub-tab navigation for Insights
+// Sub-tab nav for Insights (hidden, for JS compat)
 document.querySelectorAll('#ins-tabs .stab').forEach(t => t.addEventListener('click', e => {
   const key = e.target.dataset.it;
   goSubTab('ins-tabs', key);
@@ -742,12 +893,27 @@ document.querySelectorAll('#ins-tabs .stab').forEach(t => t.addEventListener('cl
   else if (key==='options') loadOptionsLab();
 }));
 
-// Sub-tab navigation for P&L
+// Sub-tab nav for P&L
 document.querySelectorAll('#pnl-tabs .stab').forEach(t => t.addEventListener('click', e => {
-  const key = e.target.dataset.pt;
+  const key = e.currentTarget.dataset.pt;
   goSubTab('pnl-tabs', key);
   if (key==='dashboard') renderPnlDashboard();
 }));
+
+// Style active bottom nav
+function updateNavStyle() {
+  document.querySelectorAll('.bn').forEach(b => {
+    if (b.classList.contains('on')) {
+      b.style.color = '#ffd60a';
+      b.style.background = 'rgba(255,214,10,.1)';
+    } else {
+      b.style.color = '#d0c6ab';
+      b.style.background = 'transparent';
+    }
+  });
+}
+const navObs = new MutationObserver(updateNavStyle);
+document.querySelectorAll('.bn').forEach(b => navObs.observe(b, {attributes:true,attributeFilter:['class']}));
 
 // ══════════════════════════════════════════════════════════
 // WEBSOCKET & DATA
@@ -771,7 +937,6 @@ function connectWS() {
     try {
       const d = JSON.parse(e.data);
       if (d.type==='init') {
-        // Initial data dump from server
         if (d.status) setSt(d.status);
         if (d.stocks) Object.assign(S, d.stocks);
         if (d.indices) Object.assign(IDX, d.indices);
@@ -822,8 +987,12 @@ function setSt(st) {
   const el = document.getElementById('sd');
   const txt = document.getElementById('stxt');
   if (!el) return;
-  el.className = 'sd '+st;
+  const colorMap = {live:'#47e266',connecting:'#ffd60a',demo:'#ffd60a',closed:'#d0c6ab',offline:'#ffb4ab',rc:'#ff9f0a'};
+  el.style.background = colorMap[st] || '#636366';
+  txt.style.color = colorMap[st] || '#636366';
   txt.textContent = st.toUpperCase();
+  if (st==='live') el.classList.add('animate-pulse');
+  else el.classList.remove('animate-pulse');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -833,21 +1002,26 @@ function renderHeroIdx() {
   const n = IDX['NIFTY50'] || IDX['Nifty 50'];
   if (n) {
     const intPart = Math.floor(n.price);
-    const decPart = (n.price % 1).toFixed(2).slice(1); // ".XX"
-    document.getElementById('h-nifty').innerHTML = `${fmt(intPart)}<span class="dc">${decPart}</span>`;
+    const decPart = (n.price % 1).toFixed(2).slice(1);
+    document.getElementById('h-nifty').innerHTML = `${fmt(intPart)}<span class="text-[1.6rem] font-semibold text-[#d0c6ab]">${decPart}</span>`;
     const chgEl = document.getElementById('h-chg');
-    chgEl.textContent = `${n.chgPct>=0?'+':''}${n.chgPct.toFixed(2)}%`;
-    chgEl.className = 'hbdg '+(n.chgPct>=0?'up':'dn');
+    const isUp = n.chgPct >= 0;
+    chgEl.className = `px-3 py-1 rounded-md flex items-center gap-1 ${isUp ? 'bg-[#47e266]/10 text-[#47e266]' : 'bg-[#ffb4ab]/10 text-[#ffb4ab]'}`;
+    chgEl.innerHTML = `<span class="material-symbols-outlined text-sm" style="font-variation-settings:'FILL' 1">${isUp?'arrow_drop_up':'arrow_drop_down'}</span><span class="font-bold text-xs tnum">${isUp?'+':''}${n.chgPct.toFixed(2)}%</span>`;
   }
   const indices = ['NIFTY100','NIFTYBANK','NIFTYFIFTY','INDIA_VIX'];
   let html = '';
   indices.forEach(idx => {
     const d = IDX[idx];
     if (d) {
-      html += `<div class="ichip">
-        <div class="in">${idx.replace('NIFTY','Nifty ').replace('INDIA_VIX','VIX').replace('NIFTYFIFTY','Nifty 50')}</div>
-        <div class="ip">${fmt(d.price)}</div>
-        <div class="ic ${d.chgPct>=0?'up':'dn'}">${d.chgPct>=0?'+':''}${d.chgPct.toFixed(2)}%</div>
+      const label = idx.replace('NIFTY','Nifty ').replace('INDIA_VIX','India VIX').replace('NIFTYFIFTY','Nifty 50');
+      const isUp = d.chgPct >= 0;
+      const borderCol = isUp ? 'border-[#47e266]' : 'border-[#ffb4ab]';
+      const textCol = isUp ? 'text-[#47e266]' : 'text-[#ffb4ab]';
+      html += `<div class="min-w-[130px] bg-[#1c1b1b] p-3 rounded-xl border-l-4 ${borderCol}">
+        <div class="text-[10px] font-bold text-[#d0c6ab] uppercase mb-1 font-mono">${label}</div>
+        <div class="text-sm font-bold tnum">${fmt(d.price)}</div>
+        <div class="text-[10px] ${textCol} font-bold tnum">${isUp?'+':''}${d.chgPct.toFixed(2)}%</div>
       </div>`;
     }
   });
@@ -861,30 +1035,43 @@ function renderGauge() {
   document.getElementById('gnum').textContent = avg;
   const pct = Math.max(0,Math.min(100,avg));
   document.getElementById('garc').setAttribute('stroke-dasharray', `${(pct/100)*173} 173`);
-  const cols = pct>=75?'#30d158':pct>=50?'#ffd60a':pct>=25?'#ff9f0a':'#ff453a';
+  const cols = pct>=75?'#47e266':pct>=50?'#ffd60a':pct>=25?'#ff9f0a':'#ffb4ab';
   document.getElementById('garc').setAttribute('stroke', cols);
+
+  // Gauge grid
+  const grid = document.getElementById('ggrid');
+  if (grid) {
+    const items = [
+      {l:'Trend',v:pct>=60?'Bullish':'Bearish',c:pct>=60?'#47e266':'#ffb4ab'},
+      {l:'Momentum',v:pct>=65?'High':'Low',c:pct>=65?'#47e266':'#d0c6ab'},
+      {l:'Breadth',v:pct>=55?'Strong':'Weak',c:pct>=55?'#47e266':'#ffb4ab'},
+      {l:'VIX',v:VIX.value<20?'Stable':'High',c:VIX.value<20?'#47e266':'#ffb4ab'},
+      {l:'FII',v:FIIDII.fii>=0?'Buying':'Selling',c:FIIDII.fii>=0?'#47e266':'#ffb4ab'},
+      {l:'Volatility',v:VIX.value<18?'Low':'High',c:VIX.value<18?'#47e266':'#d0c6ab'}
+    ];
+    grid.innerHTML = items.map(i=>`<div><div class="text-[8px] text-[#d0c6ab] font-bold uppercase font-mono">${i.l}</div><div class="text-[10px] font-bold" style="color:${i.c}">${i.v}</div></div>`).join('');
+  }
 }
 
 function renderBreadth() {
   const el=document.getElementById('breadth-bar');if(!el)return;
   const stocks=Object.values(S);
-  if(!stocks.length){el.innerHTML='<div class="empty"><i>📊</i>Loading...</div>';return;}
+  if(!stocks.length){el.innerHTML='<div class="text-center py-3 text-[#636366] text-xs font-mono">Loading...</div>';return;}
   const up = stocks.filter(s=>s.chgPct>=0).length;
   const dn = stocks.filter(s=>s.chgPct<0).length;
-  const upPct = stocks.length ? (up/stocks.length*100).toFixed(0) : 0;
+  const total = stocks.length;
+  const upPct = total ? (up/total*100).toFixed(0) : 0;
+  const dnPct = total ? (dn/total*100).toFixed(0) : 0;
   el.innerHTML = `
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <div style="flex:1;height:20px;background:var(--s3);border-radius:10px;overflow:hidden;display:flex">
-        <div style="flex:${upPct}%;background:var(--grn)"></div>
-        <div style="flex:${100-upPct}%;background:var(--red)"></div>
-      </div>
+    <div class="flex h-2.5 w-full rounded-full overflow-hidden bg-[#353534] mb-3">
+      <div class="bg-[#47e266] h-full" style="width:${upPct}%"></div>
+      <div class="bg-[#353534] h-full" style="width:2%"></div>
+      <div class="bg-[#ffb4ab] h-full" style="width:${dnPct}%"></div>
     </div>
-    <div style="display:flex;justify-content:space-between;font-size:11px;font-family:var(--mono);color:var(--t2)">
-      <span>🟢 ${up} Up</span>
-      <span>📊 ${upPct}%</span>
-      <span>🔴 ${dn} Down</span>
-    </div>
-  `;
+    <div class="flex justify-between text-[10px] font-bold uppercase tracking-tighter font-mono">
+      <div class="flex items-center gap-1.5 text-[#47e266]"><span class="w-2 h-2 rounded-full bg-[#47e266]"></span>${up} UP (${upPct}%)</div>
+      <div class="flex items-center gap-1.5 text-[#ffb4ab]">${dn} DOWN (${dnPct}%)<span class="w-2 h-2 rounded-full bg-[#ffb4ab]"></span></div>
+    </div>`;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -905,36 +1092,61 @@ function renderNews() {
   const list = document.getElementById('news-list');
   const loading = document.getElementById('news-loading');
   if (!list) return;
-  if (!NEWS_ITEMS.length) {
-    list.innerHTML = '';
-    loading.style.display = 'block';
-    return;
-  }
+  if (!NEWS_ITEMS.length) { list.innerHTML = ''; loading.style.display = 'block'; return; }
   loading.style.display = 'none';
-  list.innerHTML = NEWS_ITEMS.map((n, i) => `
-    <div class="news-item" onclick="toggleNewsDetail(${i})">
-      <div class="news-hd">
-        <div class="news-icon">${n.icon||'📰'}</div>
-        <div class="news-meta">
-          <div class="news-title">${n.title}</div>
-          <div class="news-sub">
-            <span class="news-badge ${(n.priority||'low').toLowerCase()}">${(n.priority||'Low').toUpperCase()}</span>
-            <span class="news-sent">${n.sentiment || 'Neutral'} · ${n.time || 'Just now'}</span>
-          </div>
-          <div class="news-detail" id="news-d${i}">
-            <div class="news-impact">${n.detail || n.title}</div>
-            ${n.impact ? `<div style="font-size:10px;color:var(--t3)"><strong>Impact:</strong> ${n.impact}</div>` : ''}
-          </div>
+  list.innerHTML = NEWS_ITEMS.map((n, i) => {
+    const priClass = (n.priority||'low').toLowerCase() === 'high' ? 'bg-[#ffb4ab]/20 text-[#ffb4ab]' :
+                     (n.priority||'low').toLowerCase() === 'medium' ? 'bg-[#ffd60a]/20 text-[#ffd60a]' :
+                     'bg-[#47e266]/12 text-[#47e266]';
+    const sentColor = (n.sentiment||'').toLowerCase().includes('positive') ? 'text-[#47e266]' :
+                      (n.sentiment||'').toLowerCase().includes('negative') ? 'text-[#ffb4ab]' : 'text-[#d0c6ab]';
+    return `<div class="flex gap-3 cursor-pointer hover:bg-[#353534]/30 rounded-lg p-2 -mx-2 transition-colors" onclick="openNewsModal(${i})">
+      <div class="flex-shrink-0 w-10 h-10 bg-[#353534] rounded flex items-center justify-center text-lg">${n.icon||'📰'}</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-[8px] ${priClass} px-1.5 py-0.5 rounded font-black uppercase">${(n.priority||'Low').toUpperCase()}</span>
+          <span class="text-[8px] ${sentColor} font-bold uppercase tracking-tighter">${n.sentiment||'Neutral'}</span>
         </div>
+        <p class="text-[11px] font-bold leading-tight text-[#e5e2e1] line-clamp-2">${n.title}</p>
+        <span class="text-[9px] text-[#d0c6ab] mt-1 block font-mono">${n.time||'Just now'}</span>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
-function toggleNewsDetail(i) {
-  const el = document.getElementById(`news-d${i}`);
-  if (el) el.classList.toggle('open');
+function openNewsModal(i) {
+  const n = NEWS_ITEMS[i];
+  if (!n) return;
+  const priClass = (n.priority||'low').toLowerCase() === 'high' ? 'bg-[#93000a]/20 text-[#ffb4ab] border-[#ffb4ab]/20' : 'bg-[#ffd60a]/20 text-[#ffd60a] border-[#ffd60a]/20';
+  const sentColor = (n.sentiment||'').toLowerCase().includes('positive') ? 'text-[#47e266]' : 'text-[#d0c6ab]';
+  document.getElementById('news-modal-content').innerHTML = `
+    <div class="mt-2">
+      <h2 class="text-base font-bold text-white leading-snug font-headline">${n.title}</h2>
+      <div class="flex items-center gap-3 mt-4">
+        <span class="px-2 py-0.5 ${priClass} text-[10px] font-bold tracking-wider rounded border">${(n.priority||'LOW').toUpperCase()}</span>
+        <span class="${sentColor} text-[12px] font-semibold">${n.sentiment||'Neutral'}</span>
+        <span class="text-[#d0c6ab] text-[12px] ml-auto font-mono">${n.time||'Just now'}</span>
+      </div>
+    </div>
+    <div class="h-[1px] w-full bg-white/10 my-5"></div>
+    <section class="mb-5">
+      <h3 class="text-[12px] font-bold text-[#ffd60a] mb-2 uppercase tracking-widest font-label">Impact Analysis</h3>
+      <p class="text-[12px] text-[#d0c6ab] leading-relaxed">${n.detail || n.title}</p>
+    </section>
+    ${n.impact ? `<section class="mb-5 p-4 bg-[#2a2a2a] rounded-xl border-l-2 border-[#ffd60a]">
+      <div class="flex items-center gap-2 mb-2"><span class="material-symbols-outlined text-[#ffd60a] text-sm">auto_awesome</span><h3 class="text-[12px] font-bold text-[#ffd60a] uppercase tracking-widest">AI Insight</h3></div>
+      <p class="text-[12px] text-[#d0c6ab] italic leading-relaxed">${n.impact}</p>
+    </section>` : ''}
+  `;
+  document.getElementById('news-modal').classList.add('on');
 }
+
+function closeNewsModal() {
+  document.getElementById('news-modal').classList.remove('on');
+}
+
+// Legacy toggle (kept for compat)
+function toggleNewsDetail(i) { openNewsModal(i); }
 
 // ══════════════════════════════════════════════════════════
 // FII/DII
@@ -942,24 +1154,18 @@ function toggleNewsDetail(i) {
 function renderHomeFiiDii() {
   const el = document.getElementById('home-fii-dii');
   if (!el) return;
-  el.innerHTML = `
-    <div class="fii-row">
-      <div class="fii-nm">FII</div>
-      <div class="fii-val ${FIIDII.fii>=0?'pos':'neg'}">₹${fmt(Math.abs(FIIDII.fii))}</div>
+  const rows = [
+    {nm:'FII Cash', val:`₹${fmt(Math.abs(FIIDII.fii))} Cr`, isUp:FIIDII.fii>=0},
+    {nm:'DII Cash', val:`₹${fmt(Math.abs(FIIDII.dii))} Cr`, isUp:FIIDII.dii>=0},
+    {nm:'USD / INR', val:FIIDII.usdInr, neutral:true},
+    {nm:'Crude Oil', val:`$${FIIDII.crude}`, neutral:true},
+  ];
+  el.innerHTML = rows.map(r => `
+    <div class="flex justify-between items-center bg-[#0e0e0e] p-2.5 rounded-lg">
+      <span class="text-[10px] font-bold uppercase text-[#d0c6ab] font-mono">${r.nm}</span>
+      <span class="text-[11px] font-bold tnum font-mono ${r.neutral ? 'text-[#e5e2e1]' : r.isUp ? 'text-[#47e266]' : 'text-[#ffb4ab]'}">${r.isUp && !r.neutral ? '+' : r.neutral ? '' : '-'}${r.val}</span>
     </div>
-    <div class="fii-row">
-      <div class="fii-nm">DII</div>
-      <div class="fii-val ${FIIDII.dii>=0?'pos':'neg'}">₹${fmt(Math.abs(FIIDII.dii))}</div>
-    </div>
-    <div class="fii-row">
-      <div class="fii-nm">USD/INR</div>
-      <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--t1)">${FIIDII.usdInr}</div>
-    </div>
-    <div class="fii-row" style="border-bottom:none">
-      <div class="fii-nm">Crude Oil</div>
-      <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--t1)">$${FIIDII.crude}</div>
-    </div>
-  `;
+  `).join('');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -969,20 +1175,14 @@ function renderEconCal() {
   const events = generateEventCalendar();
   const el = document.getElementById('h-events');
   if (!el) return;
-  if (!events.length) {
-    el.innerHTML = '<div class="empty"><i>📅</i>No upcoming events</div>';
-    return;
-  }
-  el.innerHTML = events.map(e => `
-    <div class="evt">
-      <div class="evt-pri evt-${e.priority.toLowerCase()}"></div>
-      <div style="flex:1">
-        <div class="evt-title">${e.title}</div>
-        <div class="evt-date">${e.date}</div>
-        ${e.desc ? `<div class="evt-desc">${e.desc}</div>` : ''}
-      </div>
-    </div>
-  `).join('');
+  if (!events.length) { el.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">No upcoming events</div>'; return; }
+  el.innerHTML = events.slice(0,3).map(e => {
+    const priCol = e.priority.toLowerCase()==='high' ? '#ffb4ab' : e.priority.toLowerCase()==='medium' ? '#ffd60a' : '#47e266';
+    return `<div class="flex gap-3">
+      <div class="flex flex-col items-center"><div class="w-2 h-2 rounded-full mt-1" style="background:${priCol}"></div><div class="w-[1px] h-full bg-[#353534] mt-1"></div></div>
+      <div class="pb-2"><div class="flex justify-between items-start mb-0.5"><span class="text-[11px] font-bold">${e.title}</span><span class="text-[9px] font-bold text-[#ffd60a] tnum font-mono">${e.date}</span></div>${e.desc ? `<p class="text-[10px] text-[#d0c6ab] leading-tight">${e.desc}</p>` : ''}</div>
+    </div>`;
+  }).join('');
 }
 
 let MARKET_EVENTS = [];
@@ -992,34 +1192,54 @@ async function loadEventCalendar() {
     if (d && d.length) {
       MARKET_EVENTS = d;
       renderEconCal();
-      // Also render in More tab
-      const ecal = document.getElementById('event-cal-body');
-      if (ecal) {
-        ecal.innerHTML = d.map(e => `
-          <div class="evt">
-            <div class="evt-pri evt-${e.priority.toLowerCase()}" style="min-height:32px"></div>
-            <div style="flex:1">
-              <div class="evt-title">${e.icon||''} ${e.title}</div>
-              <div class="evt-date">${e.trend}</div>
-              <div class="evt-desc">${e.impact}</div>
-              ${e.sectors ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">
-                ${(e.sectors.buy||[]).map(s=>`<span class="tag" style="background:rgba(48,209,88,.1);color:var(--grn)">Buy: ${s}</span>`).join('')}
-                ${(e.sectors.avoid||[]).map(s=>`<span class="tag" style="background:rgba(255,69,58,.1);color:var(--red)">Avoid: ${s}</span>`).join('')}
-                ${(e.sectors.watch||[]).map(s=>`<span class="tag">Watch: ${s}</span>`).join('')}
-              </div>` : ''}
-              ${e.vixImpact ? `<div style="font-family:var(--mono);font-size:9px;color:var(--t3);margin-top:4px">⚡ VIX: ${e.vixImpact}</div>` : ''}
-            </div>
-          </div>
-        `).join('');
-      }
+      renderFullEventCalendar();
     }
-  } catch (err) {
-    console.error('Event calendar error:', err);
-  }
+  } catch (err) { console.error('Event calendar error:', err); }
+}
+
+function renderFullEventCalendar() {
+  const ecal = document.getElementById('event-cal-body');
+  if (!ecal || !MARKET_EVENTS.length) return;
+  const filtered = eventFilter === 'all' ? MARKET_EVENTS : MARKET_EVENTS.filter(e => {
+    const t = (e.title||'').toLowerCase();
+    if (eventFilter === 'rbi') return t.includes('rbi') || t.includes('repo');
+    if (eventFilter === 'fomc') return t.includes('fomc') || t.includes('fed');
+    if (eventFilter === 'earnings') return t.includes('earning') || t.includes('result') || t.includes('q1') || t.includes('q2') || t.includes('q3') || t.includes('q4');
+    if (eventFilter === 'holidays') return t.includes('holiday') || t.includes('closed') || e.priority === 'LOW';
+    if (eventFilter === 'ipo') return t.includes('ipo') || t.includes('listing');
+    return true;
+  });
+  ecal.innerHTML = filtered.map(e => {
+    const priCol = e.priority.toLowerCase()==='high' ? 'border-[#ffb4ab]' : e.priority.toLowerCase()==='medium' ? 'border-[#ffd60a]' : 'border-[#47e266]';
+    return `<div class="bg-[#1c1b1b] p-4 rounded-xl space-y-2 border-l-4 ${priCol}">
+      <div class="flex-1">
+        <div class="flex justify-between items-start"><h3 class="text-sm font-bold text-[#e5e2e1] font-headline leading-tight">${e.icon||''} ${e.title}</h3></div>
+        <p class="text-[9px] font-bold text-[#ffd60a] tnum font-mono mt-1">${e.trend}</p>
+        <p class="text-xs text-[#d0c6ab] leading-relaxed mt-1">${e.impact}</p>
+        ${e.sectors ? `<div class="flex flex-wrap gap-1.5 mt-2">
+          ${(e.sectors.buy||[]).map(s=>`<span class="px-2 py-0.5 bg-[#47e266]/10 text-[#47e266] text-[10px] font-bold rounded-md border border-[#47e266]/20">Buy: ${s}</span>`).join('')}
+          ${(e.sectors.avoid||[]).map(s=>`<span class="px-2 py-0.5 bg-[#ffb4ab]/10 text-[#ffb4ab] text-[10px] font-bold rounded-md border border-[#ffb4ab]/20">Avoid: ${s}</span>`).join('')}
+          ${(e.sectors.watch||[]).map(s=>`<span class="px-2 py-0.5 bg-[#ffd60a]/10 text-[#ffd60a] text-[10px] font-bold rounded-md border border-[#ffd60a]/20">Watch: ${s}</span>`).join('')}
+        </div>` : ''}
+        ${e.vixImpact ? `<div class="pt-2 flex items-center gap-1.5"><span class="material-symbols-outlined text-xs text-[#ffd60a]">bolt</span><span class="text-[9px] font-bold uppercase tracking-wide text-[#d0c6ab]">VIX: ${e.vixImpact}</span></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterEvents(filter) {
+  eventFilter = filter;
+  document.querySelectorAll('.evt-chip').forEach(c => {
+    if (c.dataset.filter === filter) {
+      c.className = 'flex-shrink-0 px-4 py-2 bg-[#ffd60a] text-[#0a0a0a] font-bold text-xs rounded-lg active:scale-95 duration-200 evt-chip';
+    } else {
+      c.className = 'flex-shrink-0 px-4 py-2 bg-[#1c1b1b] border border-[#4d4632]/50 text-[#d0c6ab] font-medium text-xs rounded-lg active:scale-95 duration-200 evt-chip';
+    }
+  });
+  renderFullEventCalendar();
 }
 
 function generateEventCalendar() {
-  // Returns MARKET_EVENTS from server, or fallback
   if (MARKET_EVENTS.length) {
     return MARKET_EVENTS.map(e => ({
       date: e.trend,
@@ -1036,74 +1256,72 @@ function generateEventCalendar() {
 // ══════════════════════════════════════════════════════════
 async function loadAiPicks() {
   const el = document.getElementById('picks-list');
-  el.innerHTML = '<div class="empty"><i>⏳</i>Loading AI picks...</div>';
+  el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Loading AI picks...</div>';
   try {
     const d = await fetch('/api/ai-picks').then(r=>r.json());
     if (d.picks && d.picks.length) {
       document.getElementById('picks-ts').textContent = new Date().toLocaleTimeString();
-      el.innerHTML = d.picks.map(p => `
-        <div class="stock-card ${p.upside>=20?'up':'dn'}">
-          <div class="stock-hd">
-            <div>
-              <div class="stock-sym">${p.symbol}</div>
-              <div class="stock-nm">${p.name||'--'}</div>
+      el.innerHTML = d.picks.map(p => {
+        const borderCol = p.upside >= 0 ? 'border-[#47e266]' : 'border-[#ffb4ab]';
+        return `<div class="bg-[#1c1c1e] rounded-xl ${borderCol} border-l-4 overflow-hidden">
+          <div class="p-4">
+            <div class="flex justify-between items-start mb-4">
+              <div><h3 class="font-headline font-extrabold text-xl tracking-tight">${p.symbol}</h3><p class="text-[0.75rem] text-[#d0c6ab] font-medium">${p.name||'--'}</p></div>
+              <div class="text-right"><div class="text-lg font-bold tnum">₹${fmt(p.price)}</div><div class="text-[0.75rem] font-bold text-[#47e266] uppercase tracking-wider">+${p.upside}% UPSIDE</div></div>
             </div>
-            <div class="stock-price">
-              <div class="stock-p">₹${fmt(p.price)}</div>
-              <div class="stock-pchg">↑${p.upside}%</div>
+            <div class="grid grid-cols-2 gap-2.5 mb-4">
+              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Target</p><p class="text-sm font-bold tnum text-[#ffd60a]">₹${fmt(p.target)}</p></div>
+              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Confidence</p><p class="text-sm font-bold tnum text-[#47e266]">${p.confidence}%</p></div>
+              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Timeframe</p><p class="text-sm font-bold text-[#e5e2e1]">${p.timeframe}</p></div>
+              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Risk</p><p class="text-sm font-bold text-[#e5e2e1]">${p.risk}</p></div>
             </div>
+            ${p.reason ? `<div class="mb-3"><p class="text-[0.8125rem] text-[#d0c6ab] line-clamp-2 leading-relaxed" id="reason-${p.symbol}">${p.reason.substring(0,120)}...</p><button class="text-[#ffd60a] font-bold text-sm mt-1" onclick="const r=document.getElementById('reason-${p.symbol}');r.classList.toggle('line-clamp-2');this.textContent=r.classList.contains('line-clamp-2')?'View AI Reasoning ▸':'Collapse ▴'">View AI Reasoning ▸</button></div>` : ''}
+            <div class="flex flex-wrap gap-2">${(p.tags||[]).map(t=>`<span class="px-2 py-0.5 rounded bg-[#353534] text-[0.625rem] font-bold text-[#e5e2e1] uppercase tracking-tight">${t}</span>`).join('')}</div>
           </div>
-          <div class="stock-grid">
-            <div class="sg"><div class="sg-l">Target</div><div class="sg-v">₹${fmt(p.target)}</div></div>
-            <div class="sg"><div class="sg-l">Confidence</div><div class="sg-v">${p.confidence}%</div></div>
-            <div class="sg"><div class="sg-l">Timeframe</div><div class="sg-v">${p.timeframe}</div></div>
-            <div class="sg"><div class="sg-l">Risk</div><div class="sg-v">${p.risk}</div></div>
-          </div>
-          ${p.reason ? `<div class="stock-reason" id="reason-${p.symbol}">${p.reason.substring(0,100)}...</div><div class="stock-exp" onclick="document.getElementById('reason-${p.symbol}').classList.toggle('exp')">Expand reasoning</div>` : ''}
-          <div class="stock-tags">
-            ${(p.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}
-          </div>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
     } else {
-      el.innerHTML = '<div class="empty"><i>📊</i>No AI picks available yet</div>';
+      el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">📊 No AI picks available yet</div>';
     }
   } catch (err) {
-    el.innerHTML = '<div class="empty"><i>⚠️</i>Error loading picks</div>';
+    el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⚠️ Error loading picks</div>';
     console.error(err);
   }
 }
 
 async function loadOptionsLab() {
-  const el = document.getElementById('opts-list');
-  el.innerHTML = '<div class="empty"><i>⏳</i>Loading options strategies...</div>';
+  const el = document.getElementById('opts-list-page');
+  const elHidden = document.getElementById('opts-list');
+  const target = el || elHidden;
+  if (!target) return;
+  target.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Loading options strategies...</div>';
   try {
     const d = await fetch('/api/options-lab').then(r=>r.json());
     if (d.trades && d.trades.length) {
-      document.getElementById('opts-ts').textContent = new Date().toLocaleTimeString();
-      el.innerHTML = d.trades.map(t => `
-        <div class="opt-card">
-          <div class="opt-hd">
-            <div class="opt-sym">${t.symbol}</div>
-            <span class="opt-dir ${t.direction==='CE'?'ce':'pe'}">${t.direction}</span>
+      const tsEl = document.getElementById('opts-ts-page');
+      if (tsEl) tsEl.textContent = new Date().toLocaleTimeString();
+      const html = d.trades.map(t => {
+        const dirClass = t.direction === 'CE' ? 'bg-[#47e266]/10 text-[#47e266]' : 'bg-[#ffb4ab]/10 text-[#ffb4ab]';
+        return `<article class="bg-[#1c1c1e] rounded-[16px] p-5 border border-[#4d4632]/10">
+          <div class="flex justify-between items-start mb-4">
+            <div><div class="flex items-center gap-2 mb-1"><h3 class="text-lg font-bold font-headline tracking-tight">${t.symbol}</h3><span class="${dirClass} text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">${t.direction}</span></div><p class="text-[#ffd60a] font-mono text-xs font-bold uppercase tracking-widest">${t.strategy}</p></div>
+            <div class="text-right"><div class="text-[10px] text-[#d0c6ab] uppercase font-medium">Confidence</div><div class="text-lg font-bold text-[#ffd60a]">${t.confidence}%</div></div>
           </div>
-          <div class="opt-grid">
-            <div class="og"><div class="og-l">Entry</div><div class="og-v">₹${fmt(t.entry)}</div></div>
-            <div class="og"><div class="og-l">Target</div><div class="og-v">₹${fmt(t.target)}</div></div>
-            <div class="og"><div class="og-l">SL</div><div class="og-v">₹${fmt(t.sl)}</div></div>
+          <div class="grid grid-cols-3 gap-0.5 bg-[#242426] rounded-xl overflow-hidden mb-4">
+            <div class="bg-[#1c1c1e] p-3"><div class="text-[10px] text-[#d0c6ab] uppercase mb-1 font-mono">Entry</div><div class="text-sm font-bold tnum">₹${fmt(t.entry)}</div></div>
+            <div class="bg-[#1c1c1e] p-3"><div class="text-[10px] text-[#d0c6ab] uppercase mb-1 font-mono">Target</div><div class="text-sm font-bold tnum">₹${fmt(t.target)}</div></div>
+            <div class="bg-[#1c1c1e] p-3"><div class="text-[10px] text-[#d0c6ab] uppercase mb-1 font-mono">Stoploss</div><div class="text-sm font-bold tnum">₹${fmt(t.sl)}</div></div>
           </div>
-          <div class="opt-meta">
-            <div class="om-it"><div class="l">Strategy</div><div class="v">${t.strategy}</div></div>
-            <div class="om-it"><div class="l">Risk:Reward</div><div class="v">${t.riskReward}</div></div>
-            <div class="om-it"><div class="l">Confidence</div><div class="v">${t.confidence}%</div></div>
-          </div>
-        </div>
-      `).join('');
+          <div class="flex items-center justify-between px-1 mb-3"><span class="text-xs text-[#d0c6ab]">R:R Ratio</span><span class="text-xs font-bold font-headline">${t.riskReward}</span></div>
+        </article>`;
+      }).join('');
+      target.innerHTML = html;
+      if (el && elHidden) elHidden.innerHTML = html;
     } else {
-      el.innerHTML = '<div class="empty"><i>📊</i>No options trades available</div>';
+      target.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">📊 No options trades available</div>';
     }
   } catch (err) {
-    el.innerHTML = '<div class="empty"><i>⚠️</i>Error loading options</div>';
+    target.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⚠️ Error loading options</div>';
   }
 }
 
@@ -1111,27 +1329,26 @@ async function verifyPick() {
   const sym = document.getElementById('verify-sym').value.toUpperCase();
   if (!sym) { toast('Enter a symbol'); return; }
   const el = document.getElementById('verify-result');
-  el.innerHTML = '<div class="empty"><i>⏳</i>Analysing...</div>';
+  el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Analysing...</div>';
   try {
     const d = await fetch('/api/verify-stock', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({symbol:sym})}).then(r=>r.json());
+    const verdictCol = d.verdict==='BUY' ? 'bg-[#09bf49] text-[#004615]' : d.verdict==='HOLD' ? 'bg-[#ffd60a] text-[#3b2f00]' : 'bg-[#93000a] text-[#ffdad6]';
     el.innerHTML = `
-      <div style="background:var(--s3);border-radius:var(--rs);padding:14px;margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span style="font-size:18px;font-weight:700">${sym}</span>
-          <span class="bdg ${d.verdict==='BUY'?'sb':d.verdict==='HOLD'?'w':'s'}">${d.verdict}</span>
-        </div>
-        <div style="font-family:var(--mono);font-size:11px;color:var(--t2);line-height:1.8">
-          <div>Confidence: ${d.confidence}%</div>
-          <div>Risk Level: ${d.riskLevel}</div>
-          ${d.target ? `<div>Target: ₹${d.target}</div>` : ''}
-          ${d.stopLoss ? `<div>Stop Loss: ₹${d.stopLoss}</div>` : ''}
-        </div>
+      <div class="bg-[#242426] p-5 rounded-xl flex justify-between items-center mb-3">
+        <div><h3 class="text-xl font-headline font-extrabold text-white">${sym}</h3><p class="text-xs text-[#d0c6ab]">${d.name||sym}</p></div>
+        <div class="${verdictCol} px-4 py-1.5 rounded-full"><span class="font-black text-sm">${d.verdict}</span></div>
       </div>
-      ${d.positives ? `<div style="background:rgba(48,209,88,.1);border-left:3px solid var(--grn);border-radius:var(--rs);padding:12px;margin-bottom:10px"><strong style="color:var(--grn)">✓ Positives:</strong><div style="font-size:11px;color:var(--t2);margin-top:4px">${d.positives}</div></div>` : ''}
-      ${d.risks ? `<div style="background:rgba(255,69,58,.1);border-left:3px solid var(--red);border-radius:var(--rs);padding:12px;margin-bottom:10px"><strong style="color:var(--red)">⚠ Risks:</strong><div style="font-size:11px;color:var(--t2);margin-top:4px">${d.risks}</div></div>` : ''}
+      <div class="grid grid-cols-2 gap-2 mb-3">
+        <div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#ffd60a]"><p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Confidence</p><p class="text-lg font-headline font-bold text-white tnum">${d.confidence}%</p></div>
+        <div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#ffd60a]"><p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Risk</p><p class="text-lg font-headline font-bold text-white">${d.riskLevel}</p></div>
+        ${d.target ? `<div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#47e266]"><p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Target</p><p class="text-lg font-headline font-bold text-white tnum">₹${d.target}</p></div>` : ''}
+        ${d.stopLoss ? `<div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#ffb4aa]"><p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Stop Loss</p><p class="text-lg font-headline font-bold text-white tnum">₹${d.stopLoss}</p></div>` : ''}
+      </div>
+      ${d.positives ? `<div class="bg-[#1c1c1e] border-l-4 border-[#47e266] rounded-xl p-4 mb-3 bg-gradient-to-r from-[#47e266]/5 to-transparent"><p class="text-xs font-bold text-[#47e266] mb-2 flex items-center gap-1"><span class="material-symbols-outlined text-sm">check_circle</span> What's working:</p><p class="text-xs text-[#e5e2e1] leading-relaxed">${d.positives}</p></div>` : ''}
+      ${d.risks ? `<div class="bg-[#1c1c1e] border-l-4 border-[#ffb4aa] rounded-xl p-4 mb-3 bg-gradient-to-r from-[#ffb4aa]/5 to-transparent"><p class="text-xs font-bold text-[#ffb4aa] mb-2 flex items-center gap-1"><span class="material-symbols-outlined text-sm">warning</span> Watch out for:</p><p class="text-xs text-[#e5e2e1] leading-relaxed">${d.risks}</p></div>` : ''}
     `;
   } catch (err) {
-    el.innerHTML = '<div class="empty"><i>⚠️</i>Error analysing stock</div>';
+    el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⚠️ Error analysing stock</div>';
   }
 }
 
@@ -1144,48 +1361,33 @@ function renderPnlDashboard() {
   const wr = TRADES.length ? (wins/TRADES.length*100).toFixed(0) : 0;
   const charges = TRADES.reduce((s,t)=>s+(t.charges||0),0);
 
-  document.getElementById('pnl-total').textContent = `₹${fmt(total)}`;
+  const totalEl = document.getElementById('pnl-total');
+  totalEl.textContent = `₹${fmt(total)}`;
+  totalEl.style.color = total >= 0 ? '#47e266' : '#ffb4ab';
   document.getElementById('pnl-winrate').textContent = `${wr}%`;
   document.getElementById('pnl-trades').textContent = TRADES.length;
   document.getElementById('pnl-charges').textContent = `₹${fmt(charges)}`;
 
   const list = document.getElementById('pnl-tradelist');
-  if (!TRADES.length) {
-    list.innerHTML = '<div class="empty"><i>📊</i>No trades yet</div>';
-    return;
-  }
-  list.innerHTML = `
-    <div style="overflow-x:auto">
-      <table style="width:100%;font-family:var(--mono);font-size:11px;border-collapse:collapse">
-        <tr style="border-bottom:1px solid var(--b1)">
-          <th style="text-align:left;padding:8px;color:var(--t3)">Date</th>
-          <th style="text-align:left;padding:8px;color:var(--t3)">Symbol</th>
-          <th style="text-align:right;padding:8px;color:var(--t3)">Qty</th>
-          <th style="text-align:right;padding:8px;color:var(--t3)">Buy</th>
-          <th style="text-align:right;padding:8px;color:var(--t3)">Sell</th>
-          <th style="text-align:right;padding:8px;color:var(--t3)">P&L</th>
-        </tr>
-        ${TRADES.map(t=>`
-          <tr style="border-bottom:1px solid var(--b1)">
-            <td style="padding:8px">${t.buyDate}</td>
-            <td style="padding:8px">${t.symbol}</td>
-            <td style="text-align:right;padding:8px">${t.qty}</td>
-            <td style="text-align:right;padding:8px">₹${fmt(t.buyPrice)}</td>
-            <td style="text-align:right;padding:8px">₹${fmt(t.sellPrice)}</td>
-            <td style="text-align:right;padding:8px;color:${(t.grossPnl||0)>=0?'var(--grn)':'var(--red)'};font-weight:700">₹${fmt(t.grossPnl||0)}</td>
-          </tr>
-        `).join('')}
-      </table>
-    </div>
-  `;
+  if (!TRADES.length) { list.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">📊 No trades yet</div>'; return; }
+  list.innerHTML = `<div class="w-full text-[10px] space-y-3">
+    <div class="grid grid-cols-5 text-[#d0c6ab] font-medium uppercase tracking-tighter font-mono"><span>Symbol</span><span class="text-center">Qty</span><span class="text-center">Buy</span><span class="text-center">Sell</span><span class="text-right">P&L</span></div>
+    ${TRADES.map(t => `<div class="grid grid-cols-5 items-center tnum font-mono">
+      <span class="font-bold text-[#e5e2e1]">${t.symbol}</span>
+      <span class="text-center text-[#d0c6ab]">${t.qty}</span>
+      <span class="text-center text-[#d0c6ab]">${fmt(t.buyPrice)}</span>
+      <span class="text-center text-[#d0c6ab]">${fmt(t.sellPrice)}</span>
+      <span class="text-right font-bold" style="color:${(t.grossPnl||0)>=0?'#47e266':'#ffb4ab'}">${(t.grossPnl||0)>=0?'+':''}₹${fmt(t.grossPnl||0)}</span>
+    </div>`).join('')}
+  </div>`;
 }
 
-// Show/hide spread fields based on trade type
+// Show/hide spread fields
 document.getElementById('trade-type').addEventListener('change', function() {
   document.getElementById('spread-fields').style.display = this.value === 'spread' ? 'block' : 'none';
 });
 
-// Auto-calculate charges on input change
+// Auto-calc charges
 ['trade-qty','trade-buyprice','trade-sellprice','trade-type'].forEach(id => {
   document.getElementById(id).addEventListener('input', calcCharges);
   document.getElementById(id).addEventListener('change', calcCharges);
@@ -1196,34 +1398,22 @@ function calcCharges() {
   const bp = parseFloat(document.getElementById('trade-buyprice').value) || 0;
   const sp = parseFloat(document.getElementById('trade-sellprice').value) || 0;
   const type = document.getElementById('trade-type').value;
-
-  const buyVal = bp * qty;
-  const sellVal = sp * qty;
-  const turnover = buyVal + sellVal;
-
-  // Zerodha charges
-  const brokerage = Math.min(20, buyVal * 0.0003) + Math.min(20, sellVal * 0.0003); // ₹20 or 0.03% whichever is lower
-  let stt = 0;
-  if (type === 'equity') {
-    stt = sellVal * 0.001; // 0.1% on sell side for delivery
-  } else {
-    stt = sellVal * 0.000625; // 0.0625% for options
-  }
-  const exchTxn = turnover * 0.0000345; // NSE charges
+  const buyVal = bp * qty, sellVal = sp * qty, turnover = buyVal + sellVal;
+  const brokerage = Math.min(20, buyVal * 0.0003) + Math.min(20, sellVal * 0.0003);
+  let stt = type === 'equity' ? sellVal * 0.001 : sellVal * 0.000625;
+  const exchTxn = turnover * 0.0000345;
   const gst = (brokerage + exchTxn) * 0.18;
-  const sebi = turnover * 0.000001; // ₹10 per crore
-  const stamp = buyVal * 0.00015; // 0.015% on buy side
-
+  const sebi = turnover * 0.000001;
+  const stamp = buyVal * 0.00015;
   const totalCharges = brokerage + stt + exchTxn + gst + sebi + stamp;
   const grossPnl = (sp - bp) * qty;
   const netPnl = grossPnl - totalCharges;
-
   document.getElementById('calc-brokerage').textContent = '₹' + brokerage.toFixed(2);
   document.getElementById('calc-stt').textContent = '₹' + stt.toFixed(2);
   document.getElementById('calc-exch').textContent = '₹' + (exchTxn + sebi + stamp).toFixed(2);
   document.getElementById('calc-gst').textContent = '₹' + gst.toFixed(2);
   document.getElementById('calc-netpnl').textContent = '₹' + netPnl.toFixed(2);
-  document.getElementById('calc-netpnl').style.color = netPnl >= 0 ? 'var(--grn)' : 'var(--red)';
+  document.getElementById('calc-netpnl').style.color = netPnl >= 0 ? '#47e266' : '#ffb4ab';
 }
 
 function saveTrade() {
@@ -1232,25 +1422,19 @@ function saveTrade() {
   const buyPrice = parseFloat(document.getElementById('trade-buyprice').value);
   const sellPrice = parseFloat(document.getElementById('trade-sellprice').value);
   const type = document.getElementById('trade-type').value;
-
   const buyDate = document.getElementById('trade-buydate').value;
   const sellDate = document.getElementById('trade-selldate').value;
-
   if (!sym||!qty||!buyPrice||!sellPrice) { toast('Fill all required fields'); return; }
-
   const grossPnl = (sellPrice-buyPrice)*qty;
-  const buyVal = buyPrice * qty;
-  const sellVal = sellPrice * qty;
-  const turnover = buyVal + sellVal;
-  const brokerage = Math.min(20, buyVal*0.0003) + Math.min(20, sellVal*0.0003);
+  const buyVal = buyPrice*qty, sellVal = sellPrice*qty, turnover = buyVal+sellVal;
+  const brokerage = Math.min(20,buyVal*0.0003)+Math.min(20,sellVal*0.0003);
   const stt = type==='equity' ? sellVal*0.001 : sellVal*0.000625;
   const exchTxn = turnover*0.0000345;
   const gst = (brokerage+exchTxn)*0.18;
   const sebi = turnover*0.000001;
   const stamp = buyVal*0.00015;
-  const charges = brokerage + stt + exchTxn + gst + sebi + stamp;
-
-  TRADES.push({symbol:sym, qty, buyPrice, sellPrice, type, grossPnl, charges, buyDate:buyDate||new Date().toLocaleDateString(), sellDate:sellDate||new Date().toLocaleDateString()});
+  const charges = brokerage+stt+exchTxn+gst+sebi+stamp;
+  TRADES.push({symbol:sym,qty,buyPrice,sellPrice,type,grossPnl,charges,buyDate:buyDate||new Date().toLocaleDateString(),sellDate:sellDate||new Date().toLocaleDateString()});
   toast('Trade saved ✅');
   document.getElementById('trade-sym').value='';
   document.getElementById('trade-qty').value='';
@@ -1263,35 +1447,24 @@ function handleCsvUpload(e) {
   const f = e.target.files[0];
   if (!f) return;
   const r = new FileReader();
-  r.onload = (ev) => {
-    document.getElementById('csv-textarea').value = ev.target.result;
-  };
+  r.onload = (ev) => { document.getElementById('csv-textarea').value = ev.target.result; };
   r.readAsText(f);
 }
 
 async function importCsv() {
   const csv = document.getElementById('csv-textarea').value;
   if (!csv.trim()) { toast('Paste CSV data first'); return; }
-
-  // Try server-side import first (handles Zerodha format)
   try {
-    const d = await fetch('/api/trades/import-csv', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({csv})
-    }).then(r=>r.json());
-
+    const d = await fetch('/api/trades/import-csv', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({csv})}).then(r=>r.json());
     if (d.trades && d.trades.length) {
       TRADES.push(...d.trades);
-      document.getElementById('import-result').innerHTML = `<div style="background:rgba(48,209,88,.15);border-left:3px solid var(--grn);border-radius:var(--rs);padding:12px">✅ Imported ${d.trades.length} trades via server</div>`;
+      document.getElementById('import-result').innerHTML = `<div class="bg-[#1c1b1b] border-l-4 border-[#47e266] rounded-lg p-4 flex flex-col gap-1"><div class="flex items-center gap-2 text-[#47e266] font-semibold text-sm"><span class="material-symbols-outlined text-sm" style="font-variation-settings:'FILL' 1">check_circle</span>Imported ${d.trades.length} trades via server</div></div>`;
       document.getElementById('csv-textarea').value = '';
       renderPnlDashboard();
       setTimeout(()=>goSubTab('pnl-tabs','dashboard'), 500);
       return;
     }
   } catch {}
-
-  // Fallback: client-side parse
   const lines = csv.trim().split('\n').slice(1);
   let count = 0;
   lines.forEach(line => {
@@ -1305,23 +1478,11 @@ async function importCsv() {
       const exchTxn = turnover*0.0000345;
       const gst = (brokerage+exchTxn)*0.18;
       const charges = brokerage+stt+exchTxn+gst+turnover*0.000001+buyVal*0.00015;
-
-      TRADES.push({
-        symbol:sym,
-        qty:q,
-        buyPrice:b,
-        sellPrice:s,
-        type:'equity',
-        grossPnl:(s-b)*q,
-        charges,
-        buyDate:bd||new Date().toLocaleDateString(),
-        sellDate:sd||new Date().toLocaleDateString()
-      });
+      TRADES.push({symbol:sym,qty:q,buyPrice:b,sellPrice:s,type:'equity',grossPnl:(s-b)*q,charges,buyDate:bd||new Date().toLocaleDateString(),sellDate:sd||new Date().toLocaleDateString()});
       count++;
     }
   });
-
-  document.getElementById('import-result').innerHTML = `<div style="background:rgba(48,209,88,.15);border-left:3px solid var(--grn);border-radius:var(--rs);padding:12px">✅ Imported ${count} trades</div>`;
+  document.getElementById('import-result').innerHTML = `<div class="bg-[#1c1b1b] border-l-4 border-[#47e266] rounded-lg p-4"><div class="flex items-center gap-2 text-[#47e266] font-semibold text-sm"><span class="material-symbols-outlined text-sm" style="font-variation-settings:'FILL' 1">check_circle</span>Imported ${count} trades</div></div>`;
   document.getElementById('csv-textarea').value = '';
   renderPnlDashboard();
   setTimeout(()=>goSubTab('pnl-tabs','dashboard'), 500);
@@ -1330,9 +1491,7 @@ async function importCsv() {
 // ══════════════════════════════════════════════════════════
 // SETTINGS & SYSTEM
 // ══════════════════════════════════════════════════════════
-function toggleAcc(el) {
-  el.classList.toggle('open');
-}
+function toggleAcc(el) { el.classList.toggle('open'); }
 
 async function saveSettings() {
   const settings = {
@@ -1395,18 +1554,17 @@ async function loadHealth() {
     const d = await fetch('/api/system-health').then(r=>r.json());
     const el = document.getElementById('sys-health');
     if (!el) return;
+    el.classList.remove('hidden');
     const items = [];
-    if (d.upstox) items.push({name:'Upstox',detail:d.upstox.connected?'Connected':'Disconnected',status:d.upstox.connected?'ok':'err'});
-    if (d.zerodha) items.push({name:'Zerodha',detail:d.zerodha.connected?`Holdings: ${d.zerodha.holdingsCount}`:'Not connected',status:d.zerodha.connected?'ok':'warn'});
-    if (d.gemini) items.push({name:'Gemini AI',detail:d.gemini.status,status:d.gemini.configured?'ok':'warn'});
-    if (d.server) items.push({name:'Server',detail:`Uptime: ${Math.round(d.server.uptime/60)}min · ${d.server.memMB}MB`,status:'ok'});
+    if (d.upstox) items.push({name:'Upstox WebSocket',detail:d.upstox.connected?'Connected':'Disconnected',status:d.upstox.connected?'ok':'err'});
+    if (d.zerodha) items.push({name:'Zerodha Auth Flow',detail:d.zerodha.connected?`Holdings: ${d.zerodha.holdingsCount}`:'Not connected',status:d.zerodha.connected?'ok':'err'});
+    if (d.gemini) items.push({name:'Gemini Engine',detail:d.gemini.status,status:d.gemini.configured?'ok':'err'});
+    if (d.server) items.push({name:'Main Server (Railway)',detail:`Uptime: ${Math.round(d.server.uptime/60)}min · ${d.server.memMB}MB`,status:'ok'});
     items.push({name:'Market',detail:d.marketOpen?'Open':'Closed',status:d.marketOpen?'ok':'warn'});
-    el.innerHTML = items.map(i=>`
-      <div class="sh-row">
-        <div><div class="sh-name">${i.name}</div><div class="sh-det">${i.detail}</div></div>
-        <span class="sh-badge ${i.status}">${i.status.toUpperCase()}</span>
-      </div>
-    `).join('');
+    el.innerHTML = items.map(i => {
+      const badgeClass = i.status==='ok' ? 'bg-[#47e266]/20 text-[#47e266]' : i.status==='warn' ? 'bg-[#ffd60a]/20 text-[#ffd60a]' : 'bg-[#ffb4ab]/20 text-[#ffb4ab]';
+      return `<div class="flex justify-between items-center"><span class="text-xs text-[#d0c6ab]">${i.name}</span><span class="px-2 py-0.5 rounded text-[10px] font-black ${badgeClass}">${i.status.toUpperCase()}</span></div>`;
+    }).join('');
   } catch {}
 }
 
@@ -1415,7 +1573,10 @@ async function loadLogs() {
     const d = await fetch('/api/logs').then(r=>r.json());
     const el = document.getElementById('log-list');
     if (el && d.logs) {
-      el.innerHTML = d.logs.map(l=>`<div class="log-line ${l.level}">${l.msg}</div>`).join('');
+      el.innerHTML = d.logs.map(l => {
+        const col = l.level==='OK' ? 'text-[#47e266]' : l.level==='WARN' ? 'text-[#ffd60a]' : l.level==='ERR' ? 'text-[#ffb4ab]' : 'text-[#47e266]/60';
+        return `<p class="${col}">${l.msg}</p>`;
+      }).join('');
     }
   } catch {}
 }
@@ -1427,10 +1588,8 @@ function fmt(n, d=0) {
   if (n === null || n === undefined || isNaN(n)) return '0';
   const num = Number(n);
   if (d > 0) return num.toFixed(d);
-  // Indian number format with commas
   const parts = Math.abs(num).toFixed(d).split('.');
   let intPart = parts[0];
-  // Indian grouping: last 3 digits, then groups of 2
   if (intPart.length > 3) {
     const last3 = intPart.slice(-3);
     const rest = intPart.slice(0, -3);
@@ -1453,13 +1612,8 @@ function toast(msg) {
   setTimeout(() => el.classList.remove('on'), 2000);
 }
 
-function closeMod(e) {
-  if (e.target === e.currentTarget) document.getElementById('mod').classList.remove('on');
-}
-
-function closeModD() {
-  document.getElementById('mod').classList.remove('on');
-}
+function closeMod(e) { if (e.target === e.currentTarget) document.getElementById('mod').classList.remove('on'); }
+function closeModD() { document.getElementById('mod').classList.remove('on'); }
 
 // ══════════════════════════════════════════════════════════
 // INIT APP
@@ -1485,7 +1639,7 @@ async function initApp() {
   const ist = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
   const mins = ist.getHours()*60+ist.getMinutes();
   const open = mins>=555&&mins<=930&&ist.getDay()>=1&&ist.getDay()<=5;
-  const mkt = open ? '🟢 Market Open — Live data' : '🔴 Market Closed · Opens 9:15 AM IST Mon–Fri';
+  const mkt = open ? 'Market Open' : 'Market Closed';
   document.getElementById('h-mkt').textContent = mkt;
 
   // Title
@@ -1496,13 +1650,13 @@ async function initApp() {
   // Auto-refresh
   setInterval(fetchStatus, 60000);
   setInterval(fetchNews, 600000);
+
+  // Initial nav style
+  updateNavStyle();
 }
 
-// Start app — show PIN first, initApp runs after PIN bypass/verify
 let appInited = false;
-window.addEventListener('DOMContentLoaded', () => {
-  initPin();
-});
+window.addEventListener('DOMContentLoaded', () => { initPin(); });
 </script>
 </body>
 </html>
