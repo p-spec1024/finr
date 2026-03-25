@@ -551,7 +551,11 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
         <!-- Penny sub-tab -->
         <div id="mt-penny" style="display:none">
           <div class="risk-warn">⚠️ <strong>Penny Stock Warning:</strong> These are high-risk, low-liquidity stocks frequently targeted for pump-and-dump manipulation. Large operators buy quietly, spread fake tips, then dump at peak leaving retail investors trapped. Never invest more than 5% of portfolio. Always check volume spike before buying.</div>
-          <div id="penny-list"></div>
+          <div id="penny-list" style="display:none"></div>
+          <div id="penny-load-wrap" style="text-align:center;padding:24px 0">
+            <button id="btn-load-penny" onclick="loadPennyStocks()" style="background:var(--ora);color:#000;border:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--mono)">🔓 Load 46 Penny Stocks</button>
+            <div style="font-size:10px;color:var(--t3);margin-top:8px">High-risk, speculative stocks — tap to reveal</div>
+          </div>
         </div>
       </div>
 
@@ -1513,8 +1517,62 @@ function renderGlobalMarkets() {
 // ══════════════════════════════════════════════════════════
 // PENNY STOCKS
 // ══════════════════════════════════════════════════════════
-const PENNY=[{symbol:'SUZLON',name:'Suzlon Energy',sector:'Power',price:42,risk:'HIGH',flag:'High debt but renewable energy tailwind strong. Turnaround story.',vol:'Very High',promoter:16,manipulation:'⚠️ Frequently pumped on WhatsApp tips. Check volume before buying.'},{symbol:'IRFC',name:'Indian Railway Finance',sector:'Finance',price:145,risk:'LOW',flag:'PSU backed, guaranteed steady income. Least risky penny.',vol:'Moderate',promoter:0,manipulation:'✅ Government backed — relatively safe'},{symbol:'YESBANK',name:'Yes Bank',sector:'Banking',price:19,risk:'HIGH',flag:'Recovery play. Watch for consistent FII buying before entry.',vol:'Very High',promoter:0,manipulation:'⚠️ Highly manipulated. Operators run pump cycles. Only buy on strong fundamental news.'},{symbol:'IDEA',name:'Vodafone Idea',sector:'Telecom',price:8,risk:'EXTREME',flag:'Extreme debt, survival dependent on government support.',vol:'Very High',promoter:22,manipulation:'🔴 EXTREME risk. Promoter pledging. High chance of dilution.'},{symbol:'JPPOWER',name:'Jaiprakash Power',sector:'Power',price:12,risk:'HIGH',flag:'Debt restructuring. Power sector demand positive.',vol:'High',promoter:35,manipulation:'⚠️ Promoter pledge high. Check pledge% before investing.'}];
+const PENNY=[
+{symbol:'SUZLON',name:'Suzlon Energy',sector:'Power',price:42,risk:'HIGH',flag:'High debt but renewable energy tailwind strong. Turnaround story.',vol:'Very High',promoter:16,manipulation:'⚠️ Frequently pumped on WhatsApp tips. Check volume before buying.'},
+{symbol:'IRFC',name:'Indian Railway Finance',sector:'Finance',price:145,risk:'LOW',flag:'PSU backed, guaranteed steady income. Least risky penny.',vol:'Moderate',promoter:0,manipulation:'✅ Government backed — relatively safe'},
+{symbol:'YESBANK',name:'Yes Bank',sector:'Banking',price:19,risk:'HIGH',flag:'Recovery play. Watch for consistent FII buying before entry.',vol:'Very High',promoter:0,manipulation:'⚠️ Highly manipulated. Operators run pump cycles. Only buy on strong fundamental news.'},
+{symbol:'IDEA',name:'Vodafone Idea',sector:'Telecom',price:8,risk:'EXTREME',flag:'Extreme debt, survival dependent on government support.',vol:'Very High',promoter:22,manipulation:'🔴 EXTREME risk. Promoter pledging. High chance of dilution.'},
+{symbol:'JPPOWER',name:'Jaiprakash Power',sector:'Power',price:12,risk:'HIGH',flag:'Debt restructuring. Power sector demand positive.',vol:'High',promoter:35,manipulation:'⚠️ Promoter pledge high. Check pledge% before investing.'},
+{symbol:'RPOWER',name:'Reliance Power',sector:'Power',price:28,risk:'HIGH',flag:'ADAG group, high debt but power capex play.',vol:'Very High',promoter:24,manipulation:'⚠️ Operator driven. Huge volume spikes on fake news.'},
+{symbol:'JSWENERGY',name:'JSW Energy',sector:'Power',price:58,risk:'MEDIUM',flag:'Capacity addition, JSW group backing.',vol:'High',promoter:75,manipulation:'✅ Promoter strong. Relatively safer.'},
+{symbol:'NLCINDIA',name:'NLC India',sector:'Power',price:230,risk:'LOW',flag:'PSU lignite miner + power, govt backing.',vol:'Moderate',promoter:72,manipulation:'✅ Government backed.'},
+{symbol:'SJVN',name:'SJVN Ltd',sector:'Power',price:110,risk:'LOW',flag:'PSU hydro power, steady dividends.',vol:'Moderate',promoter:81,manipulation:'✅ PSU backed. Low manipulation risk.'},
+{symbol:'CENTRALBK',name:'Central Bank India',sector:'Banking',price:48,risk:'HIGH',flag:'PSU bank turnaround, high NPAs improving.',vol:'Very High',promoter:93,manipulation:'⚠️ Retail favorite for pump. Watch quarterly NPA numbers.'},
+{symbol:'UNIONBANK',name:'Union Bank of India',sector:'Banking',price:105,risk:'MEDIUM',flag:'PSU bank, credit growth improving.',vol:'High',promoter:83,manipulation:'✅ Improving fundamentals.'},
+{symbol:'UCOBANK',name:'UCO Bank',sector:'Banking',price:42,risk:'HIGH',flag:'PSU bank, recovery play, watch asset quality.',vol:'Very High',promoter:95,manipulation:'⚠️ Low float, high volatility. Classic operator stock.'},
+{symbol:'BANDHANBNK',name:'Bandhan Bank',sector:'Banking',price:165,risk:'MEDIUM',flag:'Microfinance focus, watch asset quality.',vol:'High',promoter:40,manipulation:'⚠️ Microfinance stress cycles. Enter only after NPA clarity.'},
+{symbol:'MANAPPURAM',name:'Manappuram Finance',sector:'Finance',price:180,risk:'MEDIUM',flag:'Gold loan NBFC, rate sensitive.',vol:'High',promoter:35,manipulation:'✅ Solid gold loan book. Watch gold price trends.'},
+{symbol:'SAIL',name:'Steel Auth India',sector:'Metals',price:115,risk:'MEDIUM',flag:'PSU steel, capex cycle beneficiary.',vol:'Very High',promoter:65,manipulation:'⚠️ High retail participation. Operator activity on commodity cycles.'},
+{symbol:'NATIONALUM',name:'National Aluminium',sector:'Metals',price:195,risk:'MEDIUM',flag:'PSU aluminium, commodity cycle play.',vol:'High',promoter:51,manipulation:'✅ Commodity driven. Track LME aluminium price.'},
+{symbol:'HINDCOPPER',name:'Hindustan Copper',sector:'Metals',price:280,risk:'MEDIUM',flag:'Only listed copper producer, EV demand play.',vol:'High',promoter:67,manipulation:'⚠️ Thin float. Can be volatile on low volumes.'},
+{symbol:'NMDC',name:'NMDC Ltd',sector:'Mining',price:225,risk:'LOW',flag:'PSU iron ore miner, high dividend payer.',vol:'High',promoter:60,manipulation:'✅ Fundamentally strong PSU. Low manipulation.'},
+{symbol:'MOIL',name:'MOIL Ltd',sector:'Mining',price:350,risk:'LOW',flag:'PSU manganese monopoly, steel sector linked.',vol:'Moderate',promoter:64,manipulation:'✅ Niche monopoly. Track steel demand.'},
+{symbol:'IRCON',name:'Ircon International',sector:'Infra',price:220,risk:'LOW',flag:'PSU railway construction, strong order book.',vol:'High',promoter:73,manipulation:'✅ Government backed infra. Steady.'},
+{symbol:'NBCC',name:'NBCC India',sector:'Infra',price:95,risk:'MEDIUM',flag:'PSU construction, redevelopment projects.',vol:'Very High',promoter:62,manipulation:'⚠️ Retail favorite. Watch for pump-dump around order wins.'},
+{symbol:'RVNL',name:'Rail Vikas Nigam',sector:'Infra',price:420,risk:'MEDIUM',flag:'Railway infra PSU, capex beneficiary.',vol:'Very High',promoter:72,manipulation:'⚠️ Very high retail interest. Operators active on budget announcements.'},
+{symbol:'HUDCO',name:'HUDCO',sector:'Finance',price:235,risk:'LOW',flag:'PSU housing finance, steady dividends.',vol:'High',promoter:75,manipulation:'✅ Government backed. Low risk.'},
+{symbol:'COCHINSHIP',name:'Cochin Shipyard',sector:'Defence',price:1800,risk:'MEDIUM',flag:'PSU defence shipyard, order book strong.',vol:'High',promoter:73,manipulation:'✅ Defence sector tailwind.'},
+{symbol:'HFCL',name:'HFCL Ltd',sector:'Telecom',price:120,risk:'MEDIUM',flag:'5G infra, optical fibre, defence orders.',vol:'Very High',promoter:41,manipulation:'⚠️ Classic operator stock. Massive volume spikes.'},
+{symbol:'ROUTE',name:'Route Mobile',sector:'IT',price:1250,risk:'MEDIUM',flag:'CPaaS platform, global expansion story.',vol:'Moderate',promoter:74,manipulation:'✅ Promoter holding high. Niche business.'},
+{symbol:'BDL',name:'Bharat Dynamics',sector:'Defence',price:1300,risk:'MEDIUM',flag:'PSU missile manufacturer, order book visibility.',vol:'High',promoter:75,manipulation:'✅ Defence PSU. Government backed.'},
+{symbol:'GRSE',name:'Garden Reach Ship',sector:'Defence',price:1600,risk:'MEDIUM',flag:'PSU warship builder, strong order pipeline.',vol:'High',promoter:74,manipulation:'✅ Steady defence orders.'},
+{symbol:'MAZAGON',name:'Mazagon Dock Ship',sector:'Defence',price:4800,risk:'MEDIUM',flag:'PSU submarine & warship builder.',vol:'High',promoter:84,manipulation:'✅ Premium defence PSU. High promoter holding.'},
+{symbol:'DLF',name:'DLF Ltd',sector:'Realty',price:720,risk:'MEDIUM',flag:'Largest listed developer, luxury focus.',vol:'Very High',promoter:75,manipulation:'⚠️ Real estate cycles. Track NCR property demand.'},
+{symbol:'GODREJPROP',name:'Godrej Properties',sector:'Realty',price:2600,risk:'MEDIUM',flag:'Premium developer, pan-India presence.',vol:'High',promoter:58,manipulation:'✅ Branded developer. Track booking data.'},
+{symbol:'OBEROIRLTY',name:'Oberoi Realty',sector:'Realty',price:1950,risk:'MEDIUM',flag:'Mumbai luxury developer, land bank strong.',vol:'Moderate',promoter:68,manipulation:'✅ Premium play. Low manipulation.'},
+{symbol:'PRESTIGE',name:'Prestige Estates',sector:'Realty',price:1500,risk:'MEDIUM',flag:'South India developer, Blackstone partnership.',vol:'High',promoter:68,manipulation:'✅ Institutional backing.'},
+{symbol:'DEEPAKNITRITE',name:'Deepak Nitrite',sector:'Chemicals',price:2400,risk:'MEDIUM',flag:'Specialty chemicals, import substitution play.',vol:'High',promoter:50,manipulation:'⚠️ Volatile on chemical cycle news.'},
+{symbol:'CLEAN',name:'Clean Science & Tech',sector:'Chemicals',price:1350,risk:'MEDIUM',flag:'Green chemistry leader, high margins.',vol:'Moderate',promoter:72,manipulation:'✅ Niche monopoly. High promoter holding.'},
+{symbol:'AUROPHARMA',name:'Aurobindo Pharma',sector:'Pharma',price:1150,risk:'MEDIUM',flag:'US generics, injectables pipeline strong.',vol:'High',promoter:52,manipulation:'⚠️ US FDA news causes big swings.'},
+{symbol:'BIOCON',name:'Biocon Ltd',sector:'Pharma',price:340,risk:'MEDIUM',flag:'Biosimilars leader, Viatris partnership.',vol:'High',promoter:60,manipulation:'⚠️ Biotech volatility. Track biosimilar approvals.'},
+{symbol:'TVSMOTOR',name:'TVS Motor',sector:'Auto',price:2500,risk:'LOW',flag:'Two-wheeler leader, EV push.',vol:'High',promoter:50,manipulation:'✅ Strong brand. Low manipulation.'},
+{symbol:'ASHOKLEY',name:'Ashok Leyland',sector:'Auto',price:225,risk:'MEDIUM',flag:'CV leader, infra capex cycle play.',vol:'Very High',promoter:52,manipulation:'⚠️ Cyclical stock. Track CV sales monthly data.'},
+{symbol:'MOTHERSON',name:'Motherson Sumi',sector:'Auto',price:175,risk:'MEDIUM',flag:'Global auto components, diversified.',vol:'Very High',promoter:67,manipulation:'⚠️ High retail interest.'},
+{symbol:'EMAMILTD',name:'Emami Ltd',sector:'FMCG',price:720,risk:'MEDIUM',flag:'Navratna, BoroPlus brand house.',vol:'Moderate',promoter:55,manipulation:'✅ Brand strength. Moderate risk.'},
+{symbol:'SUNTV',name:'Sun TV Network',sector:'Media',price:650,risk:'LOW',flag:'South India media monopoly, high dividends.',vol:'Moderate',promoter:75,manipulation:'✅ Monopoly business. High dividend yield.'},
+{symbol:'PVR',name:'PVR INOX',sector:'Consumer',price:1400,risk:'MEDIUM',flag:'Multiplex leader, footfall recovery.',vol:'High',promoter:28,manipulation:'⚠️ Box office hit/miss causes swings.'},
+{symbol:'INDHOTEL',name:'Indian Hotels (Taj)',sector:'Consumer',price:680,risk:'LOW',flag:'Tata group, premium hospitality brand.',vol:'High',promoter:38,manipulation:'✅ Tata group. Low manipulation risk.'},
+{symbol:'LEMONTRE',name:'Lemon Tree Hotels',sector:'Consumer',price:135,risk:'MEDIUM',flag:'Budget hotel chain, occupancy recovering.',vol:'High',promoter:25,manipulation:'⚠️ Low promoter holding. Operator activity possible.'}
+];
+let pennyLoaded = false;
+function loadPennyStocks() {
+  pennyLoaded = true;
+  document.getElementById('penny-load-wrap').style.display='none';
+  document.getElementById('penny-list').style.display='block';
+  renderPenny();
+}
 function renderPenny() {
+  if(!pennyLoaded) return;
   const el=document.getElementById('penny-list');if(!el)return;
   let html='';
   for(const p of PENNY){

@@ -947,46 +947,237 @@ app.get('/api/pnl/csv', (req, res) => {
 // STOCK UNIVERSE & FUNDAMENTALS
 // ══════════════════════════════════════════════════════════════════════════════
 const STOCK_UNIVERSE = [
-  { instrumentKey:'NSE_EQ|INE002A01018', symbol:'RELIANCE',   name:'Reliance Industries',     sector:'Energy',    pe:24,  roe:14, de:0.3,  div:0.4, target:3200, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE040A01034', symbol:'HDFCBANK',   name:'HDFC Bank',               sector:'Banking',   pe:18,  roe:17, de:0.8,  div:1.1, target:1900, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE009A01021', symbol:'INFY',       name:'Infosys',                 sector:'IT',        pe:26,  roe:32, de:0.0,  div:3.2, target:2050, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE467B01029', symbol:'TCS',        name:'Tata Consultancy',        sector:'IT',        pe:28,  roe:48, de:0.0,  div:3.8, target:4600, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE062A01020', symbol:'ICICIBANK',  name:'ICICI Bank',              sector:'Banking',   pe:17,  roe:19, de:0.7,  div:0.8, target:1600, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE030A01027', symbol:'HINDUNILVR', name:'Hindustan Unilever',      sector:'FMCG',      pe:52,  roe:22, de:0.0,  div:1.8, target:2850, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE018A01030', symbol:'BHARTIARTL', name:'Bharti Airtel',           sector:'Telecom',   pe:78,  roe:16, de:1.8,  div:0.4, target:2100, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE585B01010', symbol:'AXISBANK',   name:'Axis Bank',               sector:'Banking',   pe:14,  roe:16, de:0.9,  div:0.1, target:1350, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE669C01036', symbol:'BAJFINANCE', name:'Bajaj Finance',           sector:'NBFC',      pe:35,  roe:22, de:3.2,  div:0.3, target:8800, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE001A01036', symbol:'HCLTECH',    name:'HCL Technologies',        sector:'IT',        pe:24,  roe:26, de:0.0,  div:4.5, target:1850, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE044A01036', symbol:'SUNPHARMA',  name:'Sun Pharmaceutical',      sector:'Pharma',    pe:35,  roe:18, de:0.1,  div:0.5, target:2200, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE326A01037', symbol:'KOTAKBANK',  name:'Kotak Mahindra Bank',     sector:'Banking',   pe:20,  roe:15, de:0.5,  div:0.1, target:2150, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE216A01030', symbol:'MARUTI',     name:'Maruti Suzuki',           sector:'Auto',      pe:25,  roe:18, de:0.0,  div:1.2, target:13500, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE029A01011', symbol:'TATAMOTORS', name:'Tata Motors',             sector:'Auto',      pe:8,   roe:22, de:1.1,  div:0.0, target:1100, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE155A01022', symbol:'TATASTEEL',  name:'Tata Steel',              sector:'Metals',    pe:9,   roe:12, de:0.8,  div:0.6, target:200, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE397D01024', symbol:'NTPC',       name:'NTPC',                    sector:'Power',     pe:16,  roe:13, de:1.2,  div:3.5, target:430, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE748C01020', symbol:'POWERGRID',  name:'Power Grid Corp',         sector:'Power',     pe:17,  roe:23, de:1.5,  div:4.2, target:395, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE160A01022', symbol:'WIPRO',      name:'Wipro',                   sector:'IT',        pe:22,  roe:17, de:0.0,  div:0.2, target:650, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE019A01038', symbol:'LTIM',       name:'LTIMindtree',             sector:'IT',        pe:32,  roe:28, de:0.0,  div:1.5, target:6200, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE066A01021', symbol:'ONGC',       name:'ONGC',                    sector:'Energy',    pe:7,   roe:14, de:0.3,  div:5.2, target:340, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE101A01026', symbol:'CIPLA',      name:'Cipla',                   sector:'Pharma',    pe:28,  roe:16, de:0.1,  div:0.4, target:1750, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE021A01026', symbol:'COALINDIA',  name:'Coal India',              sector:'Mining',    pe:8,   roe:58, de:0.0,  div:8.5, target:560, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE095A01012', symbol:'INDUSINDBK', name:'IndusInd Bank',           sector:'Banking',   pe:9,   roe:15, de:0.7,  div:1.2, target:1300, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE071A01013', symbol:'BPCL',       name:'BPCL',                    sector:'Energy',    pe:8,   roe:22, de:0.4,  div:6.5, target:380, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE356A01018', symbol:'GRASIM',     name:'Grasim Industries',       sector:'Diversified', pe:20, roe:12, de:0.4, div:0.4, target:3100, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE123W01016', symbol:'ADANIENT',   name:'Adani Enterprises',       sector:'Diversified', pe:65, roe:9,  de:2.1, div:0.0, target:3000, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE070A01015', symbol:'HINDALCO',   name:'Hindalco Industries',     sector:'Metals',    pe:11,  roe:16, de:0.5,  div:0.8, target:800, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE115A01026', symbol:'HAL',        name:'Hindustan Aeronautics',   sector:'Defence',   pe:42,  roe:28, de:0.0,  div:0.8, target:5800, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE089A01023', symbol:'DRREDDY',    name:"Dr Reddy's Laboratories", sector:'Pharma',    pe:22,  roe:21, de:0.0,  div:0.6, target:1700, cap:'Large' },
-  { instrumentKey:'NSE_EQ|INE040A01034', symbol:'BAJAJFINSV', name:'Bajaj Finserv',           sector:'NBFC',      pe:28,  roe:14, de:2.8,  div:0.1, target:2200, cap:'Large' },
+  // ── Nifty 50 (30 stocks) ─────────────────────────────────────────────────
+  // ISINs verified from upstox.com/stocks/<name>-share-price/<ISIN>/
+  { instrumentKey:'NSE_EQ|INE002A01018', symbol:'RELIANCE',   name:'Reliance Industries',     sector:'Energy',      pe:24,  roe:14, de:0.3,  div:0.4, target:3200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE040A01034', symbol:'HDFCBANK',   name:'HDFC Bank',               sector:'Banking',     pe:18,  roe:17, de:0.8,  div:1.1, target:1900, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE009A01021', symbol:'INFY',       name:'Infosys',                 sector:'IT',          pe:26,  roe:32, de:0.0,  div:3.2, target:2050, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE467B01029', symbol:'TCS',        name:'Tata Consultancy',        sector:'IT',          pe:28,  roe:48, de:0.0,  div:3.8, target:4600, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE090A01021', symbol:'ICICIBANK',  name:'ICICI Bank',              sector:'Banking',     pe:17,  roe:19, de:0.7,  div:0.8, target:1600, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE030A01027', symbol:'HINDUNILVR', name:'Hindustan Unilever',      sector:'FMCG',        pe:52,  roe:22, de:0.0,  div:1.8, target:2850, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE397D01024', symbol:'BHARTIARTL', name:'Bharti Airtel',           sector:'Telecom',     pe:78,  roe:16, de:1.8,  div:0.4, target:2100, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE238A01034', symbol:'AXISBANK',   name:'Axis Bank',               sector:'Banking',     pe:14,  roe:16, de:0.9,  div:0.1, target:1350, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE296A01032', symbol:'BAJFINANCE', name:'Bajaj Finance',           sector:'NBFC',        pe:35,  roe:22, de:3.2,  div:0.3, target:8800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE001A01036', symbol:'HCLTECH',    name:'HCL Technologies',        sector:'IT',          pe:24,  roe:26, de:0.0,  div:4.5, target:1850, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE044A01036', symbol:'SUNPHARMA',  name:'Sun Pharmaceutical',      sector:'Pharma',      pe:35,  roe:18, de:0.1,  div:0.5, target:2200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE237A01028', symbol:'KOTAKBANK',  name:'Kotak Mahindra Bank',     sector:'Banking',     pe:20,  roe:15, de:0.5,  div:0.1, target:2150, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE585B01010', symbol:'MARUTI',     name:'Maruti Suzuki',           sector:'Auto',        pe:25,  roe:18, de:0.0,  div:1.2, target:13500, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE029A01011', symbol:'TATAMOTORS', name:'Tata Motors',             sector:'Auto',        pe:8,   roe:22, de:1.1,  div:0.0, target:1100, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE155A01022', symbol:'TATASTEEL',  name:'Tata Steel',              sector:'Metals',      pe:9,   roe:12, de:0.8,  div:0.6, target:200,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE733E01010', symbol:'NTPC',       name:'NTPC',                    sector:'Power',       pe:16,  roe:13, de:1.2,  div:3.5, target:430,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE748C01020', symbol:'POWERGRID',  name:'Power Grid Corp',         sector:'Power',       pe:17,  roe:23, de:1.5,  div:4.2, target:395,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE075A01022', symbol:'WIPRO',      name:'Wipro',                   sector:'IT',          pe:22,  roe:17, de:0.0,  div:0.2, target:650,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE214T01019', symbol:'LTIM',       name:'LTIMindtree',             sector:'IT',          pe:32,  roe:28, de:0.0,  div:1.5, target:6200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE213A01029', symbol:'ONGC',       name:'ONGC',                    sector:'Energy',      pe:7,   roe:14, de:0.3,  div:5.2, target:340,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE059A01026', symbol:'CIPLA',      name:'Cipla',                   sector:'Pharma',      pe:28,  roe:16, de:0.1,  div:0.4, target:1750, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE522F01014', symbol:'COALINDIA',  name:'Coal India',              sector:'Mining',      pe:8,   roe:58, de:0.0,  div:8.5, target:560,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE095A01012', symbol:'INDUSINDBK', name:'IndusInd Bank',           sector:'Banking',     pe:9,   roe:15, de:0.7,  div:1.2, target:1300, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE071A01013', symbol:'BPCL',       name:'BPCL',                    sector:'Energy',      pe:8,   roe:22, de:0.4,  div:6.5, target:380,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE047A01021', symbol:'GRASIM',     name:'Grasim Industries',       sector:'Diversified', pe:20,  roe:12, de:0.4,  div:0.4, target:3100, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE423A01024', symbol:'ADANIENT',   name:'Adani Enterprises',       sector:'Diversified', pe:65,  roe:9,  de:2.1,  div:0.0, target:3000, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE070A01015', symbol:'HINDALCO',   name:'Hindalco Industries',     sector:'Metals',      pe:11,  roe:16, de:0.5,  div:0.8, target:800,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE115A01026', symbol:'HAL',        name:'Hindustan Aeronautics',   sector:'Defence',     pe:42,  roe:28, de:0.0,  div:0.8, target:5800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE089A01023', symbol:'DRREDDY',    name:"Dr Reddy's Laboratories", sector:'Pharma',      pe:22,  roe:21, de:0.0,  div:0.6, target:1700, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE918I01026', symbol:'BAJAJFINSV', name:'Bajaj Finserv',           sector:'NBFC',        pe:28,  roe:14, de:2.8,  div:0.1, target:2200, cap:'Large' },
+  // ── Nifty 50 additions ────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE062A01020', symbol:'SBIN',       name:'State Bank of India',     sector:'Banking',     pe:12,  roe:17, de:0.1,  div:1.5, target:1280, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE018A01030', symbol:'LT',         name:'Larsen & Toubro',         sector:'Engineering', pe:25,  roe:17, de:0.5,  div:1.2, target:3800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE154A01025', symbol:'ITC',        name:'ITC Ltd',                 sector:'FMCG',        pe:21,  roe:15, de:0.3,  div:2.8, target:385,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE280A01028', symbol:'TITAN',      name:'Titan Company',           sector:'Consumer',    pe:54,  roe:19, de:0.4,  div:0.5, target:3200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE669C01036', symbol:'TECHM',      name:'Tech Mahindra',           sector:'IT',          pe:19,  roe:16, de:0.1,  div:1.8, target:1650, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE101A01026', symbol:'M&M',        name:'Mahindra & Mahindra',     sector:'Auto',        pe:18,  roe:20, de:0.3,  div:0.8, target:3200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE021A01026', symbol:'ASIANPAINT', name:'Asian Paints',            sector:'Paints',      pe:72,  roe:22, de:0.2,  div:0.6, target:4200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE481G01011', symbol:'ULTRACEMCO', name:'UltraTech Cement',        sector:'Cement',      pe:22,  roe:18, de:0.7,  div:1.2, target:9500, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE019A01038', symbol:'JSWSTEEL',   name:'JSW Steel',               sector:'Metals',      pe:12,  roe:15, de:1.2,  div:2.0, target:780,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE742F01042', symbol:'ADANIPORTS', name:'Adani Ports & SEZ',       sector:'Infrastructure', pe:17, roe:18, de:1.2, div:1.8, target:1180, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE849A01020', symbol:'TRENT',      name:'Trent Ltd',               sector:'Retail',      pe:85,  roe:25, de:0.4,  div:0.2, target:6500, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE917I01010', symbol:'BAJAJ-AUTO', name:'Bajaj Auto',              sector:'Auto',        pe:26,  roe:19, de:0.1,  div:3.5, target:5600, cap:'Large' },
+  // ── Nifty Next 50 ─────────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE361B01024', symbol:'DIVISLAB',   name:"Divi's Laboratories",     sector:'Pharma',      pe:52,  roe:22, de:0.1,  div:0.8, target:6500, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE437A01024', symbol:'APOLLOHOSP', name:'Apollo Hospitals',        sector:'Healthcare',  pe:38,  roe:20, de:0.4,  div:0.4, target:8000, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE066A01021', symbol:'EICHERMOT',  name:'Eicher Motors',           sector:'Auto',        pe:39,  roe:25, de:0.3,  div:1.1, target:4200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE158A01026', symbol:'HEROMOTOCO', name:'Hero MotoCorp',           sector:'Auto',        pe:21,  roe:24, de:0.2,  div:4.8, target:3800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE216A01030', symbol:'BRITANNIA',  name:'Britannia Industries',    sector:'FMCG',        pe:59,  roe:23, de:0.1,  div:1.1, target:5800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE192A01025', symbol:'TATACONSUM', name:'Tata Consumer Products',  sector:'FMCG',        pe:36,  roe:17, de:0.3,  div:1.3, target:1050, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE721A01013', symbol:'SHRIRAMFIN', name:'Shriram Finance',         sector:'NBFC',        pe:14,  roe:20, de:1.8,  div:2.1, target:2250, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE239A01016', symbol:'NESTLEIND',  name:'Nestle India',            sector:'FMCG',        pe:68,  roe:25, de:0.0,  div:1.5, target:2850, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE795G01014', symbol:'HDFCLIFE',   name:'HDFC Life Insurance',     sector:'Insurance',   pe:62,  roe:12, de:0.0,  div:0.3, target:800,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE123W01016', symbol:'SBILIFE',    name:'SBI Life Insurance',      sector:'Insurance',   pe:58,  roe:14, de:0.0,  div:0.4, target:1600, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE205A01025', symbol:'VEDL',       name:'Vedanta Ltd',             sector:'Metals',      pe:7,   roe:25, de:1.5,  div:2.8, target:450,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE646L01027', symbol:'INDIGO',     name:'InterGlobe Aviation',     sector:'Airlines',    pe:45,  roe:9,  de:2.2,  div:0.0, target:4500, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE016A01026', symbol:'DABUR',      name:'Dabur India',             sector:'FMCG',        pe:43,  roe:20, de:0.2,  div:1.9, target:620,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE318A01026', symbol:'PIDILITIND', name:'Pidilite Industries',     sector:'Chemicals',   pe:65,  roe:27, de:0.1,  div:0.6, target:3200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE758E01017', symbol:'JIOFIN',     name:'Jio Financial Services',  sector:'NBFC',        pe:95,  roe:5,  de:0.0,  div:0.0, target:350,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE102D01028', symbol:'GODREJCP',   name:'Godrej Consumer Products',sector:'FMCG',        pe:48,  roe:20, de:0.3,  div:1.2, target:1400, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE176B01034', symbol:'HAVELLS',    name:'Havells India',           sector:'Consumer',    pe:55,  roe:21, de:0.1,  div:0.9, target:1900, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE121A01024', symbol:'CHOLAFIN',   name:'Cholamandalam Investment', sector:'NBFC',       pe:25,  roe:21, de:3.5,  div:0.5, target:1500, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE0J1Y01017', symbol:'LICI',       name:'Life Insurance Corp',     sector:'Insurance',   pe:19,  roe:14, de:0.1,  div:1.2, target:850,  cap:'Large' },
+  // ── Banking & Finance ──────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE160A01022', symbol:'PNB',        name:'Punjab National Bank',    sector:'Banking',     pe:10,  roe:13, de:0.2,  div:2.1, target:130,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE028A01039', symbol:'BANKBARODA', name:'Bank of Baroda',          sector:'Banking',     pe:11,  roe:13, de:0.2,  div:2.1, target:195,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE476A01014', symbol:'CANBK',      name:'Canara Bank',             sector:'Banking',     pe:13,  roe:13, de:0.2,  div:1.9, target:280,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE134E01011', symbol:'PFC',        name:'Power Finance Corp',      sector:'NBFC',        pe:6,   roe:20, de:6.5,  div:4.5, target:600,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE020B01018', symbol:'RECLTD',     name:'REC Ltd',                 sector:'NBFC',        pe:6,   roe:22, de:6.8,  div:4.2, target:580,  cap:'Large' },
+  // ── Energy & Oil ───────────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE242A01010', symbol:'IOC',        name:'Indian Oil Corp',         sector:'Energy',      pe:7,   roe:18, de:0.8,  div:5.5, target:180,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE139A01034', symbol:'HINDPETRO',  name:'Hindustan Petroleum',     sector:'Energy',      pe:7,   roe:11, de:0.9,  div:4.2, target:380,  cap:'Large' },
+  // ── Power & Utilities ──────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE245A01021', symbol:'TATAPOWER',  name:'Tata Power',              sector:'Power',       pe:28,  roe:12, de:0.8,  div:0.8, target:480,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE364U01010', symbol:'ADANIGREEN', name:'Adani Green Energy',      sector:'Power',       pe:85,  roe:13, de:2.1,  div:0.0, target:1800, cap:'Large' },
+  // ── Defence & Engineering ──────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE263A01024', symbol:'BEL',        name:'Bharat Electronics',      sector:'Defence',     pe:30,  roe:28, de:0.0,  div:1.5, target:350,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE257A01026', symbol:'BHEL',       name:'Bharat Heavy Electricals',sector:'Engineering', pe:11,  roe:13, de:0.1,  div:2.2, target:285,  cap:'Large' },
+  // ── Healthcare & Pharma ────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE027H01010', symbol:'MAXHEALTH',  name:'Max Healthcare',          sector:'Healthcare',  pe:42,  roe:20, de:0.2,  div:0.3, target:1100, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE634S01028', symbol:'MANKIND',    name:'Mankind Pharma',          sector:'Pharma',      pe:38,  roe:22, de:0.1,  div:0.6, target:2600, cap:'Large' },
+  // ── Consumer & Retail ──────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE758T01015', symbol:'ZOMATO',     name:'Zomato Ltd',              sector:'Consumer',    pe:120, roe:5,  de:0.0,  div:0.0, target:280,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE335Y01020', symbol:'IRCTC',      name:'IRCTC',                   sector:'Consumer',    pe:45,  roe:38, de:0.0,  div:1.5, target:950,  cap:'Large' },
+  // ── Chemicals / Specialty (includes PCBL) ──────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE602A01031', symbol:'PCBL',       name:'PCBL Chemical',           sector:'Chemicals',   pe:36,  roe:13, de:0.9,  div:1.5, target:350,  cap:'Mid'   },
+  // ── Additional IT (Midcap) ─────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE670A01012', symbol:'TATAELXSI',  name:'Tata Elxsi',              sector:'IT',          pe:45,  roe:35, de:0.0,  div:1.2, target:4800, cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE262H01021', symbol:'PERSISTENT', name:'Persistent Systems',      sector:'IT',          pe:55,  roe:25, de:0.0,  div:0.8, target:6500, cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE591G01025', symbol:'COFORGE',    name:'Coforge Ltd',             sector:'IT',          pe:38,  roe:22, de:0.1,  div:1.0, target:1500, cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE356A01018', symbol:'MPHASIS',    name:'Mphasis Ltd',             sector:'IT',          pe:28,  roe:18, de:0.0,  div:2.5, target:2600, cap:'Mid'   },
+  // ── Additional Pharma ──────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE685A01028', symbol:'TORNTPHARM', name:'Torrent Pharmaceuticals', sector:'Pharma',      pe:58,  roe:30, de:0.4,  div:0.8, target:3800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE326A01037', symbol:'LUPIN',      name:'Lupin Ltd',               sector:'Pharma',      pe:23,  roe:15, de:0.2,  div:0.5, target:2400, cap:'Large' },
+  // ── Additional FMCG / Consumer ─────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE196A01026', symbol:'MARICO',     name:'Marico Ltd',              sector:'FMCG',        pe:49,  roe:24, de:0.1,  div:1.2, target:750,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE761H01022', symbol:'PAGEIND',    name:'Page Industries',         sector:'Consumer',    pe:65,  roe:34, de:0.3,  div:0.8, target:38000,cap:'Large' },
+  // ── Additional Auto & Engineering ──────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE003A01024', symbol:'SIEMENS',    name:'Siemens Ltd',             sector:'Engineering', pe:70,  roe:18, de:0.1,  div:0.4, target:7500, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE117A01022', symbol:'ABB',        name:'ABB India',               sector:'Engineering', pe:80,  roe:22, de:0.0,  div:0.3, target:8200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE455K01017', symbol:'POLYCAB',    name:'Polycab India',           sector:'Engineering', pe:45,  roe:22, de:0.1,  div:0.6, target:8000, cap:'Large' },
+  // ── Additional Metals & Mining ─────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE749A01030', symbol:'JINDALSTEL', name:'Jindal Steel & Power',    sector:'Metals',      pe:14,  roe:14, de:0.5,  div:0.8, target:1100, cap:'Large' },
+  // ── Additional Cement ──────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE079A01024', symbol:'AMBUJACEM',  name:'Ambuja Cements',          sector:'Cement',      pe:30,  roe:12, de:0.1,  div:0.9, target:650,  cap:'Large' },
+  // ── Additional Finance / Insurance ─────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE726G01019', symbol:'ICICIPRULI', name:'ICICI Prudential Life',   sector:'Insurance',   pe:62,  roe:12, de:0.0,  div:0.4, target:600,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE414G01012', symbol:'MUTHOOTFIN', name:'Muthoot Finance',         sector:'NBFC',        pe:15,  roe:22, de:3.2,  div:1.5, target:2200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE018E01016', symbol:'SBICARD',    name:'SBI Cards & Payment',     sector:'NBFC',        pe:44,  roe:29, de:0.0,  div:0.5, target:825,  cap:'Large' },
+  // ── Additional Energy & Gas ────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE203G01027', symbol:'IGL',        name:'Indraprastha Gas',        sector:'Energy',      pe:20,  roe:20, de:0.0,  div:1.5, target:500,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE274J01014', symbol:'OIL',        name:'Oil India Ltd',           sector:'Energy',      pe:8,   roe:18, de:0.3,  div:4.5, target:550,  cap:'Large' },
+  // ── Additional Power ───────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE813H01021', symbol:'TORNTPOWER', name:'Torrent Power',           sector:'Power',       pe:27,  roe:15, de:0.9,  div:1.3, target:2150, cap:'Large' },
+  // ── Additional Defence ─────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE118H01025', symbol:'BSE',        name:'BSE Ltd',                 sector:'Diversified', pe:55,  roe:18, de:0.0,  div:0.8, target:5500, cap:'Large' },
+  // ── Logistics / New-age ────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE148O01028', symbol:'DELHIVERY',  name:'Delhivery Ltd',           sector:'Consumer',    pe:170, roe:2,  de:0.0,  div:0.0, target:500,  cap:'Mid'   },
+  // ── Additional PSU / Infra ─────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE084A01016', symbol:'BANKINDIA',  name:'Bank of India',           sector:'Banking',     pe:9,   roe:11, de:0.2,  div:2.5, target:130,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE457A01014', symbol:'MAHABANK',   name:'Bank of Maharashtra',     sector:'Banking',     pe:8,   roe:18, de:0.1,  div:2.0, target:70,   cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE562A01011', symbol:'INDIANB',    name:'Indian Bank',             sector:'Banking',     pe:8,   roe:15, de:0.1,  div:2.5, target:600,  cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE565A01014', symbol:'IOB',        name:'Indian Overseas Bank',    sector:'Banking',     pe:12,  roe:10, de:0.1,  div:1.8, target:65,   cap:'Mid'   },
+  // ── Additional Large/Mid Cap ───────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE323A01026', symbol:'BOSCHLTD',   name:'Bosch Ltd',               sector:'Auto',        pe:49,  roe:22, de:0.1,  div:1.0, target:28500,cap:'Large' },
+  // ── PSU Power & Mining ─────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE038A01020', symbol:'NHPC',       name:'NHPC Ltd',                sector:'Power',       pe:18,  roe:12, de:0.5,  div:3.5, target:110,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE584A01023', symbol:'NMDC',       name:'NMDC Ltd',                sector:'Mining',      pe:9,   roe:20, de:0.1,  div:5.0, target:280,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE267A01025', symbol:'SAIL',       name:'Steel Authority of India',sector:'Metals',      pe:10,  roe:8,  de:0.5,  div:2.5, target:160,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE510A01028', symbol:'NATIONALUM', name:'National Aluminium',      sector:'Metals',      pe:12,  roe:18, de:0.0,  div:4.0, target:230,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE531A01024', symbol:'HINDCOPPER', name:'Hindustan Copper',        sector:'Metals',      pe:40,  roe:15, de:0.2,  div:1.5, target:360,  cap:'Mid'   },
+  // ── Infra & Construction ───────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE053F01010', symbol:'IRCON',      name:'Ircon International',     sector:'Infrastructure', pe:12, roe:16, de:0.2, div:2.5, target:280, cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE415G01027', symbol:'NBCC',       name:'NBCC India',              sector:'Infrastructure', pe:35, roe:22, de:0.0, div:1.0, target:130, cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE611A01016', symbol:'HUDCO',      name:'HUDCO',                   sector:'NBFC',        pe:8,   roe:16, de:5.5,  div:3.5, target:280,  cap:'Mid'   },
+  // ── Real Estate ────────────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE002S01010', symbol:'DLF',        name:'DLF Ltd',                 sector:'Infrastructure', pe:40, roe:10, de:0.2, div:0.6, target:900, cap:'Large' },
+  // ── Telecom / Media ────────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE330H01018', symbol:'SUNTV',      name:'Sun TV Network',          sector:'Consumer',    pe:14,  roe:22, de:0.0,  div:3.5, target:720,  cap:'Mid'   },
+  // ── Misc Large/Mid Cap ─────────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE628A01036', symbol:'UPL',        name:'UPL Ltd',                 sector:'Chemicals',   pe:15,  roe:8,  de:1.5,  div:1.2, target:600,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE092T01019', symbol:'IDFCFIRSTB', name:'IDFC First Bank',         sector:'Banking',     pe:15,  roe:12, de:0.1,  div:0.0, target:85,   cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE860A01027', symbol:'HFCL',       name:'HFCL Ltd',                sector:'Telecom',     pe:32,  roe:14, de:0.2,  div:0.5, target:160,  cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE220G01021', symbol:'JSWENERGY',  name:'JSW Energy',              sector:'Power',       pe:48,  roe:12, de:0.8,  div:0.4, target:700,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE752E01010', symbol:'PAYTM',      name:'One 97 Communications',   sector:'Consumer',    pe:0,   roe:-5, de:0.0,  div:0.0, target:900,  cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE121A01016', symbol:'CONCOR',     name:'Container Corp of India', sector:'Infrastructure', pe:28, roe:12, de:0.1, div:1.5, target:1000, cap:'Large' },
+  // ── Additional Midcap Metals/Mining ────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE880J01016', symbol:'SJVN',       name:'SJVN Ltd',                sector:'Power',       pe:30,  roe:10, de:0.5,  div:3.0, target:140,  cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE849B01017', symbol:'RVNL',       name:'Rail Vikas Nigam',        sector:'Infrastructure', pe:22, roe:18, de:0.3, div:2.5, target:500, cap:'Mid'   },
+  // ── Additional Nifty Next50 ────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE883A01011', symbol:'GAIL',       name:'GAIL India',              sector:'Energy',      pe:12,  roe:14, de:0.2,  div:3.5, target:230,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE020A01011', symbol:'NAUKRI',     name:'Info Edge (Naukri)',       sector:'Consumer',    pe:75,  roe:12, de:0.0,  div:0.4, target:7500, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE347G01014', symbol:'PIIND',      name:'PI Industries',           sector:'Chemicals',   pe:30,  roe:20, de:0.1,  div:0.5, target:4200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE765G01017', symbol:'ICICIGI',    name:'ICICI Lombard GI',        sector:'Insurance',   pe:38,  roe:18, de:0.0,  div:0.5, target:2000, cap:'Large' },
+  // ── Remaining to reach ~150 ────────────────────────────────────────────────
+  { instrumentKey:'NSE_EQ|INE692A01016', symbol:'LTTS',       name:'L&T Technology Services',  sector:'IT',          pe:35,  roe:25, de:0.0,  div:1.5, target:5500, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE148I01020', symbol:'FEDERALBNK', name:'Federal Bank',            sector:'Banking',     pe:13,  roe:15, de:0.1,  div:1.8, target:185,  cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE774D01024', symbol:'AUBANK',     name:'AU Small Finance Bank',   sector:'Banking',     pe:28,  roe:16, de:0.4,  div:0.3, target:720,  cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE935A01035', symbol:'TATACHEM',   name:'Tata Chemicals',          sector:'Chemicals',   pe:15,  roe:10, de:0.3,  div:1.5, target:1200, cap:'Mid'   },
+  { instrumentKey:'NSE_EQ|INE150A01025', symbol:'AUROPHARMA', name:'Aurobindo Pharma',        sector:'Pharma',      pe:15,  roe:12, de:0.4,  div:1.2, target:1250, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE129A01019', symbol:'INDUSTOWER', name:'Indus Towers',            sector:'Telecom',     pe:14,  roe:25, de:0.8,  div:2.5, target:420,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE219A01012', symbol:'CUMMINSIND', name:'Cummins India',           sector:'Engineering', pe:42,  roe:25, de:0.0,  div:1.5, target:3800, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE121J01017', symbol:'M&MFIN',     name:'Mahindra & Mahindra Fin', sector:'NBFC',        pe:8,   roe:15, de:4.2,  div:2.5, target:285,  cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE536H01010', symbol:'COLPAL',     name:'Colgate-Palmolive India', sector:'FMCG',        pe:50,  roe:55, de:0.0,  div:2.0, target:3200, cap:'Large' },
+  { instrumentKey:'NSE_EQ|INE094A01015', symbol:'LICHSGFIN',  name:'LIC Housing Finance',     sector:'NBFC',        pe:8,   roe:14, de:8.0,  div:3.0, target:700,  cap:'Large' },
 ];
 
-const SECTOR_PE = { IT:27, Banking:15, Pharma:30, Energy:10, FMCG:48, Auto:20, Metals:8, Power:16, Telecom:22, NBFC:22, Mining:7, Diversified:18, Defence:38 };
+const SECTOR_PE = { IT:27, Banking:15, Pharma:30, Energy:10, FMCG:48, Auto:20, Metals:8, Power:16, Telecom:22, NBFC:22, Mining:7, Diversified:18, Defence:38, Engineering:20, Insurance:55, Retail:60, Cement:22, Healthcare:35, Airlines:30, Consumer:50, Infrastructure:18, Paints:55, Chemicals:28 };
 
 const PENNY_STOCKS = [
-  { symbol:'SUZLON',  name:'Suzlon Energy',    sector:'Power',   price:42,  risk:'HIGH',   flag:'High debt, renewable tailwind',     vol:'Very High',  promoter:16 },
-  { symbol:'IRFC',    name:'Indian Railway FC', sector:'Finance', price:145, risk:'LOW',    flag:'PSU backed, steady income',         vol:'Moderate',   promoter:0  },
-  { symbol:'YESBANK', name:'Yes Bank',          sector:'Banking', price:19,  risk:'HIGH',   flag:'Recovery play, watch FII buying',   vol:'Very High',  promoter:0  },
-  { symbol:'IDEA',    name:'Vodafone Idea',     sector:'Telecom', price:8,   risk:'EXTREME', flag:'High debt, survival uncertain',    vol:'Very High',  promoter:22 },
-  { symbol:'JPPOWER', name:'Jaiprakash Power',  sector:'Power',   price:12,  risk:'HIGH',   flag:'Debt restructuring, power demand',  vol:'High',       promoter:35 },
+  // ── Original 5 ────────────────────────────────────────────────────────────
+  { symbol:'SUZLON',     name:'Suzlon Energy',       sector:'Power',      price:42,   risk:'HIGH',    flag:'High debt, renewable tailwind',                    vol:'Very High',  promoter:16 },
+  { symbol:'IRFC',       name:'Indian Railway FC',   sector:'Finance',    price:145,  risk:'LOW',     flag:'PSU backed, steady income',                        vol:'Moderate',   promoter:0  },
+  { symbol:'YESBANK',    name:'Yes Bank',            sector:'Banking',    price:19,   risk:'HIGH',    flag:'Recovery play, watch FII buying',                  vol:'Very High',  promoter:0  },
+  { symbol:'IDEA',       name:'Vodafone Idea',       sector:'Telecom',    price:8,    risk:'EXTREME', flag:'High debt, survival uncertain',                    vol:'Very High',  promoter:22 },
+  { symbol:'JPPOWER',    name:'Jaiprakash Power',    sector:'Power',      price:12,   risk:'HIGH',    flag:'Debt restructuring, power demand',                 vol:'High',       promoter:35 },
+  // ── Power & Energy ────────────────────────────────────────────────────────
+  { symbol:'RPOWER',     name:'Reliance Power',      sector:'Power',      price:28,   risk:'HIGH',    flag:'ADAG group, high debt but power capex play',       vol:'Very High',  promoter:24 },
+  { symbol:'JSWENERGY',  name:'JSW Energy',          sector:'Power',      price:58,   risk:'MEDIUM',  flag:'Capacity addition, JSW group backing',             vol:'High',       promoter:75 },
+  { symbol:'NLCINDIA',   name:'NLC India',           sector:'Power',      price:230,  risk:'LOW',     flag:'PSU lignite miner + power, govt backing',          vol:'Moderate',   promoter:72 },
+  { symbol:'SJVN',       name:'SJVN Ltd',            sector:'Power',      price:110,  risk:'LOW',     flag:'PSU hydro power, steady dividends',                vol:'Moderate',   promoter:81 },
+  // ── PSU Banks & Finance ───────────────────────────────────────────────────
+  { symbol:'CENTRALBK',  name:'Central Bank India',  sector:'Banking',    price:48,   risk:'HIGH',    flag:'PSU bank turnaround, high NPAs improving',         vol:'Very High',  promoter:93 },
+  { symbol:'UNIONBANK',  name:'Union Bank of India', sector:'Banking',    price:105,  risk:'MEDIUM',  flag:'PSU bank, credit growth improving',                vol:'High',       promoter:83 },
+  { symbol:'UCOBANK',    name:'UCO Bank',            sector:'Banking',    price:42,   risk:'HIGH',    flag:'PSU bank, recovery play, watch asset quality',     vol:'Very High',  promoter:95 },
+  { symbol:'BANDHANBNK', name:'Bandhan Bank',        sector:'Banking',    price:165,  risk:'MEDIUM',  flag:'Microfinance focus, watch asset quality trends',   vol:'High',       promoter:40 },
+  { symbol:'MANAPPURAM', name:'Manappuram Finance',  sector:'Finance',    price:180,  risk:'MEDIUM',  flag:'Gold loan NBFC, rate sensitive',                   vol:'High',       promoter:35 },
+  // ── Metals & Mining ───────────────────────────────────────────────────────
+  { symbol:'SAIL',       name:'Steel Auth India',    sector:'Metals',     price:115,  risk:'MEDIUM',  flag:'PSU steel, capex cycle beneficiary',               vol:'Very High',  promoter:65 },
+  { symbol:'NATIONALUM', name:'National Aluminium',  sector:'Metals',     price:195,  risk:'MEDIUM',  flag:'PSU aluminium, commodity cycle play',              vol:'High',       promoter:51 },
+  { symbol:'HINDCOPPER', name:'Hindustan Copper',    sector:'Metals',     price:280,  risk:'MEDIUM',  flag:'Only listed copper producer, EV demand play',      vol:'High',       promoter:67 },
+  { symbol:'NMDC',       name:'NMDC Ltd',            sector:'Mining',     price:225,  risk:'LOW',     flag:'PSU iron ore miner, high dividend payer',          vol:'High',       promoter:60 },
+  { symbol:'MOIL',       name:'MOIL Ltd',            sector:'Mining',     price:350,  risk:'LOW',     flag:'PSU manganese monopoly, steel sector linked',      vol:'Moderate',   promoter:64 },
+  // ── Infrastructure & Construction ─────────────────────────────────────────
+  { symbol:'IRCON',      name:'Ircon International', sector:'Infra',      price:220,  risk:'LOW',     flag:'PSU railway construction, strong order book',      vol:'High',       promoter:73 },
+  { symbol:'NBCC',       name:'NBCC India',          sector:'Infra',      price:95,   risk:'MEDIUM',  flag:'PSU construction, redevelopment projects',         vol:'Very High',  promoter:62 },
+  { symbol:'RVNL',       name:'Rail Vikas Nigam',    sector:'Infra',      price:420,  risk:'MEDIUM',  flag:'Railway infra PSU, capex beneficiary',             vol:'Very High',  promoter:72 },
+  { symbol:'HUDCO',      name:'HUDCO',               sector:'Finance',    price:235,  risk:'LOW',     flag:'PSU housing finance, steady dividends',            vol:'High',       promoter:75 },
+  { symbol:'COCHINSHIP', name:'Cochin Shipyard',     sector:'Defence',    price:1800, risk:'MEDIUM',  flag:'PSU defence shipyard, order book strong',          vol:'High',       promoter:73 },
+  // ── Telecom & Tech ────────────────────────────────────────────────────────
+  { symbol:'HFCL',       name:'HFCL Ltd',            sector:'Telecom',    price:120,  risk:'MEDIUM',  flag:'5G infra, optical fibre, defence orders',          vol:'Very High',  promoter:41 },
+  { symbol:'ROUTE',      name:'Route Mobile',        sector:'IT',         price:1250, risk:'MEDIUM',  flag:'CPaaS platform, global expansion story',           vol:'Moderate',   promoter:74 },
+  // ── Defence ───────────────────────────────────────────────────────────────
+  { symbol:'BDL',        name:'Bharat Dynamics',     sector:'Defence',    price:1300, risk:'MEDIUM',  flag:'PSU missile manufacturer, order book visibility',  vol:'High',       promoter:75 },
+  { symbol:'GRSE',       name:'Garden Reach Ship',   sector:'Defence',    price:1600, risk:'MEDIUM',  flag:'PSU warship builder, strong order pipeline',       vol:'High',       promoter:74 },
+  { symbol:'MAZAGON',    name:'Mazagon Dock Ship',   sector:'Defence',    price:4800, risk:'MEDIUM',  flag:'PSU submarine & warship builder',                  vol:'High',       promoter:84 },
+  // ── Real Estate ───────────────────────────────────────────────────────────
+  { symbol:'DLF',        name:'DLF Ltd',             sector:'Realty',     price:720,  risk:'MEDIUM',  flag:'Largest listed developer, luxury focus',            vol:'Very High',  promoter:75 },
+  { symbol:'GODREJPROP', name:'Godrej Properties',   sector:'Realty',     price:2600, risk:'MEDIUM',  flag:'Premium developer, pan-India presence',            vol:'High',       promoter:58 },
+  { symbol:'OBEROIRLTY', name:'Oberoi Realty',       sector:'Realty',     price:1950, risk:'MEDIUM',  flag:'Mumbai luxury developer, land bank strong',        vol:'Moderate',   promoter:68 },
+  { symbol:'PRESTIGE',   name:'Prestige Estates',    sector:'Realty',     price:1500, risk:'MEDIUM',  flag:'South India developer, Blackstone partnership',    vol:'High',       promoter:68 },
+  // ── Chemicals & Pharma ────────────────────────────────────────────────────
+  { symbol:'DEEPAKNITRITE',name:'Deepak Nitrite',    sector:'Chemicals',  price:2400, risk:'MEDIUM',  flag:'Specialty chemicals, import substitution play',    vol:'High',       promoter:50 },
+  { symbol:'CLEAN',      name:'Clean Science & Tech',sector:'Chemicals',  price:1350, risk:'MEDIUM',  flag:'Green chemistry leader, high margins',             vol:'Moderate',   promoter:72 },
+  { symbol:'AUROPHARMA', name:'Aurobindo Pharma',    sector:'Pharma',     price:1150, risk:'MEDIUM',  flag:'US generics, injectables pipeline strong',         vol:'High',       promoter:52 },
+  { symbol:'BIOCON',     name:'Biocon Ltd',          sector:'Pharma',     price:340,  risk:'MEDIUM',  flag:'Biosimilars leader, Viatris partnership',          vol:'High',       promoter:60 },
+  // ── Auto / Components ─────────────────────────────────────────────────────
+  { symbol:'TVSMOTOR',   name:'TVS Motor',           sector:'Auto',       price:2500, risk:'LOW',     flag:'Two-wheeler leader, EV push',                      vol:'High',       promoter:50 },
+  { symbol:'ASHOKLEY',   name:'Ashok Leyland',       sector:'Auto',       price:225,  risk:'MEDIUM',  flag:'CV leader, infra capex cycle play',                vol:'Very High',  promoter:52 },
+  { symbol:'MOTHERSON',  name:'Motherson Sumi',      sector:'Auto',       price:175,  risk:'MEDIUM',  flag:'Global auto components, diversified',              vol:'Very High',  promoter:67 },
+  // ── FMCG / Consumer ───────────────────────────────────────────────────────
+  { symbol:'COLPAL',     name:'Colgate-Palmolive',   sector:'FMCG',       price:2800, risk:'LOW',     flag:'MNC oral care monopoly, steady compounder',        vol:'Low',        promoter:51 },
+  { symbol:'EMAMILTD',   name:'Emami Ltd',           sector:'FMCG',       price:720,  risk:'MEDIUM',  flag:'Navratna, BoroPlus brand house',                   vol:'Moderate',   promoter:55 },
+  // ── Media / Consumer ──────────────────────────────────────────────────────
+  { symbol:'SUNTV',      name:'Sun TV Network',      sector:'Media',      price:650,  risk:'LOW',     flag:'South India media monopoly, high dividends',       vol:'Moderate',   promoter:75 },
+  { symbol:'PVR',        name:'PVR INOX',            sector:'Consumer',   price:1400, risk:'MEDIUM',  flag:'Multiplex leader, footfall recovery',              vol:'High',       promoter:28 },
+  // ── Hotels / Travel ───────────────────────────────────────────────────────
+  { symbol:'INDHOTEL',   name:'Indian Hotels (Taj)',  sector:'Consumer',   price:680,  risk:'LOW',     flag:'Tata group, premium hospitality brand',            vol:'High',       promoter:38 },
+  { symbol:'LEMONTRE',   name:'Lemon Tree Hotels',   sector:'Consumer',   price:135,  risk:'MEDIUM',  flag:'Budget hotel chain, occupancy recovering',         vol:'High',       promoter:25 },
 ];
 
 function calcSignal(symbol, price) {
@@ -1180,7 +1371,7 @@ async function pollUpstoxPrices() {
 
 function startPricePoller() {
   if (pricePoller) return;
-  const intervalMs = 3000; // Poll every 3 seconds
+  const intervalMs = 2000; // Poll every 2 seconds
   pollUpstoxPrices(); // First poll immediately
   pricePoller = setInterval(() => {
     if (isMarketOpen()) pollUpstoxPrices();
@@ -1200,7 +1391,59 @@ function connectUpstoxWs() {
 // ══════════════════════════════════════════════════════════════════════════════
 // MOCK DATA (market closed / no token)
 // ══════════════════════════════════════════════════════════════════════════════
-const MOCK_BASE = { RELIANCE:2920, SUZLON:62, IRFC:158, YESBANK:22, IDEA:9, JPPOWER:14, HDFCBANK:1840, INFY:1720, TCS:3980, ICICIBANK:1520, HINDUNILVR:2420, BHARTIARTL:1950, AXISBANK:1180, BAJFINANCE:6980, HCLTECH:1580, SUNPHARMA:2180, KOTAKBANK:2050, MARUTI:11200, TATAMOTORS:620, TATASTEEL:145, NTPC:385, POWERGRID:360, WIPRO:520, LTIM:5200, ONGC:265, CIPLA:1680, COALINDIA:420, INDUSINDBK:780, BPCL:295, GRASIM:2580, ADANIENT:2280, HINDALCO:640, HAL:4650, DRREDDY:1380, BAJAJFINSV:1920 };
+const MOCK_BASE = {
+  // Original 30 stocks
+  RELIANCE:2920, HDFCBANK:1840, INFY:1720, TCS:3980, ICICIBANK:1520, HINDUNILVR:2420,
+  BHARTIARTL:1950, AXISBANK:1180, BAJFINANCE:6980, HCLTECH:1580, SUNPHARMA:2180, KOTAKBANK:2050,
+  MARUTI:11200, TATAMOTORS:620, TATASTEEL:145, NTPC:385, POWERGRID:360, WIPRO:520, LTIM:5200,
+  ONGC:265, CIPLA:1680, COALINDIA:420, INDUSINDBK:780, BPCL:295, GRASIM:2580, ADANIENT:2280,
+  HINDALCO:640, HAL:4650, DRREDDY:1380, BAJAJFINSV:1920,
+  // Penny stocks (prices used for mock, also covers some STOCK_UNIVERSE overlaps)
+  SUZLON:62, IRFC:158, YESBANK:22, IDEA:9, JPPOWER:14,
+  RPOWER:28, JSWENERGY:58, NLCINDIA:230, SJVN:110,
+  CENTRALBK:48, UNIONBANK:105, UCOBANK:42, BANDHANBNK:165, MANAPPURAM:180,
+  SAIL:115, NATIONALUM:195, HINDCOPPER:280, NMDC:225, MOIL:350,
+  IRCON:220, NBCC:95, RVNL:420, HUDCO:235, COCHINSHIP:1800,
+  HFCL:120, ROUTE:1250, BDL:1300, GRSE:1600, MAZAGON:4800,
+  DLF:720, GODREJPROP:2600, OBEROIRLTY:1950, PRESTIGE:1500,
+  DEEPAKNITRITE:2400, CLEAN:1350, AUROPHARMA:1150, BIOCON:340,
+  TVSMOTOR:2500, ASHOKLEY:225, MOTHERSON:175,
+  COLPAL:2800, EMAMILTD:720, SUNTV:650, PVR:1400,
+  INDHOTEL:680, LEMONTRE:135,
+  // Nifty 50 additions
+  SBIN:820, LT:3440, ITC:420, TITAN:3100, TECHM:1340, 'M&M':3050, ASIANPAINT:2350,
+  ULTRACEMCO:11500, JSWSTEEL:960, ADANIPORTS:1250, TRENT:5800, 'BAJAJ-AUTO':9200,
+  // Nifty Next 50
+  DIVISLAB:5800, APOLLOHOSP:7200, EICHERMOT:5100, HEROMOTOCO:4600, BRITANNIA:5400,
+  TATACONSUM:960, SHRIRAMFIN:680, NESTLEIND:2250, HDFCLIFE:680, SBILIFE:1550,
+  VEDL:420, INDIGO:4300, DABUR:530, PIDILITIND:2900, JIOFIN:250, GODREJCP:1200,
+  HAVELLS:1650, CHOLAFIN:1350, LICI:850,
+  // Banking & Finance
+  PNB:105, BANKBARODA:245, CANBK:95, PFC:520, RECLTD:480,
+  // Energy & Oil
+  IOC:135, HINDPETRO:400,
+  // Power
+  TATAPOWER:420, ADANIGREEN:1650,
+  // Defence & Engineering
+  BEL:310, BHEL:240,
+  // Healthcare & Pharma
+  MAXHEALTH:1050, MANKIND:2400,
+  // Consumer & Retail
+  ZOMATO:240, IRCTC:870,
+  // Chemicals
+  PCBL:310,
+  // Additional STOCK_UNIVERSE stocks (midcap IT, pharma, etc)
+  TATAELXSI:4200, PERSISTENT:6200, COFORGE:1150, MPHASIS:2100,
+  TORNTPHARM:3500, LUPIN:2200, MARICO:780, PAGEIND:36000,
+  SIEMENS:7200, ABB:7800, POLYCAB:7500, JINDALSTEL:1100,
+  AMBUJACEM:580, ICICIPRULI:560, MUTHOOTFIN:2100, SBICARD:780,
+  IGL:480, OIL:520, TORNTPOWER:1950, BSE:5200, DELHIVERY:380,
+  BANKINDIA:115, MAHABANK:60, INDIANB:550, IOB:55, BOSCHLTD:27000,
+  NHPC:95, GAIL:200, NAUKRI:7000, PIIND:3800, ICICIGI:1850,
+  LTTS:5200, FEDERALBNK:170, AUBANK:700, TATACHEM:1100,
+  INDUSTOWER:380, CUMMINSIND:3500, 'M&MFIN':270,
+  UPL:550, IDFCFIRSTB:75, CONCOR:950, LICHSGFIN:650
+};
 const IDX_BASE  = { 'Nifty 50':22950, 'SENSEX':75600, 'Nifty Bank':49800, 'Nifty IT':36400, 'Nifty Pharma':23800 };
 
 function initMockData() {
