@@ -490,6 +490,341 @@ Include NIFTY or BANKNIFTY if favorable. Be thorough and accurate.`;
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ON-DEMAND STOCK PRICE FETCH (single stock from Upstox)
+// ══════════════════════════════════════════════════════════════════════════════
+async function fetchSingleStockPrice(symbol) {
+  // First check if we already have live data
+  if (liveStocks[symbol] && liveStocks[symbol].price) return liveStocks[symbol];
+  // Look up ISIN from STOCK_UNIVERSE
+  const stock = STOCK_UNIVERSE.find(s => s.symbol === symbol);
+  if (!stock || !accessToken) return null;
+  try {
+    const res = await axios.get('https://api.upstox.com/v2/market-quote/quotes', {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      params: { instrument_key: stock.instrumentKey }
+    });
+    const data = res.data?.data;
+    if (data) {
+      for (const [key, val] of Object.entries(data)) {
+        processUpstoxQuote(key, val);
+      }
+    }
+    return liveStocks[symbol] || null;
+  } catch (e) {
+    log('WARN', `On-demand fetch failed for ${symbol}: ${e.message}`);
+    return null;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AI LONG-TERM PICKS — Gemini suggests best 10-15 stocks from entire market
+// ══════════════════════════════════════════════════════════════════════════════
+let aiPicksCache = { picks: [], lastFetch: 0 };
+const AI_PICKS_CACHE_MS = 4 * 60 * 60 * 1000; // Cache 4 hours
+
+app.get('/api/ai-picks', async (req, res) => {
+  const force = req.query.force === 'true';
+  // Return cache if fresh
+  if (!force && aiPicksCache.picks.length && (Date.now() - aiPicksCache.lastFetch) < AI_PICKS_CACHE_MS) {
+    return res.json({ picks: aiPicksCache.picks, cached: true, generated: new Date(aiPicksCache.lastFetch).toISOString() });
+  }
+  if (!appConfig.geminiKey) return res.json({ picks: [], configured: false, error: 'Gemini API key not configured' });
+  try {
+    const nifty = liveIndices['Nifty 50'];
+    const bankNifty = liveIndices['Nifty Bank'];
+    const stocks = Object.values(liveStocks).filter(s => s.price);
+    const topGainers = [...stocks].sort((a,b) => b.changePct - a.changePct).slice(0,15).map(s => `${s.symbol}(${s.changePct>=0?'+':''}${s.changePct.toFixed(1)}%)`).join(',');
+    const topLosers = [...stocks].sort((a,b) => a.changePct - b.changePct).slice(0,15).map(s => `${s.symbol}(${s.changePct.toFixed(1)}%)`).join(',');
+    const strongSigs = Object.values(signalCache).filter(s => s.score >= 70).sort((a,b) => b.score - a.score).slice(0,15).map(s => `${s.symbol}(${s.signal},${s.score})`).join(',');
+
+    // Build sector summary
+    const sectorPerf = {};
+    for (const s of stocks) {
+      if (!s.sector) continue;
+      if (!sectorPerf[s.sector]) sectorPerf[s.sector] = { total:0, count:0 };
+      sectorPerf[s.sector].total += (s.changePct || 0);
+      sectorPerf[s.sector].count++;
+    }
+    const sectorStr = Object.entries(sectorPerf).map(([k,v]) => `${k}:${(v.total/v.count).toFixed(2)}%`).join(' ');
+
+    const prompt = `You are a SEBI-registered-level Indian stock market research analyst. Recommend the TOP 12-15 NSE-listed stocks to BUY RIGHT NOW for LONG-TERM investment (6 months to 3 years holding).
+
+CURRENT MARKET DATA:
+- Nifty 50: ${nifty?.price||'?'} (${nifty?.changePct>=0?'+':''}${nifty?.changePct||0}%)
+- Bank Nifty: ${bankNifty?.price||'?'} (${bankNifty?.changePct>=0?'+':''}${bankNifty?.changePct||0}%)
+- India VIX: ${vixData.value} (${vixData.trend})
+- FII: ₹${fiiDiiData.fii}Cr (${fiiDiiData.fii<0?'SELLING':'BUYING'}) | DII: ₹${fiiDiiData.dii}Cr
+- USD/INR: ${fiiDiiData.usdInr} | Crude: $${fiiDiiData.crude}
+
+SECTOR PERFORMANCE: ${sectorStr}
+TOP GAINERS: ${topGainers}
+TOP LOSERS: ${topLosers}
+STRONG BUY SIGNALS: ${strongSigs}
+
+ANALYSIS REQUIREMENTS — BE THOROUGH:
+1. Pick stocks from ANY NSE sector — large cap, mid cap, or strong small cap
+2. For each stock, do COMPLETE fundamental analysis: PE ratio vs sector PE, ROE, debt-to-equity, dividend yield, revenue/profit growth trend, promoter holding
+3. Do COMPLETE technical analysis: current price vs 52-week high/low, RSI zone, support/resistance, trend (uptrend/downtrend/consolidation), volume trend
+4. Provide a SPECIFIC target price and ESTIMATED timeframe to reach it
+5. Provide a STOP-LOSS level
+6. Explain WHY this stock — what catalyst or trigger will drive it to the target
+7. Rate confidence: VERY_HIGH, HIGH, MODERATE
+8. Consider macro factors: RBI policy, FII flows, sector tailwinds/headwinds, global cues
+
+Reply ONLY valid JSON array, NO markdown fences:
+[{"symbol":"NSE_SYMBOL","name":"Full Company Name","sector":"Sector","currentPrice":"approximate current price","targetPrice":"target price","timeframe":"6 months / 1 year / 2 years","stopLoss":"stop-loss price","upside":"xx%","confidence":"VERY_HIGH/HIGH/MODERATE","signal":"STRONG BUY/BUY","riskLevel":"LOW/MEDIUM/HIGH","pe":"current PE","sectorPe":"sector average PE","roe":"ROE%","debtToEquity":"D/E ratio","dividendYield":"div%","promoterHolding":"xx%","revenueGrowth":"YoY revenue growth%","profitGrowth":"YoY profit growth%","week52High":"52W high","week52Low":"52W low","rsiZone":"Oversold/Neutral/Overbought","trend":"Uptrend/Consolidation/Downtrend","support":"support level","resistance":"resistance level","reasoning":"100-word detailed analysis: why buy now, what catalyst, sector outlook, risk factors, when to exit","tags":["value","growth","dividend","momentum","turnaround"]}]
+
+Be specific with numbers. Do NOT give generic advice. Give ACTIONABLE picks.`;
+
+    const g = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 8000, timeout: 60000 });
+    const raw = g.text || '[]';
+    log('OK', `AI Long-Term Picks generated (${g.model}), ${raw.length} chars`);
+
+    let picks = [];
+    const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+    try { picks = JSON.parse(cleaned); } catch(_) {}
+    if (!picks.length) {
+      const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
+      if (s >= 0 && e > s) { try { picks = JSON.parse(cleaned.slice(s, e+1)); } catch(_) {} }
+    }
+    if (!picks.length) {
+      const m = cleaned.match(/\{[^{}]*"symbol"\s*:\s*"[^"]+"[^{}]*\}/g);
+      if (m) { for (const x of m) { try { picks.push(JSON.parse(x)); } catch(_) {} } }
+    }
+
+    // Enrich with live prices where available
+    for (const pick of picks) {
+      const live = liveStocks[pick.symbol];
+      if (live && live.price) {
+        pick.livePrice = live.price;
+        pick.liveChange = live.changePct;
+      }
+    }
+
+    aiPicksCache = { picks, lastFetch: Date.now() };
+    res.json({ picks, cached: false, generated: new Date().toISOString(), model: g.model });
+  } catch(e) {
+    log('ERR', 'AI Long-Term Picks failed: ' + e.message);
+    res.status(500).json({ error: 'AI analysis failed: ' + e.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VERIFY STOCK — Deep AI analysis of a single stock (for checking friend's tips)
+// ══════════════════════════════════════════════════════════════════════════════
+app.post('/api/verify-stock', async (req, res) => {
+  const { symbol } = req.body;
+  if (!symbol) return res.status(400).json({ error: 'Stock symbol required' });
+  if (!appConfig.geminiKey) return res.json({ configured: false, error: 'Gemini API key not configured' });
+  try {
+    const sym = symbol.toUpperCase().trim();
+    // Try to get live data
+    const live = liveStocks[sym];
+    const sig = signalCache[sym];
+    const fund = STOCK_UNIVERSE.find(s => s.symbol === sym);
+    const f52 = fundamentals[sym];
+
+    const liveInfo = live ? `Current Price: ₹${live.price} (${live.changePct>=0?'+':''}${live.changePct}%) Volume: ${live.volume||'?'}` : 'Price data not available — use your knowledge';
+    const sigInfo = sig ? `Signal: ${sig.signal} (${sig.score}/100)` : '';
+    const fundInfo = fund ? `PE:${fund.pe} ROE:${fund.roe} D/E:${fund.de} Div:${fund.div}% Target:₹${fund.target}` : '';
+    const w52Info = f52 ? `52W High:₹${f52.high52} 52W Low:₹${f52.low52}` : '';
+
+    const nifty = liveIndices['Nifty 50'];
+    const prompt = `You are an expert Indian stock market research analyst. A retail investor's friend has suggested buying ${sym}. Do a COMPLETE, UNBIASED analysis.
+
+MARKET CONTEXT:
+- Nifty 50: ${nifty?.price||'?'} (${nifty?.changePct>=0?'+':''}${nifty?.changePct||0}%)
+- VIX: ${vixData.value} | FII: ₹${fiiDiiData.fii}Cr | DII: ₹${fiiDiiData.dii}Cr
+
+STOCK DATA WE HAVE:
+${liveInfo}
+${sigInfo}
+${fundInfo}
+${w52Info}
+
+REQUIREMENTS — Be BRUTALLY HONEST:
+1. VERDICT: Is this a good buy right now? BUY / HOLD / AVOID — with confidence level
+2. FUNDAMENTALS: PE vs sector, ROE, debt, revenue/profit growth, promoter holding, any red flags
+3. TECHNICALS: Current trend, RSI zone, support/resistance, 52W position, volume pattern
+4. TARGET: Realistic target price and timeframe
+5. RISK ASSESSMENT: What could go wrong? Rate: LOW / MEDIUM / HIGH / VERY HIGH
+6. STOP LOSS: Where to place SL
+7. BULL CASE: Best scenario — why it could work
+8. BEAR CASE: Worst scenario — why it could fail
+9. BETTER ALTERNATIVES: If this stock is mediocre, suggest 2-3 better options in the same sector
+
+Reply ONLY valid JSON, NO markdown fences:
+{"symbol":"${sym}","name":"Full Name","sector":"sector","verdict":"BUY/HOLD/AVOID","confidence":"VERY_HIGH/HIGH/MODERATE/LOW","riskLevel":"LOW/MEDIUM/HIGH/VERY_HIGH","currentPrice":"₹xxx","targetPrice":"₹xxx","timeframe":"x months","stopLoss":"₹xxx","upside":"xx%","downside":"xx%","pe":"xx","sectorPe":"xx","roe":"xx%","debtToEquity":"x.x","dividendYield":"x%","promoterHolding":"xx%","revenueGrowth":"xx%","profitGrowth":"xx%","week52High":"₹xxx","week52Low":"₹xxx","rsiZone":"Oversold/Neutral/Overbought","trend":"Uptrend/Downtrend/Sideways","support":"₹xxx","resistance":"₹xxx","bullCase":"50-word best case scenario","bearCase":"50-word worst case scenario","reasoning":"100-word detailed honest analysis","redFlags":["flag1","flag2"],"positives":["pos1","pos2"],"alternatives":[{"symbol":"ALT1","reason":"why better"},{"symbol":"ALT2","reason":"why better"}]}`;
+
+    const g = await callGemini(prompt, { temperature: 0.3, maxOutputTokens: 4000, timeout: 45000 });
+    const raw = g.text || '{}';
+    log('OK', `Verify Stock analysis for ${sym} (${g.model}), ${raw.length} chars`);
+
+    let analysis = {};
+    const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+    try { analysis = JSON.parse(cleaned); } catch(_) {
+      const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
+      if (s >= 0 && e > s) { try { analysis = JSON.parse(cleaned.slice(s, e+1)); } catch(_) {} }
+    }
+
+    res.json({ analysis, configured: true, model: g.model });
+  } catch(e) {
+    log('ERR', `Verify Stock failed for ${symbol}: ${e.message}`);
+    res.status(500).json({ error: 'AI analysis failed: ' + e.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// OPTIONS LAB — AI scans market and suggests best options trades
+// ══════════════════════════════════════════════════════════════════════════════
+let optionsLabCache = { trades: [], lastFetch: 0 };
+const OPTIONS_LAB_CACHE_MS = 30 * 60 * 1000; // 30 min cache
+
+app.get('/api/options-lab', async (req, res) => {
+  const force = req.query.force === 'true';
+  if (!force && optionsLabCache.trades.length && (Date.now() - optionsLabCache.lastFetch) < OPTIONS_LAB_CACHE_MS) {
+    return res.json({ trades: optionsLabCache.trades, cached: true, generated: new Date(optionsLabCache.lastFetch).toISOString() });
+  }
+  if (!appConfig.geminiKey) return res.json({ trades: [], configured: false, error: 'Gemini API key not configured' });
+  try {
+    const nifty = liveIndices['Nifty 50'];
+    const bankNifty = liveIndices['Nifty Bank'];
+    const stocks = Object.values(liveStocks).filter(s => s.price && !s.isMock);
+    const topGainers = [...stocks].sort((a,b) => b.changePct - a.changePct).slice(0,15);
+    const topLosers = [...stocks].sort((a,b) => a.changePct - b.changePct).slice(0,15);
+
+    const gainStr = topGainers.map(s => {
+      const f = STOCK_UNIVERSE.find(x => x.symbol === s.symbol);
+      const sig = signalCache[s.symbol];
+      return `${s.symbol}:₹${s.price}(${s.changePct>=0?'+':''}${s.changePct.toFixed(1)}%) PE:${f?.pe||'?'} Sig:${sig?.score||'?'}`;
+    }).join('\n');
+    const loseStr = topLosers.map(s => {
+      const f = STOCK_UNIVERSE.find(x => x.symbol === s.symbol);
+      const sig = signalCache[s.symbol];
+      return `${s.symbol}:₹${s.price}(${s.changePct.toFixed(1)}%) PE:${f?.pe||'?'} Sig:${sig?.score||'?'}`;
+    }).join('\n');
+
+    const prompt = `You are an expert NSE F&O options strategist. Analyse the CURRENT market and recommend the TOP 6-8 BEST options trades to take RIGHT NOW.
+
+LIVE MARKET DATA:
+Nifty=${nifty?.price||'?'}(${nifty?.changePct>=0?'+':''}${nifty?.changePct||0}%) BankNifty=${bankNifty?.price||'?'}(${bankNifty?.changePct>=0?'+':''}${bankNifty?.changePct||0}%)
+VIX=${vixData.value}(${vixData.trend}) FII=₹${fiiDiiData.fii}Cr DII=₹${fiiDiiData.dii}Cr
+Market:${isMarketOpen()?'OPEN':'CLOSED'} Time:${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}
+
+TOP GAINERS (momentum for CE):
+${gainStr}
+
+TOP LOSERS (momentum for PE):
+${loseStr}
+
+ANALYSIS RULES:
+1. Use TOP GAINERS for CE (Call) trades — ride the momentum
+2. Use TOP LOSERS for PE (Put) trades — ride the downtrend
+3. Also consider NIFTY and BANKNIFTY index options
+4. For each trade: specify exact strategy (Naked CE/PE, Bull Call Spread, Bear Put Spread, Iron Condor)
+5. HIGH VIX (>18) = prefer selling premium / spreads. LOW VIX (<13) = prefer buying options
+6. Give SPECIFIC strike prices relative to current price
+7. Include risk/reward ratio, max loss, and hedge suggestions
+8. Rate each: AGGRESSIVE, MODERATE, CONSERVATIVE
+
+Reply ONLY valid JSON array, NO markdown fences:
+[{"symbol":"SYMBOL","direction":"CE/PE","strategy":"Naked CE / Bull Call Spread 23000-23200 / etc","strategyType":"NAKED/VERTICAL_SPREAD/IRON_CONDOR/STRADDLE/HEDGED","currentPrice":"₹xxx","strikePrice":"xxxx CE/PE","entry":"₹xx-₹xx premium range","target":"₹xx-₹xx target premium","stopLoss":"₹xx SL on premium","expiry":"weekly/monthly","targetTime":"1-3 days / 1 week / monthly","riskReward":"1:2","maxLoss":"₹xxx per lot","lotSize":"lot size","margin":"approx margin required","confidence":"HIGH/MEDIUM/LOW","riskType":"AGGRESSIVE/MODERATE/CONSERVATIVE","reasoning":"80-word analysis: why this trade, momentum/reversal logic, IV consideration, key levels","hedgeSuggestion":"optional: buy xxx as protection","sentiment":"BULLISH/BEARISH/NEUTRAL"}]`;
+
+    const g = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 6000, timeout: 50000 });
+    const raw = g.text || '[]';
+    log('OK', `Options Lab generated (${g.model}), ${raw.length} chars`);
+
+    let trades = [];
+    const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+    try { trades = JSON.parse(cleaned); } catch(_) {}
+    if (!trades.length) {
+      const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
+      if (s >= 0 && e > s) { try { trades = JSON.parse(cleaned.slice(s, e+1)); } catch(_) {} }
+    }
+    if (!trades.length) {
+      const m = cleaned.match(/\{[^{}]*"symbol"\s*:\s*"[^"]+"[^{}]*\}/g);
+      if (m) { for (const x of m) { try { trades.push(JSON.parse(x)); } catch(_) {} } }
+    }
+
+    optionsLabCache = { trades, lastFetch: Date.now() };
+    res.json({ trades, cached: false, generated: new Date().toISOString(), model: g.model });
+  } catch(e) {
+    log('ERR', 'Options Lab failed: ' + e.message);
+    res.status(500).json({ error: 'AI analysis failed: ' + e.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TRADES CSV IMPORT (Zerodha tradebook format)
+// ══════════════════════════════════════════════════════════════════════════════
+app.post('/api/trades/import-csv', (req, res) => {
+  const { csvData } = req.body;
+  if (!csvData) return res.status(400).json({ error: 'CSV data required' });
+  try {
+    const lines = csvData.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) return res.status(400).json({ error: 'CSV must have header + data rows' });
+    const header = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g,''));
+    const imported = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',').map(c => c.trim().replace(/"/g,''));
+      const row = {};
+      header.forEach((h, idx) => { row[h] = cols[idx] || ''; });
+      // Zerodha tradebook fields: symbol, isin, trade_date, exchange, segment, series, trade_type, quantity, price, trade_id, order_id
+      const symbol = (row.symbol || row.tradingsymbol || '').toUpperCase();
+      const tradeType = (row.trade_type || row.type || '').toUpperCase();
+      const qty = Math.abs(parseFloat(row.quantity || row.qty || 0));
+      const price = parseFloat(row.price || row.trade_price || 0);
+      const date = row.trade_date || row.date || row.order_execution_time || '';
+      if (!symbol || !qty || !price) continue;
+      // For P&L we need buy+sell pairs. Import as individual legs — user can pair them
+      const trade = {
+        id: Date.now().toString(36) + '-' + i,
+        symbol, qty, price: +price.toFixed(2),
+        type: tradeType === 'BUY' ? 'buy' : tradeType === 'SELL' ? 'sell' : tradeType.toLowerCase(),
+        date: date.split(' ')[0], // just date part
+        exchange: row.exchange || 'NSE',
+        segment: row.segment || 'EQ',
+        source: 'zerodha-csv',
+        added: new Date().toISOString()
+      };
+      imported.push(trade);
+    }
+    // Auto-pair buy/sell trades into P&L entries
+    const buys = {}, sells = {};
+    for (const t of imported) {
+      const key = t.symbol;
+      if (t.type === 'buy') { if (!buys[key]) buys[key] = []; buys[key].push(t); }
+      else if (t.type === 'sell') { if (!sells[key]) sells[key] = []; sells[key].push(t); }
+    }
+    let paired = 0;
+    for (const sym of Object.keys(buys)) {
+      const buyList = buys[sym] || [];
+      const sellList = sells[sym] || [];
+      const minLen = Math.min(buyList.length, sellList.length);
+      for (let j = 0; j < minLen; j++) {
+        const b = buyList[j], s = sellList[j];
+        const trade = {
+          id: Date.now().toString(36) + '-p' + paired,
+          symbol: sym, qty: Math.min(b.qty, s.qty),
+          buyPrice: b.price, sellPrice: s.price,
+          buyDate: b.date, sellDate: s.date,
+          type: 'csv-import', source: 'zerodha-csv',
+          segment: b.segment, added: new Date().toISOString()
+        };
+        tradeHistory.push(trade);
+        paired++;
+      }
+    }
+    saveTrades();
+    log('OK', `CSV imported: ${imported.length} rows, ${paired} trades paired`);
+    res.json({ ok: true, imported: imported.length, paired, totalTrades: tradeHistory.length, rawTrades: imported });
+  } catch(e) {
+    log('ERR', 'CSV import failed: ' + e.message);
+    res.status(500).json({ error: 'CSV import failed: ' + e.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 // SETTINGS & CONFIG APIs
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/api/settings', (req, res) => {
