@@ -759,6 +759,16 @@ body{color:var(--t1);font-family:var(--ui);font-size:14px;-webkit-font-smoothing
               </div>
             </div>
           </div>
+
+          <!-- AI Options Recommendations -->
+          <div class="card" style="border-left:3px solid var(--acc)">
+            <div class="card-t">🎯 AI Options Picks — What to Trade Now<span class="ct-r" style="color:var(--grn)">AI</span></div>
+            <div style="padding:0 4px">
+              <div style="font-size:11px;color:var(--t3);margin-bottom:10px;line-height:1.5">AI analyses live market data, signals, VIX, FII/DII flows and recommends the best stocks for options trading right now with CE/PE direction.</div>
+              <button class="ov-btn" onclick="getOptionsRecs()" id="or-btn">🎯 Get AI Recommendations</button>
+              <div id="or-result" style="margin-top:10px"></div>
+            </div>
+          </div>
         </div>
 
         <!-- Signals tab -->
@@ -1721,6 +1731,56 @@ async function validateOptions() {
   }
   btn.disabled=false;btn.textContent='🔍 Analyse This Trade';
 }
+
+async function getOptionsRecs() {
+  const btn=document.getElementById('or-btn'),res=document.getElementById('or-result');
+  btn.disabled=true;btn.textContent='🤔 Analysing market with AI...';
+  res.innerHTML='<div style="text-align:center;color:var(--t3);font-size:12px;padding:20px">Gemini AI is analysing 30 stocks, VIX, FII/DII flows...<br>This may take 10-15 seconds</div>';
+  try {
+    const d=await(await fetch('/api/options-recommend')).json();
+    if(!d.configured){
+      res.innerHTML='<div style="color:var(--ora);font-family:var(--mono);font-size:11px;line-height:1.8">⚠️ Gemini API key not configured.<br>Add <b>GEMINI_API_KEY</b> to Railway env vars.</div>';
+      btn.disabled=false;btn.textContent='🎯 Get AI Recommendations';return;
+    }
+    if(d.error){res.innerHTML='<div style="color:var(--red);font-size:11px">'+d.error+'</div>';btn.disabled=false;btn.textContent='🎯 Get AI Recommendations';return;}
+    const recs=d.recommendations||[];
+    if(!recs.length){
+      res.innerHTML='<div style="font-size:12px;color:var(--t2);line-height:1.8">'+(d.raw||'No recommendations available')+'</div>';
+      btn.disabled=false;btn.textContent='🎯 Get AI Recommendations';return;
+    }
+    let html='<div style="font-family:var(--mono);font-size:9px;color:var(--t3);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">AI PICKS — '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})+'</div>';
+    for(const r of recs){
+      const isCE=r.direction==='CE';
+      const dirCol=isCE?'var(--grn)':'var(--red)';
+      const dirIcon=isCE?'📈':'📉';
+      const confCol=r.confidence==='HIGH'?'var(--grn)':r.confidence==='MEDIUM'?'var(--acc)':'var(--t3)';
+      const riskCol=r.riskLevel==='LOW'?'var(--grn)':r.riskLevel==='HIGH'?'var(--red)':'var(--acc)';
+      html+='<div style="background:var(--s2);border-radius:12px;padding:14px;margin-bottom:10px;border-left:3px solid '+dirCol+'">'
+        +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+        +'<span style="font-size:22px;font-weight:900;color:var(--t1)">'+(r.symbol||'')+'</span>'
+        +'<span style="font-size:16px;font-weight:800;color:'+dirCol+'">'+dirIcon+' '+(r.direction||'')+'</span>'
+        +'<span style="font-family:var(--mono);font-size:9px;padding:3px 8px;border-radius:50px;border:1px solid '+confCol+';color:'+confCol+';margin-left:auto">'+(r.confidence||'')+' CONF</span>'
+        +'</div>';
+      if(r.strategy) html+='<div style="font-family:var(--mono);font-size:11px;color:var(--acc);margin-bottom:6px">📋 '+r.strategy+'</div>';
+      if(r.reasoning) html+='<div style="font-size:12px;color:var(--t2);line-height:1.7;margin-bottom:8px">'+r.reasoning+'</div>';
+      html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">';
+      if(r.entry) html+='<div style="background:var(--s3);border-radius:8px;padding:6px 8px"><div style="font-family:var(--mono);font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">Entry</div><div style="font-size:11px;color:var(--t1);margin-top:2px">'+r.entry+'</div></div>';
+      if(r.target) html+='<div style="background:var(--s3);border-radius:8px;padding:6px 8px"><div style="font-family:var(--mono);font-size:8px;color:var(--grn);text-transform:uppercase;letter-spacing:.5px">Target</div><div style="font-size:11px;color:var(--grn);margin-top:2px">'+r.target+'</div></div>';
+      if(r.stopLoss) html+='<div style="background:var(--s3);border-radius:8px;padding:6px 8px"><div style="font-family:var(--mono);font-size:8px;color:var(--red);text-transform:uppercase;letter-spacing:.5px">Stop Loss</div><div style="font-size:11px;color:var(--red);margin-top:2px">'+r.stopLoss+'</div></div>';
+      html+='</div>';
+      html+='<div style="display:flex;gap:8px;margin-top:6px">';
+      if(r.riskLevel) html+='<span style="font-family:var(--mono);font-size:9px;color:'+riskCol+'">Risk: '+r.riskLevel+'</span>';
+      if(r.timeframe) html+='<span style="font-family:var(--mono);font-size:9px;color:var(--t3)">'+r.timeframe+'</span>';
+      html+='</div></div>';
+    }
+    html+='<div style="font-family:var(--mono);font-size:9px;color:var(--t4);text-align:center;margin-top:8px">⚠️ AI recommendations are for analysis only — not financial advice. Always do your own research.</div>';
+    res.innerHTML=html;
+  } catch(e){
+    res.innerHTML='<div style="color:var(--red);font-family:var(--mono);font-size:11px">Error: '+e.message+'</div>';
+  }
+  btn.disabled=false;btn.textContent='🎯 Get AI Recommendations';
+}
+
 // ══════════════════════════════════════════════════════════
 // MODAL
 // ══════════════════════════════════════════════════════════

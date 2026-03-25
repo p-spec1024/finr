@@ -369,6 +369,80 @@ confidence must be exactly HIGH, MEDIUM, or LOW.`;
   }
 });
 
+// ── AI Options Recommendations ──
+app.get('/api/options-recommend', async (req, res) => {
+  if (!appConfig.geminiKey) return res.json({ recommendations: [], configured: false, error: 'Gemini API key not configured' });
+  try {
+    const nifty = liveIndices['Nifty 50'];
+    const bankNifty = liveIndices['Nifty Bank'];
+    // Build top movers and signals summary
+    const stocks = Object.values(liveStocks).filter(s => !s.isMock && s.price);
+    const topGainers = [...stocks].sort((a,b) => b.changePct - a.changePct).slice(0,5);
+    const topLosers  = [...stocks].sort((a,b) => a.changePct - b.changePct).slice(0,5);
+    const strongSignals = Object.values(signalCache).filter(s => s.score >= 65).sort((a,b) => b.score - a.score).slice(0,8);
+
+    const stockSummary = stocks.slice(0,30).map(s => {
+      const sig = signalCache[s.symbol];
+      const fund = STOCK_UNIVERSE.find(x => x.symbol === s.symbol);
+      return `${s.symbol}: ₹${s.price} (${s.changePct>=0?'+':''}${s.changePct.toFixed(2)}%) PE:${fund?.pe||'?'} Signal:${sig?.signal||'--'} Score:${sig?.score||0}`;
+    }).join('\n');
+
+    const prompt = `You are an expert NSE F&O options strategist for Indian retail investors. Analyse the current market and recommend the TOP 5 stocks best suited for options trading RIGHT NOW. For each stock, suggest whether to take CE (Call) or PE (Put) and give a specific strategy.
+
+CURRENT MARKET SNAPSHOT:
+- Nifty 50: ${nifty?.price || 'N/A'} (${nifty?.changePct >= 0 ? '+' : ''}${nifty?.changePct || 0}%)
+- Bank Nifty: ${bankNifty?.price || 'N/A'} (${bankNifty?.changePct >= 0 ? '+' : ''}${bankNifty?.changePct || 0}%)
+- India VIX: ${vixData.value} (${vixData.trend}) — ${vixData.value > 20 ? 'HIGH VOLATILITY' : vixData.value < 13 ? 'LOW VOLATILITY' : 'MODERATE'}
+- FII Flow: ₹${fiiDiiData.fii}Cr | DII Flow: ₹${fiiDiiData.dii}Cr
+- Market: ${isMarketOpen() ? 'OPEN' : 'CLOSED'} | IST: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+
+TOP GAINERS: ${topGainers.map(s => `${s.symbol}(${s.changePct>=0?'+':''}${s.changePct.toFixed(2)}%)`).join(', ')}
+TOP LOSERS: ${topLosers.map(s => `${s.symbol}(${s.changePct.toFixed(2)}%)`).join(', ')}
+
+STOCK DATA:
+${stockSummary}
+
+Respond ONLY with valid JSON array — no markdown fences, no preamble:
+[{"symbol":"STOCKNAME","direction":"CE","confidence":"HIGH","strategy":"Brief strategy name (e.g. Buy 24500 CE weekly)","reasoning":"2-3 line analysis covering trend, volatility, support/resistance, why CE or PE","entry":"Specific entry condition or price range","target":"Target profit % or price","stopLoss":"Stop loss level or %","riskLevel":"LOW/MEDIUM/HIGH","timeframe":"Intraday/Weekly/Monthly"},...]
+
+RULES:
+- Only recommend F&O eligible stocks (large-cap, high liquidity)
+- direction must be CE or PE only
+- confidence must be HIGH, MEDIUM, or LOW
+- Consider VIX for strategy selection (high VIX = sell options, low VIX = buy options)
+- Consider FII/DII flows for market direction
+- Give specific strike guidance where possible
+- Include at least one index option (NIFTY or BANKNIFTY) if conditions are favorable`;
+
+    const r = await axios.post(
+      `https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-flash-preview:generateContent?key=${appConfig.geminiKey}`,
+      { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 2500 } },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 45000 }
+    );
+    const raw = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+    log('OK', 'Gemini options recommendations generated');
+    // Try to parse as JSON, fallback to raw
+    let recs = [];
+    try {
+      const cleaned = raw.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+      recs = JSON.parse(cleaned);
+    } catch(pe) {
+      // Try regex extraction for each recommendation object
+      const objRegex = /\{[^{}]*"symbol"[^{}]*\}/g;
+      const matches = raw.match(objRegex);
+      if (matches) {
+        for (const m of matches) {
+          try { recs.push(JSON.parse(m)); } catch(_) {}
+        }
+      }
+    }
+    res.json({ recommendations: recs, raw: recs.length ? undefined : raw, configured: true });
+  } catch(e) {
+    log('ERR', 'Gemini options recommend failed: ' + e.message);
+    res.status(500).json({ error: 'AI analysis failed: ' + e.message });
+  }
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // SETTINGS & CONFIG APIs
 // ══════════════════════════════════════════════════════════════════════════════
@@ -992,8 +1066,9 @@ function processUpstoxQuote(key, val) {
   // Response keys use COLON format: "NSE_EQ:RELIANCE", not pipe format
   const price = val.last_price;
   if (!price) return false;
-  const close = val.ohlc?.close || price;
-  const change = price - close, pct = close ? (change / close) * 100 : 0;
+  // close_price = previous day's close; ohlc.close = today's running close (same as last_price)
+  const prevClose = val.close_price || val.ohlc?.close || price;
+  const change = price - prevClose, pct = prevClose ? (change / prevClose) * 100 : 0;
   const iToken = val.instrument_token || ''; // pipe format: NSE_EQ|INE...
 
   if (key.includes('NSE_INDEX')) {
@@ -1046,6 +1121,9 @@ async function pollUpstoxPrices() {
         if (pollFirstLog) {
           const keys = Object.keys(data).slice(0, 3);
           log('OK', `Upstox REST first response — ${Object.keys(data).length} instruments, sample keys: ${keys.join(', ')}`);
+          // Log one sample quote to verify field names
+          const sampleVal = Object.values(data)[0];
+          if (sampleVal) log('INFO', `Sample quote fields: last_price=${sampleVal.last_price} close_price=${sampleVal.close_price} ohlc.close=${sampleVal.ohlc?.close} net_change=${sampleVal.net_change}`);
           pollFirstLog = false;
         }
         for (const [key, val] of Object.entries(data)) {
