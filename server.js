@@ -785,13 +785,10 @@ function startMockTicks() {
     const marketOpen = isMarketOpen();
 
     if (!marketOpen) {
-      // Market closed — only indices drift (Gift Nifty, global futures trade 24/7)
-      for (const d of Object.values(liveIndices)) {
-        const drift = (Math.random() - 0.499) * d.price * 0.0002;
-        d.price = +(d.price + drift).toFixed(2);
-        d.change = +(d.change + drift).toFixed(2);
-        d.changePct = +((d.change / (IDX_BASE[d.name] || d.price)) * 100).toFixed(2);
-      }
+      // Market closed — freeze all data, no random movement
+      clearInterval(mockInterval); mockInterval = null;
+      log('INFO', 'Mock ticks stopped — market closed, data frozen');
+      return;
     } else {
       // Market open — realistic intraday simulation
       // Momentum factor: slight trending bias changes every ~60 ticks
@@ -858,9 +855,11 @@ async function initLiveData() {
   initMockData();
   if (accessToken) {
     connectUpstoxWs();
-    setTimeout(() => { if (Object.keys(liveStocks).length < 5) startMockTicks(); }, 5000);
-  } else {
+    setTimeout(() => { if (Object.keys(liveStocks).length < 5 && isMarketOpen()) startMockTicks(); }, 5000);
+  } else if (isMarketOpen()) {
     startMockTicks();
+  } else {
+    log('INFO', 'Market closed — serving frozen base prices (no mock ticks)');
   }
   log('OK', `Live data initialized — ${stockUniverse.length} stocks`);
 }
@@ -1045,7 +1044,7 @@ function errorPage(title, detail, host) {
 // ══════════════════════════════════════════════════════════════════════════════
 // SCHEDULED JOBS
 // ══════════════════════════════════════════════════════════════════════════════
-cron.schedule('15 9 * * 1-5', () => { if (accessToken) { initLiveData(); log('INFO', 'Market open — live data started'); } });
+cron.schedule('15 9 * * 1-5', () => { initLiveData(); log('INFO', 'Market open — live data started'); });
 cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); if (mockInterval) { clearInterval(mockInterval); mockInterval = null; } });
 cron.schedule('0 10,14 * * 1-5', () => { if (zAccessToken) { fetchZerodhaData(); log('INFO', 'Zerodha data refresh'); } });
 
