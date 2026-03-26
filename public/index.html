@@ -1297,10 +1297,13 @@ tailwind.config = {
               </div>
               <div class="api-card-body" style="max-height:0;overflow:hidden;opacity:0;transition:max-height 0.25s ease,opacity 0.2s ease;">
                 <div class="px-4 pb-3 space-y-2">
-                  <p class="text-[11px] text-[#d0c6ab]">Paste your GCP service account JSON below:</p>
-                  <textarea id="vertex-sa-json" class="w-full bg-[#242426] border-none rounded-lg text-[10px] py-2 px-3 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none font-mono h-24 resize-none" placeholder='{"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}'></textarea>
+                  <p class="text-[11px] text-[#d0c6ab]">Extract the <span class="font-mono text-[#ffd60a]">.json</span> file from your zip, open it in any text editor, copy all contents, and paste below:</p>
+                  <textarea id="vertex-sa-json" class="w-full bg-[#242426] border-none rounded-lg text-[10px] py-2 px-3 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none font-mono h-24 resize-none" placeholder='{"type":"service_account","project_id":"your-project","private_key":"-----BEGIN PRIVATE KEY-----\n...","client_email":"...@...iam.gserviceaccount.com"}'></textarea>
                   <div id="vertex-test-result" class="font-mono text-[10px] text-[#d0c6ab]"></div>
-                  <button class="w-full py-1.5 rounded-lg bg-[#353534] text-[#d0c6ab] text-[10px] font-bold mt-1" onclick="saveVertex()">Save</button>
+                  <div class="flex gap-2">
+                    <button class="flex-1 py-1.5 rounded-lg bg-[#353534] text-[#d0c6ab] text-[10px] font-bold" onclick="saveVertex(false)">Save</button>
+                    <button class="flex-1 py-1.5 rounded-lg bg-[#ffd60a]/20 text-[#ffd60a] text-[10px] font-bold" onclick="testVertex()">Save & Test</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2970,8 +2973,14 @@ async function doZerodhaRefresh() {
 }
 
 async function testVertex() {
-  toast('Testing Vertex AI...');
   const el = document.getElementById('vertex-test-result');
+  // If there's JSON in the textarea, save first then test
+  const raw = document.getElementById('vertex-sa-json').value.trim();
+  if (raw) {
+    const saved = await saveVertex(true); // silent save
+    if (!saved) return; // save failed, error already shown
+  }
+  toast('Testing Vertex AI...');
   try {
     const r = await fetch('/api/vertex-test', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}).then(x=>x.json());
     if (r.ok) {
@@ -2988,21 +2997,38 @@ async function testVertex() {
   }
 }
 
-async function saveVertex() {
+async function saveVertex(silent) {
   const raw = document.getElementById('vertex-sa-json').value.trim();
-  if (!raw) { toast('Paste service account JSON first'); return; }
+  const el = document.getElementById('vertex-test-result');
+  if (!raw) { toast('Paste the service account JSON first'); return false; }
+  // Check if user pasted a zip or non-JSON content
+  if (raw.startsWith('PK') || raw.includes('\x00') || !raw.startsWith('{')) {
+    if (el) el.innerHTML = '<span class="text-[#ffb4ab]">This looks like a zip file — extract the .json file from the zip first, then paste its contents here</span>';
+    toast('Extract the .json from the zip file first');
+    return false;
+  }
   try {
     const parsed = JSON.parse(raw);
+    if (!parsed.project_id || !parsed.private_key || !parsed.client_email) {
+      if (el) el.innerHTML = '<span class="text-[#ffb4ab]">Missing required fields: project_id, private_key, or client_email</span>';
+      toast('Invalid service account — missing required fields');
+      return false;
+    }
     const r = await fetch('/api/vertex-save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({serviceAccountJson: parsed})}).then(x=>x.json());
     if (r.success) {
-      toast('Vertex AI service account saved');
-      document.getElementById('vertex-test-result').innerHTML = '<span class="text-[#47e266]">Saved · ' + r.clientEmail + '</span>';
+      if (!silent) toast('Vertex AI service account saved');
+      if (el) el.innerHTML = '<span class="text-[#47e266]">Saved · ' + r.clientEmail + '</span>';
       fetchStatus();
+      return true;
     } else {
+      if (el) el.innerHTML = '<span class="text-[#ffb4ab]">' + (r.error || 'Save failed') + '</span>';
       toast('Error: ' + (r.error || 'Save failed'));
+      return false;
     }
   } catch(e) {
-    toast('Invalid JSON format — paste the full service account JSON');
+    if (el) el.innerHTML = '<span class="text-[#ffb4ab]">Invalid JSON — make sure you paste the contents of the .json file (not the .zip)</span>';
+    toast('Invalid JSON — extract the .json from your zip file first');
+    return false;
   }
 }
 
