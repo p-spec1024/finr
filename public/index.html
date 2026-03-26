@@ -218,7 +218,7 @@ tailwind.config = {
     /* ---- P&L TRACKER ---- */
     #pg-pnl > div{display:block;}
     #ptab-dashboard > section.grid{grid-template-columns:repeat(6,1fr)!important;}
-    #ptab-add{display:flex;justify-content:center;}
+    #ptab-add.on{display:flex;justify-content:center;}
 
     /* ---- COMMAND CENTRE: 3-col ---- */
     #pg-more > div > .cc-top-actions{grid-column:1/-1;}
@@ -332,13 +332,10 @@ tailwind.config = {
     /* ---- VERIFY PICK: wider center ---- */
     #pg-verify-pick > div{max-width:800px!important;margin-left:auto;margin-right:auto;}
 
-    /* ---- P&L: main + side panel ---- */
-    #pg-pnl > div{display:grid!important;grid-template-columns:1fr 380px;gap:24px;align-items:start;}
-    #pg-pnl > div > #pnl-tabs{grid-column:1/-1;}
-    #ptab-dashboard > section.grid{grid-template-columns:repeat(6,1fr)!important;grid-column:1/-1;}
-    #ptab-dashboard > section:last-child{grid-column:1;} /* Trade list stays left */
-    #ptab-add{grid-column:2;grid-row:2/5;display:flex;justify-content:center;} /* Add Trade form in right panel */
-    #ptab-import{grid-column:1/-1;}
+    /* ---- P&L TRACKER ---- */
+    #pg-pnl > div{display:block!important;}
+    #ptab-dashboard > section.grid{grid-template-columns:repeat(6,1fr)!important;}
+    #ptab-add.on{display:flex;justify-content:center;}
 
     /* ---- COMMAND CENTRE ---- */
     #pg-more > div > .cc-top-actions{grid-column:1/-1;}
@@ -2193,36 +2190,34 @@ let liveAnalysisInterval = null;
 let liveAnalysisSessionId = null;
 let laLegCount = 1;
 
-const INDEX_SYMBOLS = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX'];
+const INDEX_SYMBOLS = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX', 'BANK NIFTY', 'FIN NIFTY', 'MIDCP NIFTY'];
 
 function suggestExpiries(symbolInput) {
   const leg = symbolInput.closest('.la-leg');
   if (!leg) return;
   const sugDiv = leg.querySelector('.la-expiry-suggestions');
-  const expiryInput = leg.querySelector('.la-expiry');
   if (!sugDiv) return;
   const sym = symbolInput.value.trim().toUpperCase();
   if (!sym) { sugDiv.innerHTML = ''; return; }
-  const isIndex = INDEX_SYMBOLS.includes(sym);
+  // Normalize: strip spaces for matching (BANK NIFTY → BANKNIFTY)
+  const symNorm = sym.replace(/\s+/g, '');
+  const isIndex = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'].includes(symNorm);
   const today = new Date();
   today.setHours(0,0,0,0);
   const expiries = [];
   if (isIndex) {
-    // Weekly expiry: next 6 Thursdays
+    // Weekly expiry: next 8 Thursdays
     let d = new Date(today);
-    while (expiries.length < 6) {
+    while (expiries.length < 8) {
       d.setDate(d.getDate() + 1);
-      if (d.getDay() === 4) { // Thursday
-        expiries.push(new Date(d));
-      }
+      if (d.getDay() === 4) expiries.push(new Date(d));
     }
   } else {
-    // Monthly expiry: last Thursday of current month and next 2 months
-    for (let m = 0; m < 3; m++) {
+    // Monthly expiry: last Thursday of current + next 5 months (gives 4-6 future dates)
+    for (let m = 0; m < 6; m++) {
       const year = today.getFullYear();
       const month = today.getMonth() + m;
-      // Find last Thursday of this month
-      const lastDay = new Date(year, month + 1, 0); // last day of month
+      const lastDay = new Date(year, month + 1, 0);
       let d = new Date(lastDay);
       while (d.getDay() !== 4) d.setDate(d.getDate() - 1);
       if (d > today) expiries.push(new Date(d));
