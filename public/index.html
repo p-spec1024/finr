@@ -881,8 +881,8 @@ tailwind.config = {
                 <div class="text-[9px] text-[#d0c6ab] font-mono" id="la-exit-strategy"></div>
                 <!-- Auto-refresh indicator -->
                 <div class="flex items-center gap-1.5 mt-3" id="la-auto-indicator">
-                  <span class="w-1.5 h-1.5 rounded-full bg-[#47e266] animate-pulse"></span>
-                  <span class="text-[8px] text-[#47e266] font-mono uppercase">Auto-refreshing every 30s</span>
+                  <span class="w-1.5 h-1.5 rounded-full bg-[#47e266]"></span>
+                  <span class="text-[8px] text-[#47e266] font-mono uppercase">Monitoring active — click Analyse Now to refresh</span>
                   <span class="text-[8px] text-[#636366] font-mono ml-auto" id="la-last-update">--</span>
                 </div>
               </div>
@@ -1319,10 +1319,7 @@ tailwind.config = {
             <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5 api-card">
               <div class="px-4 py-3 flex items-center justify-between cursor-pointer" onclick="toggleApiCard(this);loadHealth()">
                 <div class="flex items-center gap-3"><span class="material-symbols-outlined text-[#47e266] text-base">health_and_safety</span><span class="font-bold text-sm text-[#e5e2e1]">System Health</span></div>
-                <div class="flex items-center gap-2">
-                  <span class="material-symbols-outlined text-[#d0c6ab] text-sm cursor-pointer hover:text-[#ffd60a] transition-colors" onclick="event.stopPropagation();loadHealth();toast('Health refreshed')">refresh</span>
-                  <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200">expand_more</span>
-                </div>
+                <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200">expand_more</span>
               </div>
               <div class="api-card-body" style="max-height:0;overflow:hidden;opacity:0;transition:max-height 0.25s ease,opacity 0.2s ease;">
                 <div id="sys-health" class="px-4 pb-3 space-y-2"></div>
@@ -2431,8 +2428,7 @@ function startLiveAnalysis() {
     document.getElementById('la-subtitle').textContent = legs.map(l => `${l.positionType} ${l.strike||''} ${l.optionType} @₹${l.entryPrice}`).join(' | ');
   }
   runLiveAnalysis();
-  liveAnalysisInterval = setInterval(runLiveAnalysis, 30000);
-  toast('Live monitoring started — auto-refresh every 30s');
+  toast('Live monitoring started — click "Analyse Now" to refresh');
 }
 
 async function runLiveAnalysis() {
@@ -2498,7 +2494,6 @@ function stopLiveAnalysis() {
   liveAnalysisSessionId = null;
   document.getElementById('la-form').classList.remove('hidden');
   document.getElementById('la-results').classList.add('hidden');
-  document.getElementById('la-auto-indicator').querySelector('span').classList.remove('animate-pulse');
   toast('Live monitoring stopped');
 }
 
