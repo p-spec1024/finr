@@ -128,6 +128,137 @@ tailwind.config = {
 
   /* Calendar date picker indicator */
   input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);}
+
+  /* ═══════ DESKTOP RESPONSIVE LAYER ═══════ */
+
+  /* Desktop sidebar — hidden on mobile */
+  .desktop-sidebar{display:none;}
+
+  @media(min-width:768px){
+    /* Sidebar: collapsed (icon-only) at tablet */
+    .desktop-sidebar{
+      display:flex;flex-direction:column;justify-content:space-between;
+      position:fixed;left:0;top:0;height:100vh;z-index:70;
+      background:rgba(28,27,27,0.6);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+      padding:24px 12px;overflow-y:auto;overflow-x:hidden;
+      width:64px;transition:width 0.2s ease;
+    }
+    .desktop-sidebar::-webkit-scrollbar{display:none;}
+    .sidebar-top{display:flex;flex-direction:column;gap:32px;}
+    .sidebar-logo{display:flex;align-items:center;gap:10px;padding:0 8px;overflow:hidden;min-height:36px;}
+    .sidebar-logo-text{display:none;flex-direction:column;white-space:nowrap;}
+    .sidebar-nav{display:flex;flex-direction:column;gap:2px;}
+    .sidebar-item{
+      display:flex;align-items:center;gap:12px;padding:10px 12px;
+      color:#d0c6ab;cursor:pointer;transition:all 0.2s;
+      font-family:'Manrope',sans-serif;font-weight:700;font-size:12px;
+      text-transform:uppercase;letter-spacing:0.05em;text-decoration:none;
+      border-radius:8px;white-space:nowrap;overflow:hidden;
+    }
+    .sidebar-item:hover{color:#fff5dc;background:rgba(53,53,52,0.5);}
+    .sidebar-item.active{color:#ffd60a;border-right:2px solid #ffd60a;background:rgba(53,53,52,0.2);}
+    .sidebar-item .material-symbols-outlined{font-size:20px;flex-shrink:0;}
+    .sidebar-label{display:none;}
+    .sidebar-bottom{display:flex;flex-direction:column;gap:8px;padding-top:16px;border-top:1px solid rgba(77,70,50,0.15);}
+    .sidebar-status{display:flex;align-items:center;gap:8px;padding:8px 12px;color:#47e266;font-size:10px;font-family:'Manrope',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap;overflow:hidden;}
+    .sidebar-status .sidebar-label{display:none;}
+
+    /* App shell layout shift for sidebar */
+    #app{margin-left:64px;width:calc(100% - 64px);}
+    #ticker{left:64px;width:calc(100% - 64px);}
+    #topbar{left:64px;width:calc(100% - 64px);}
+
+    /* Hide bottom nav on desktop */
+    nav.fixed.bottom-0{display:none!important;}
+
+    /* Reduce bottom padding since no bottom nav */
+    #content{padding-bottom:32px!important;}
+
+    /* Remove max-width constraint — let content breathe on desktop */
+    #pg-home > div,
+    #pg-insights > div,
+    #pg-options-lab > div,
+    #pg-verify-pick > div,
+    #pg-pnl > div,
+    #pg-more > div{max-width:1400px!important;padding-left:32px;padding-right:32px;}
+
+    /* ---- HOME TAB: 2-col grid ---- */
+    #pg-home > div{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
+    #pg-home > div > section:first-child{grid-column:1/-1;} /* Hero: full width */
+    #pg-home > div > .overflow-x-auto{grid-column:1/-1;} /* Index chips: full width */
+    #pg-home > div > section#news-card{grid-column:1/-1;} /* News: full width at md */
+
+    /* ---- INSIGHTS / AI PICKS ---- */
+    #picks-list{display:grid!important;grid-template-columns:repeat(2,1fr);gap:16px;}
+    #picks-list > div{margin-bottom:0!important;} /* Override space-y */
+
+    /* ---- OPTIONS LAB: 2-col ---- */
+    #opts-list-page{display:grid!important;grid-template-columns:repeat(2,1fr);gap:16px;}
+    #opts-list-page > div{margin-bottom:0!important;}
+    /* Hide back arrow on desktop since sidebar nav exists */
+    #pg-options-lab .material-symbols-outlined[onclick*="goTab('insights')"],
+    #pg-verify-pick .material-symbols-outlined[onclick*="goTab('insights')"]{display:none;}
+
+    /* ---- P&L TRACKER ---- */
+    #pg-pnl > div{display:block;}
+    #ptab-dashboard > section.grid{grid-template-columns:repeat(4,1fr)!important;}
+
+    /* ---- COMMAND CENTRE: 2-col ---- */
+    #pg-more > div{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
+    #pg-more > div > section:first-child{grid-column:1/-1;} /* Command Centre header + Connect All */
+    #pg-more > div > section:last-child{grid-column:1/-1;} /* System section spans full */
+    #pg-more > div > footer{grid-column:1/-1;}
+
+    /* Desktop bottom sheet becomes centered modal */
+    .bottom-sheet{max-width:640px;border-radius:20px;margin:auto;}
+    .bottom-sheet-overlay.on{align-items:center;}
+  }
+
+  /* ═══════ FULL SIDEBAR AT 1280px+ ═══════ */
+  @media(min-width:1280px){
+    .desktop-sidebar{width:240px;padding:24px 16px;}
+    .sidebar-logo-text{display:flex;}
+    .sidebar-label{display:inline;}
+    .sidebar-status .sidebar-label{display:inline;}
+
+    #app{margin-left:240px;width:calc(100% - 240px);}
+    #ticker{left:240px;width:calc(100% - 240px);}
+    #topbar{left:240px;width:calc(100% - 240px);}
+
+    /* ---- HOME: 3-col hero indices, 2-col rest ---- */
+    #pg-home > div{grid-template-columns:1fr 1fr 1fr;}
+    #pg-home > div > section:first-child{grid-column:1/-1;} /* Hero: full width */
+    #pg-home > div > .overflow-x-auto{grid-column:1/-1;} /* Index chips: full width */
+    #pg-home > div > section#news-card{grid-column:1/3;} /* News: 2 of 3 cols */
+    /* Economic Calendar gets the remaining col automatically */
+
+    /* ---- AI PICKS: 3-col ---- */
+    #picks-list{grid-template-columns:repeat(3,1fr)!important;}
+
+    /* ---- VERIFY PICK: wider center ---- */
+    #pg-verify-pick > div{max-width:800px!important;margin-left:auto;margin-right:auto;}
+
+    /* ---- P&L: main + side panel ---- */
+    #pg-pnl > div{display:grid!important;grid-template-columns:1fr 380px;gap:24px;align-items:start;}
+    #pg-pnl > div > #pnl-tabs{grid-column:1/-1;}
+    #ptab-dashboard > section.grid{grid-template-columns:repeat(4,1fr)!important;grid-column:1/-1;}
+    #ptab-dashboard > section:last-child{grid-column:1;} /* Trade list stays left */
+    #ptab-add{grid-column:2;grid-row:2/5;} /* Add Trade form in right panel */
+    #ptab-import{grid-column:1/-1;}
+
+    /* ---- COMMAND CENTRE: 3-col ---- */
+    #pg-more > div{grid-template-columns:1fr 1fr 1fr;}
+    #pg-more > div > section:first-child{grid-column:1/-1;}
+    #pg-more > div > section:last-child{grid-column:1/-1;}
+    #pg-more > div > footer{grid-column:1/-1;}
+
+    /* Desktop content max-width */
+    #pg-home > div,
+    #pg-insights > div,
+    #pg-options-lab > div,
+    #pg-pnl > div,
+    #pg-more > div{max-width:1600px!important;}
+  }
 </style>
 </head>
 <body>
@@ -145,6 +276,55 @@ tailwind.config = {
   </div>
   <div id="pin-skip">No PIN set — tap to enter</div>
 </div>
+
+<!-- ═══════ DESKTOP SIDEBAR ═══════ -->
+<aside id="desktop-sidebar" class="desktop-sidebar">
+  <div class="sidebar-top">
+    <div class="sidebar-logo">
+      <span class="sidebar-logo-icon material-symbols-outlined" style="font-variation-settings:'FILL' 1;color:#ffd60a;font-size:22px">analytics</span>
+      <div class="sidebar-logo-text">
+        <span class="text-2xl font-black text-[#ffd60a] tracking-tighter font-headline leading-none">FINR v2.0</span>
+        <span class="text-[10px] font-headline uppercase tracking-wider font-bold text-[#d0c6ab] opacity-70">Precision Vault</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="sidebar-item active" data-nav="home" onclick="goTab('home');updateSidebar(this)">
+        <span class="material-symbols-outlined">dashboard</span>
+        <span class="sidebar-label">Dashboard</span>
+      </a>
+      <a class="sidebar-item" data-nav="insights" onclick="goTab('insights');updateSidebar(this)">
+        <span class="material-symbols-outlined">analytics</span>
+        <span class="sidebar-label">Insights</span>
+      </a>
+      <a class="sidebar-item" data-nav="ai-picks" onclick="goTab('insights');loadAiPicks();updateSidebar(this)">
+        <span class="material-symbols-outlined">auto_awesome</span>
+        <span class="sidebar-label">AI Picks</span>
+      </a>
+      <a class="sidebar-item" data-nav="options-lab" onclick="goPage('options-lab');updateSidebar(this)">
+        <span class="material-symbols-outlined">biotech</span>
+        <span class="sidebar-label">Options Lab</span>
+      </a>
+      <a class="sidebar-item" data-nav="verify-pick" onclick="goPage('verify-pick');updateSidebar(this)">
+        <span class="material-symbols-outlined">fact_check</span>
+        <span class="sidebar-label">Verify Pick</span>
+      </a>
+      <a class="sidebar-item" data-nav="pnl" onclick="goTab('pnl');updateSidebar(this)">
+        <span class="material-symbols-outlined">show_chart</span>
+        <span class="sidebar-label">P&L Tracker</span>
+      </a>
+      <a class="sidebar-item" data-nav="more" onclick="goTab('more');updateSidebar(this)">
+        <span class="material-symbols-outlined">terminal</span>
+        <span class="sidebar-label">Command Centre</span>
+      </a>
+    </nav>
+  </div>
+  <div class="sidebar-bottom">
+    <div class="sidebar-status">
+      <span class="material-symbols-outlined text-sm" style="font-variation-settings:'FILL' 1" id="sidebar-ws-icon">shield</span>
+      <span class="sidebar-label" id="sidebar-ws-text">Connection: Secure</span>
+    </div>
+  </div>
+</aside>
 
 <!-- ═══════ APP SHELL ═══════ -->
 <div id="app" class="flex flex-col h-[100dvh] overflow-hidden">
@@ -710,7 +890,7 @@ tailwind.config = {
   </main>
 
   <!-- ═══════ BOTTOM NAV BAR ═══════ -->
-  <nav class="fixed bottom-0 left-0 w-full flex justify-around items-center h-20 glass-blur z-50 px-4 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+  <nav class="fixed bottom-0 left-0 w-full flex justify-around items-center h-20 glass-blur z-50 px-4 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.5)] md:hidden">
     <div class="bn flex flex-col items-center justify-center rounded-lg px-3 py-1.5 active:scale-90 transition-transform duration-150 cursor-pointer on" data-p="home">
       <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1">home</span>
       <span class="font-label text-[10px] font-bold uppercase tracking-[0.05em] mt-0.5">Home</span>
@@ -1714,6 +1894,33 @@ function toast(msg) {
 
 function closeMod(e) { if (e.target === e.currentTarget) document.getElementById('mod').classList.remove('on'); }
 function closeModD() { document.getElementById('mod').classList.remove('on'); }
+
+// ══════════════════════════════════════════════════════════
+// DESKTOP SIDEBAR
+// ══════════════════════════════════════════════════════════
+function updateSidebar(el) {
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  if (el) el.classList.add('active');
+}
+
+// Enhance goTab to also update sidebar
+const _origGoTab = goTab;
+goTab = function(tab) {
+  _origGoTab(tab);
+  const map = {home:'home',insights:'insights',pnl:'pnl',more:'more'};
+  document.querySelectorAll('.sidebar-item').forEach(i => {
+    i.classList.remove('active');
+    if (i.dataset.nav === (map[tab]||tab)) i.classList.add('active');
+  });
+};
+const _origGoPage = goPage;
+goPage = function(page) {
+  _origGoPage(page);
+  document.querySelectorAll('.sidebar-item').forEach(i => {
+    i.classList.remove('active');
+    if (i.dataset.nav === page) i.classList.add('active');
+  });
+};
 
 // ══════════════════════════════════════════════════════════
 // INIT APP
