@@ -129,6 +129,16 @@ tailwind.config = {
   /* Calendar date picker indicator */
   input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);}
 
+  /* Dashboard card collapse */
+  .dash-card-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;transition:background 0.15s;}
+  .dash-card-header:hover{background:rgba(53,53,52,0.3);}
+  .dash-card-chevron{transition:transform 0.2s ease;}
+  .dash-card.expanded .dash-card-chevron{transform:rotate(180deg);}
+  .dash-card-peek{transition:max-height 0.2s ease,opacity 0.2s;max-height:60px;overflow:hidden;}
+  .dash-card.expanded .dash-card-peek{max-height:0;opacity:0;}
+  .dash-card-body.collapsed{max-height:0;opacity:0;overflow:hidden;transition:max-height 0.3s ease,opacity 0.2s;}
+  .dash-card.expanded .dash-card-body.collapsed{max-height:600px;opacity:1;}
+
   /* ═══════ DESKTOP RESPONSIVE LAYER ═══════ */
 
   /* Desktop sidebar — hidden on mobile */
@@ -182,11 +192,8 @@ tailwind.config = {
     #pg-pnl > div,
     #pg-more > div{max-width:1400px!important;padding-left:32px;padding-right:32px;}
 
-    /* ---- HOME TAB: 2-col grid ---- */
-    #pg-home > div{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
-    #pg-home > div > section:first-child{grid-column:1/-1;} /* Hero: full width */
-    #pg-home > div > .overflow-x-auto{grid-column:1/-1;} /* Index chips: full width */
-    #pg-home > div > section#news-card{grid-column:1/-1;} /* News: full width at md */
+    /* ---- HOME TAB ---- */
+    #home-cards-grid .space-y-4{gap:16px;}
 
     /* ---- INSIGHTS / AI PICKS ---- */
     #picks-list{display:grid!important;grid-template-columns:repeat(2,1fr);gap:16px;}
@@ -212,6 +219,17 @@ tailwind.config = {
     /* Desktop bottom sheet becomes centered modal */
     .bottom-sheet{max-width:640px;border-radius:20px;margin:auto;}
     .bottom-sheet-overlay.on{align-items:center;}
+
+    /* ═══════ DASHBOARD CARDS ═══════ */
+    .dash-card-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;transition:background 0.15s;}
+    .dash-card-header:hover{background:rgba(53,53,52,0.3);}
+    .dash-card-chevron{transition:transform 0.2s ease;}
+    .dash-card.expanded .dash-card-chevron{transform:rotate(180deg);}
+    .dash-card-peek{transition:max-height 0.2s ease,opacity 0.2s ease;max-height:60px;overflow:hidden;}
+    .dash-card.expanded .dash-card-peek{max-height:0;opacity:0;}
+    .dash-card-body{transition:max-height 0.3s ease,opacity 0.2s ease;overflow:hidden;}
+    .dash-card-body.collapsed{max-height:0;opacity:0;}
+    .dash-card.expanded .dash-card-body.collapsed{max-height:500px;opacity:1;}
 
     /* ═══════ LAYOUT EDITOR ═══════ */
     .layout-edit-btn{
@@ -298,12 +316,7 @@ tailwind.config = {
     #ticker{left:240px;width:calc(100% - 240px);}
     #topbar{left:240px;width:calc(100% - 240px);}
 
-    /* ---- HOME: 3-col hero indices, 2-col rest ---- */
-    #pg-home > div{grid-template-columns:1fr 1fr 1fr;}
-    #pg-home > div > section:first-child{grid-column:1/-1;} /* Hero: full width */
-    #pg-home > div > .overflow-x-auto{grid-column:1/-1;} /* Index chips: full width */
-    #pg-home > div > section#news-card{grid-column:1/3;} /* News: 2 of 3 cols */
-    /* Economic Calendar gets the remaining col automatically */
+    /* ---- HOME: cards stay 3-col ---- */
 
     /* ---- AI PICKS: 3-col ---- */
     #picks-list{grid-template-columns:repeat(3,1fr)!important;}
@@ -451,9 +464,8 @@ tailwind.config = {
     <!-- TAB 1: HOME                                    -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="pg on" id="pg-home">
-      <div class="px-4 pb-6 max-w-[460px] mx-auto space-y-5">
-
-        <!-- Hero -->
+      <!-- Hero (always full width) -->
+      <div class="px-4 md:px-8 pb-2 max-w-[460px] md:max-w-full mx-auto">
         <section class="flex flex-col items-center py-3">
           <span class="text-[#d0c6ab] font-mono text-[10px] uppercase tracking-[0.2em] mb-2 font-bold">Nifty 50</span>
           <h2 class="font-headline font-extrabold text-[3.2rem] tracking-tighter tnum leading-none" id="h-nifty">--<span class="text-[1.6rem] font-semibold text-[#d0c6ab]">.--</span></h2>
@@ -466,52 +478,118 @@ tailwind.config = {
             <span class="text-[#d0c6ab] font-mono text-[10px] font-medium uppercase tracking-wider" id="h-mkt"></span>
           </div>
         </section>
+        <section class="overflow-x-auto no-scrollbar flex gap-3 -mx-4 px-4 md:mx-0 md:px-0 pb-1 md:justify-center" id="h-idx"></section>
+      </div>
 
-        <!-- Index Chips -->
-        <section class="overflow-x-auto no-scrollbar flex gap-3 -mx-4 px-4 pb-1" id="h-idx"></section>
+      <!-- 6-Card Dashboard Grid -->
+      <div class="px-4 pb-6 max-w-[460px] md:max-w-full mx-auto md:px-8" id="home-cards-grid">
+        <div class="space-y-4 md:space-y-0 md:grid md:grid-cols-3 md:gap-5 md:auto-rows-min">
 
-        <!-- Live Market News -->
-        <section class="bg-[#1c1b1b] rounded-xl p-4" id="news-card">
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-xs font-black uppercase tracking-widest text-[#e5e2e1]">Live Market News</h3>
-            <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="news-ts"></span>
-          </div>
-          <div id="news-list" class="space-y-3 max-h-[420px] overflow-y-auto"></div>
-          <div id="news-loading" class="text-center py-5 text-[#636366] text-sm">Loading news...</div>
-        </section>
+          <!-- CARD 1: Live Market News (collapsible) -->
+          <section class="dash-card bg-[#1c1b1b] rounded-xl overflow-hidden" id="news-card">
+            <div class="dash-card-header" onclick="toggleDashCard(this)">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">newspaper</span>
+                <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Live Market News</h3>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="news-ts"></span>
+                <span class="material-symbols-outlined dash-card-chevron text-[#d0c6ab]" style="font-size:18px">expand_more</span>
+              </div>
+            </div>
+            <div class="dash-card-peek" id="news-peek">
+              <div class="text-[11px] text-[#d0c6ab] font-mono px-4 py-2">Loading news...</div>
+            </div>
+            <div class="dash-card-body collapsed">
+              <div id="news-list" class="space-y-3 max-h-[350px] overflow-y-auto px-4 pb-4"></div>
+              <div id="news-loading" class="text-center py-5 text-[#636366] text-sm">Loading news...</div>
+            </div>
+          </section>
 
-        <!-- Market Health -->
-        <section class="bg-[#1c1b1b] rounded-xl p-4 flex gap-4">
-          <div class="w-1/2 flex flex-col items-center justify-center border-r border-[#353534] pr-4">
-            <svg viewBox="0 0 130 76" style="width:120px;height:68px;flex-shrink:0">
-              <path d="M12 72 A55 55 0 0 1 118 72" fill="none" stroke="#353534" stroke-width="10" stroke-linecap="round"/>
-              <path id="garc" d="M12 72 A55 55 0 0 1 118 72" fill="none" stroke="#ffd60a" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 173"/>
-              <text id="gnum" x="65" y="59" text-anchor="middle" font-family="Manrope,sans-serif" font-size="22" font-weight="900" fill="#e5e2e1">--</text>
-              <text x="65" y="72" text-anchor="middle" font-family="DM Mono,monospace" font-size="7" fill="#636366">/100</text>
-            </svg>
-            <span class="text-[10px] font-bold text-[#d0c6ab] uppercase text-center leading-tight mt-1">Overall Market Health</span>
-          </div>
-          <div class="w-1/2 grid grid-cols-2 gap-y-3 gap-x-2" id="ggrid"></div>
-        </section>
+          <!-- CARD 2: Flows & Macros (collapsible) -->
+          <section class="dash-card bg-[#1c1b1b] rounded-xl overflow-hidden">
+            <div class="dash-card-header" onclick="toggleDashCard(this)">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">swap_vert</span>
+                <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Flows & Macros</h3>
+              </div>
+              <span class="material-symbols-outlined dash-card-chevron text-[#d0c6ab]" style="font-size:18px">expand_more</span>
+            </div>
+            <div class="dash-card-peek" id="fii-peek">
+              <div class="flex justify-between items-center px-4 py-2 text-[11px] font-mono">
+                <span class="text-[#d0c6ab] font-bold uppercase text-[10px]">FII Cash</span>
+                <span class="font-bold tnum" id="fii-peek-val" style="color:#ffb4ab">--</span>
+              </div>
+            </div>
+            <div class="dash-card-body collapsed">
+              <div id="home-fii-dii" class="space-y-2 px-4 pb-4"></div>
+            </div>
+          </section>
 
-        <!-- Market Breadth -->
-        <section class="bg-[#1c1b1b] rounded-xl p-4" id="breadth-card">
-          <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1] mb-3">Market Breadth</h3>
-          <div id="breadth-bar"></div>
-        </section>
+          <!-- CARD 3: Economic Calendar (collapsible) -->
+          <section class="dash-card bg-[#1c1b1b] rounded-xl overflow-hidden">
+            <div class="dash-card-header" onclick="toggleDashCard(this)">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">event</span>
+                <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Economic Calendar</h3>
+              </div>
+              <span class="material-symbols-outlined dash-card-chevron text-[#d0c6ab]" style="font-size:18px">expand_more</span>
+            </div>
+            <div class="dash-card-peek" id="events-peek">
+              <div class="text-[11px] text-[#d0c6ab] font-mono px-4 py-2">Loading events...</div>
+            </div>
+            <div class="dash-card-body collapsed">
+              <div id="h-events" class="space-y-3 px-4 pb-4"></div>
+            </div>
+          </section>
 
-        <!-- Upcoming Events -->
-        <section class="bg-[#1c1b1b] rounded-xl p-4">
-          <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1] mb-4">Economic Calendar</h3>
-          <div id="h-events" class="space-y-3"></div>
-        </section>
+          <!-- CARD 4: Market Breadth -->
+          <section class="dash-card bg-[#1c1b1b] rounded-xl p-4" id="breadth-card">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">equalizer</span>
+              <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Breadth</h3>
+            </div>
+            <div id="breadth-bar"></div>
+          </section>
 
-        <!-- FII/DII Flow -->
-        <section class="bg-[#1c1b1b] rounded-xl p-4">
-          <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1] mb-4">Flows & Macros</h3>
-          <div id="home-fii-dii" class="space-y-2"></div>
-        </section>
+          <!-- CARD 5: Market Health Scorecard (bigger) -->
+          <section class="dash-card bg-[#1c1b1b] rounded-xl p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">health_and_safety</span>
+              <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Health</h3>
+            </div>
+            <div class="flex flex-col items-center">
+              <svg viewBox="0 0 130 76" style="width:140px;height:80px;flex-shrink:0">
+                <path d="M12 72 A55 55 0 0 1 118 72" fill="none" stroke="#353534" stroke-width="10" stroke-linecap="round"/>
+                <path id="garc" d="M12 72 A55 55 0 0 1 118 72" fill="none" stroke="#ffd60a" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 173"/>
+                <text id="gnum" x="65" y="59" text-anchor="middle" font-family="Manrope,sans-serif" font-size="22" font-weight="900" fill="#e5e2e1">--</text>
+                <text x="65" y="72" text-anchor="middle" font-family="DM Mono,monospace" font-size="7" fill="#636366">/100</text>
+              </svg>
+              <span class="text-[10px] font-bold text-[#d0c6ab] uppercase text-center leading-tight mt-1 mb-3">Overall Score</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2" id="ggrid"></div>
+          </section>
 
+          <!-- CARD 6: Market Pulse (NEW — switchable graphs) -->
+          <section class="dash-card bg-[#1c1b1b] rounded-xl p-4" id="pulse-card">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">monitoring</span>
+                <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Pulse</h3>
+              </div>
+              <select id="pulse-select" class="bg-[#0e0e0e] border border-[#353534] rounded-lg text-[10px] font-mono font-bold text-[#d0c6ab] px-2 py-1 outline-none focus:border-[#ffd60a] cursor-pointer appearance-none" onchange="renderPulseChart(this.value)" style="min-width:110px">
+                <option value="fii-dii">FII vs DII</option>
+                <option value="health-radar">Health Radar</option>
+                <option value="vix-meter">VIX Meter</option>
+                <option value="sector-flow">Sector Flow</option>
+              </select>
+            </div>
+            <div id="pulse-chart" class="flex items-center justify-center" style="min-height:160px">
+              <div class="text-[#636366] text-xs font-mono">Loading...</div>
+            </div>
+          </section>
+
+        </div>
       </div>
     </div>
 
@@ -2009,6 +2087,233 @@ goPage = function(page) {
 };
 
 // ══════════════════════════════════════════════════════════
+// DASHBOARD CARD COLLAPSE / EXPAND
+// ══════════════════════════════════════════════════════════
+function toggleDashCard(headerEl) {
+  const card = headerEl.closest('.dash-card');
+  if (card) card.classList.toggle('expanded');
+}
+
+// Update peek content when data loads
+function updateNewsPeek() {
+  const peekEl = document.getElementById('news-peek');
+  if (!peekEl || !NEWS_ITEMS || !NEWS_ITEMS.length) return;
+  const first = NEWS_ITEMS[0];
+  if (first) {
+    peekEl.innerHTML = `<div class="px-4 py-2 flex items-start gap-2">
+      <span class="w-1.5 h-1.5 rounded-full bg-[#ffd60a] mt-1.5 flex-shrink-0"></span>
+      <span class="text-[11px] text-[#d0c6ab] leading-tight line-clamp-1">${first.headline || first.title || 'Market update available'}</span>
+    </div>`;
+  }
+}
+
+function updateFiiPeek() {
+  const el = document.getElementById('fii-peek-val');
+  if (!el) return;
+  const val = FIIDII.fii;
+  el.textContent = (val >= 0 ? '+' : '-') + '₹' + fmt(Math.abs(val)) + ' Cr';
+  el.style.color = val >= 0 ? '#47e266' : '#ffb4ab';
+}
+
+function updateEventsPeek() {
+  const peekEl = document.getElementById('events-peek');
+  if (!peekEl) return;
+  const events = generateEventCalendar ? generateEventCalendar() : [];
+  if (events.length) {
+    const e = events[0];
+    peekEl.innerHTML = `<div class="px-4 py-2 flex items-start gap-2">
+      <span class="w-1.5 h-1.5 rounded-full bg-[#ffd60a] mt-1.5 flex-shrink-0"></span>
+      <span class="text-[11px] text-[#d0c6ab] leading-tight line-clamp-1"><strong class="text-[#e5e2e1]">${e.date}</strong> — ${e.title}</span>
+    </div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// MARKET PULSE CHART (SVG-based)
+// ══════════════════════════════════════════════════════════
+function renderPulseChart(chartType) {
+  const container = document.getElementById('pulse-chart');
+  if (!container) return;
+
+  switch(chartType) {
+    case 'fii-dii': renderFiiDiiDonut(container); break;
+    case 'health-radar': renderHealthRadar(container); break;
+    case 'vix-meter': renderVixMeter(container); break;
+    case 'sector-flow': renderSectorFlow(container); break;
+    default: renderFiiDiiDonut(container);
+  }
+}
+
+function renderFiiDiiDonut(el) {
+  const fii = FIIDII.fii || 0;
+  const dii = FIIDII.dii || 0;
+  const absFii = Math.abs(fii);
+  const absDii = Math.abs(dii);
+  const total = absFii + absDii || 1;
+  const fiiPct = (absFii / total * 100).toFixed(0);
+  const diiPct = (absDii / total * 100).toFixed(0);
+  const fiiAngle = (absFii / total) * 360;
+  const fiiColor = fii >= 0 ? '#47e266' : '#ffb4ab';
+  const diiColor = dii >= 0 ? '#47e266' : '#ffb4ab';
+
+  // SVG donut
+  const r = 50, cx = 70, cy = 65, sw = 14;
+  const c = 2 * Math.PI * r;
+  const fiiDash = (absFii / total) * c;
+  const diiDash = (absDii / total) * c;
+
+  el.innerHTML = `
+    <div class="flex items-center gap-5 w-full">
+      <svg viewBox="0 0 140 130" style="width:120px;height:110px;flex-shrink:0">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${diiColor}" stroke-width="${sw}" stroke-dasharray="${c}" stroke-dashoffset="0" transform="rotate(-90 ${cx} ${cy})" opacity="0.8"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${fiiColor}" stroke-width="${sw}" stroke-dasharray="${fiiDash} ${c - fiiDash}" stroke-dashoffset="0" transform="rotate(-90 ${cx} ${cy})" opacity="0.9"/>
+        <text x="${cx}" y="${cy - 4}" text-anchor="middle" font-family="DM Mono,monospace" font-size="10" fill="#d0c6ab">FII/DII</text>
+        <text x="${cx}" y="${cy + 10}" text-anchor="middle" font-family="Manrope,sans-serif" font-size="13" font-weight="800" fill="#e5e2e1">${fiiPct}/${diiPct}</text>
+      </svg>
+      <div class="flex flex-col gap-2.5 flex-1">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full" style="background:${fiiColor}"></span>
+          <div>
+            <div class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono">FII ${fii >= 0 ? 'Buying' : 'Selling'}</div>
+            <div class="text-[12px] font-bold tnum font-mono" style="color:${fiiColor}">${fii >= 0 ? '+' : '-'}₹${fmt(absFii)} Cr</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full" style="background:${diiColor}"></span>
+          <div>
+            <div class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono">DII ${dii >= 0 ? 'Buying' : 'Selling'}</div>
+            <div class="text-[12px] font-bold tnum font-mono" style="color:${diiColor}">${dii >= 0 ? '+' : '-'}₹${fmt(absDii)} Cr</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderHealthRadar(el) {
+  const sc = Object.values(SIG).map(s => s.score);
+  const avg = sc.length ? Math.round(sc.reduce((a,b) => a+b, 0) / sc.length) : 50;
+  const trend = avg >= 60 ? 85 : 40;
+  const momentum = avg >= 65 ? 80 : 35;
+  const breadth = avg >= 55 ? 75 : 30;
+  const vixScore = VIX.value < 20 ? 80 : 30;
+  const fiiScore = FIIDII.fii >= 0 ? 85 : 25;
+  const factors = [{n:'Trend',v:trend},{n:'Momentum',v:momentum},{n:'Breadth',v:breadth},{n:'VIX',v:vixScore},{n:'FII',v:fiiScore}];
+  const cx=75,cy=70,maxR=48,n=factors.length;
+
+  let polyPoints = '';
+  let labels = '';
+  let gridLines = '';
+  for (let i = 0; i < n; i++) {
+    const angle = (Math.PI*2/n)*i - Math.PI/2;
+    const r = (factors[i].v/100)*maxR;
+    const x = cx + r * Math.cos(angle);
+    const y = cy + r * Math.sin(angle);
+    polyPoints += `${x},${y} `;
+    const lx = cx + (maxR+14) * Math.cos(angle);
+    const ly = cy + (maxR+14) * Math.sin(angle);
+    labels += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" font-family="DM Mono" font-size="7" fill="#d0c6ab">${factors[i].n}</text>`;
+    // Grid line
+    const gx = cx + maxR * Math.cos(angle);
+    const gy = cy + maxR * Math.sin(angle);
+    gridLines += `<line x1="${cx}" y1="${cy}" x2="${gx}" y2="${gy}" stroke="#353534" stroke-width="0.5"/>`;
+  }
+
+  el.innerHTML = `
+    <div class="flex flex-col items-center w-full">
+      <svg viewBox="0 0 150 140" style="width:160px;height:150px">
+        <circle cx="${cx}" cy="${cy}" r="${maxR}" fill="none" stroke="#353534" stroke-width="0.5"/>
+        <circle cx="${cx}" cy="${cy}" r="${maxR*0.66}" fill="none" stroke="#353534" stroke-width="0.3"/>
+        <circle cx="${cx}" cy="${cy}" r="${maxR*0.33}" fill="none" stroke="#353534" stroke-width="0.3"/>
+        ${gridLines}
+        <polygon points="${polyPoints}" fill="rgba(255,214,10,0.12)" stroke="#ffd60a" stroke-width="1.5"/>
+        ${labels}
+      </svg>
+      <div class="text-[10px] font-bold text-[#d0c6ab] font-mono uppercase">Score: ${avg}/100</div>
+    </div>`;
+}
+
+function renderVixMeter(el) {
+  const vix = VIX.value || 16;
+  const pct = Math.min(100, (vix / 40) * 100);
+  const color = vix < 15 ? '#47e266' : vix < 20 ? '#ffd60a' : vix < 30 ? '#ff9f0a' : '#ffb4ab';
+  const label = vix < 15 ? 'LOW FEAR' : vix < 20 ? 'MODERATE' : vix < 30 ? 'ELEVATED' : 'HIGH FEAR';
+
+  el.innerHTML = `
+    <div class="flex flex-col items-center w-full gap-3">
+      <svg viewBox="0 0 140 85" style="width:150px;height:90px">
+        <defs>
+          <linearGradient id="vg" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#47e266"/>
+            <stop offset="40%" stop-color="#ffd60a"/>
+            <stop offset="70%" stop-color="#ff9f0a"/>
+            <stop offset="100%" stop-color="#ffb4ab"/>
+          </linearGradient>
+        </defs>
+        <path d="M15 75 A55 55 0 0 1 125 75" fill="none" stroke="#353534" stroke-width="12" stroke-linecap="round"/>
+        <path d="M15 75 A55 55 0 0 1 125 75" fill="none" stroke="url(#vg)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${(pct/100)*173} 173"/>
+        <text x="70" y="62" text-anchor="middle" font-family="Manrope" font-size="24" font-weight="900" fill="${color}">${vix.toFixed(1)}</text>
+        <text x="70" y="78" text-anchor="middle" font-family="DM Mono" font-size="8" fill="#d0c6ab">${label}</text>
+      </svg>
+      <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-center">
+        <div><div class="text-[8px] text-[#d0c6ab] font-mono uppercase">Trend</div><div class="text-[11px] font-bold" style="color:${VIX.trend==='falling'?'#47e266':VIX.trend==='rising'?'#ffb4ab':'#d0c6ab'}">${(VIX.trend||'stable').toUpperCase()}</div></div>
+        <div><div class="text-[8px] text-[#d0c6ab] font-mono uppercase">USD/INR</div><div class="text-[11px] font-bold text-[#e5e2e1] tnum font-mono">${FIIDII.usdInr}</div></div>
+        <div><div class="text-[8px] text-[#d0c6ab] font-mono uppercase">Crude</div><div class="text-[11px] font-bold text-[#e5e2e1] tnum font-mono">$${FIIDII.crude}</div></div>
+        <div><div class="text-[8px] text-[#d0c6ab] font-mono uppercase">Impact</div><div class="text-[11px] font-bold" style="color:${vix<20?'#47e266':'#ffb4ab'}">${vix<20?'Bullish':'Bearish'}</div></div>
+      </div>
+    </div>`;
+}
+
+function renderSectorFlow(el) {
+  // Aggregate sector performance from stock signals
+  const sectorMap = {};
+  Object.entries(SIG).forEach(([sym, sig]) => {
+    const stock = Object.values(S).find(s => s.symbol === sym);
+    if (stock && stock.sector) {
+      if (!sectorMap[stock.sector]) sectorMap[stock.sector] = {scores:[], chg:[]};
+      sectorMap[stock.sector].scores.push(sig.score);
+      if (stock.chgPct !== undefined) sectorMap[stock.sector].chg.push(stock.chgPct);
+    }
+  });
+
+  let sectors = Object.entries(sectorMap).map(([name, data]) => ({
+    name: name.length > 12 ? name.slice(0,12) + '..' : name,
+    avg: data.scores.length ? Math.round(data.scores.reduce((a,b)=>a+b,0)/data.scores.length) : 0,
+    chg: data.chg.length ? (data.chg.reduce((a,b)=>a+b,0)/data.chg.length).toFixed(1) : 0
+  })).sort((a,b) => b.avg - a.avg).slice(0, 6);
+
+  if (!sectors.length) {
+    sectors = [{name:'IT',avg:72,chg:1.2},{name:'Banking',avg:65,chg:-0.3},{name:'Pharma',avg:58,chg:0.8},{name:'Auto',avg:55,chg:0.4},{name:'Energy',avg:48,chg:-1.1},{name:'Metal',avg:42,chg:-0.6}];
+  }
+
+  const maxVal = Math.max(...sectors.map(s=>s.avg), 1);
+  const barH = `
+    <div class="w-full space-y-1.5">
+      ${sectors.map(s => {
+        const w = (s.avg / maxVal * 100).toFixed(0);
+        const color = s.avg >= 65 ? '#47e266' : s.avg >= 50 ? '#ffd60a' : '#ffb4ab';
+        return `<div class="flex items-center gap-2">
+          <span class="text-[8px] font-mono font-bold text-[#d0c6ab] uppercase w-[60px] text-right flex-shrink-0">${s.name}</span>
+          <div class="flex-1 h-3 bg-[#0e0e0e] rounded-full overflow-hidden">
+            <div class="h-full rounded-full" style="width:${w}%;background:${color};transition:width 0.5s"></div>
+          </div>
+          <span class="text-[9px] font-mono font-bold w-[28px] text-right" style="color:${color}">${s.avg}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  el.innerHTML = barH;
+}
+
+// Auto-update peeks when underlying data re-renders (non-invasive wrapping)
+const _origFiiDii = renderHomeFiiDii;
+renderHomeFiiDii = function() { _origFiiDii(); try { updateFiiPeek(); } catch(e){} };
+const _origEconCal = renderEconCal;
+renderEconCal = function() { _origEconCal(); try { updateEventsPeek(); } catch(e){} };
+const _origFetchNews = fetchNews;
+fetchNews = async function() { await _origFetchNews(); try { updateNewsPeek(); } catch(e){} };
+const _origRenderGauge = renderGauge;
+renderGauge = function() { _origRenderGauge(); try { renderPulseChart(document.getElementById('pulse-select')?.value || 'fii-dii'); } catch(e){} };
+
+// ══════════════════════════════════════════════════════════
 // LAYOUT EDITOR — drag, drop, resize, reorder sections
 // ══════════════════════════════════════════════════════════
 let layoutEditing = false;
@@ -2016,8 +2321,8 @@ let layoutEditing = false;
 // Section definitions per page
 const LAYOUT_PAGES = {
   'pg-home': {
-    containerSelector: '#pg-home > div',
-    gridCols: {md:2, xl:3},
+    containerSelector: '#home-cards-grid > div',
+    gridCols: {md:3, xl:3},
     sections: [] // auto-detected from children
   },
   'pg-more': {
@@ -2057,7 +2362,6 @@ function toggleLayoutEditor() {
 function injectWidgetControls(pageId) {
   removeWidgetControls(); // clean first
   const widgets = getGridWidgets(pageId);
-  const maxCols = window.innerWidth >= 1280 ? 3 : 2;
 
   widgets.forEach((w, idx) => {
     w.classList.add('grid-widget');
@@ -2073,24 +2377,15 @@ function injectWidgetControls(pageId) {
     w.style.position = 'relative';
     w.prepend(handle);
 
-    // Resize controls
-    const resize = document.createElement('div');
-    resize.className = 'widget-resize';
-    const currentSpan = getCurrentSpan(w, maxCols);
-    for (let c = 1; c <= maxCols; c++) {
-      const btn = document.createElement('button');
-      btn.textContent = c === maxCols ? 'FULL' : c + 'col';
-      if (c === currentSpan) btn.classList.add('active-span');
-      btn.onclick = (e) => { e.stopPropagation(); setWidgetSpan(w, c, maxCols, resize); };
-      resize.appendChild(btn);
-    }
-    // Visibility toggle
+    // Action controls (hide only — no resize)
+    const actions = document.createElement('div');
+    actions.className = 'widget-resize';
     const hideBtn = document.createElement('button');
     hideBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:12px">visibility</span>';
     hideBtn.title = 'Toggle visibility';
     hideBtn.onclick = (e) => { e.stopPropagation(); w.classList.toggle('widget-hidden'); };
-    resize.appendChild(hideBtn);
-    w.prepend(resize);
+    actions.appendChild(hideBtn);
+    w.prepend(actions);
 
     // Pointer-based drag via handle only
     handle.addEventListener('pointerdown', (e) => startWidgetDrag(e, w));
@@ -2354,6 +2649,9 @@ async function initApp() {
     fetchStatus();
     loadHealth();
     loadEventCalendar();
+    // Update dashboard peek content & pulse chart
+    updateNewsPeek(); updateFiiPeek(); updateEventsPeek();
+    renderPulseChart('fii-dii');
     // Apply saved desktop layout customizations
     if (window.innerWidth >= 768) applyStoredLayout();
   }, 500);
