@@ -391,7 +391,7 @@ tailwind.config = {
       </a>
       <a class="sidebar-item" data-nav="more" onclick="goTab('more');updateSidebar(this)">
         <span class="material-symbols-outlined">terminal</span>
-        <span class="sidebar-label">Command Centre</span>
+        <span class="sidebar-label">Settings</span>
       </a>
     </nav>
   </div>
@@ -811,18 +811,19 @@ tailwind.config = {
                   </div>
                 </div>
               </div>
-              <!-- Add Leg + Start + Stop Buttons -->
-              <div class="flex gap-2">
-                <button class="flex-1 border border-[#353534] text-[#d0c6ab] py-2 rounded-xl font-bold text-[10px] active:scale-95 transition-all flex items-center justify-center gap-1.5 hover:border-[#ffd60a] hover:text-[#ffd60a]" onclick="addLiveLeg()">
-                  <span class="material-symbols-outlined text-sm">add</span> Add Leg
-                </button>
-                <button class="flex-1 bg-[#ffd60a] text-[#3b2f00] py-2 rounded-xl font-bold font-headline text-[11px] active:scale-95 transition-all flex items-center justify-center gap-1.5" onclick="startLiveAnalysis()">
-                  <span class="material-symbols-outlined text-sm">play_arrow</span> Start
-                </button>
-                <button class="flex-1 border border-[#ffb4ab]/30 text-[#ffb4ab] py-2 rounded-xl font-bold text-[10px] active:scale-95 transition-all flex items-center justify-center gap-1.5 hover:bg-[#ffb4ab]/10" onclick="stopLiveAnalysis()">
-                  <span class="material-symbols-outlined text-sm">stop</span> Stop
-                </button>
-              </div>
+              <!-- Add Leg Button (inside card) -->
+              <button class="w-full border border-[#353534] text-[#d0c6ab] py-2 rounded-xl font-bold text-[10px] active:scale-95 transition-all flex items-center justify-center gap-1.5 hover:border-[#ffd60a] hover:text-[#ffd60a]" onclick="addLiveLeg()">
+                <span class="material-symbols-outlined text-sm">add</span> Add Leg
+              </button>
+            </div>
+            <!-- Start / Stop (outside card, left-aligned, small) -->
+            <div class="flex gap-2 mt-2" style="max-width:240px">
+              <button class="flex-1 bg-[#ffd60a] text-[#3b2f00] py-1.5 rounded-lg font-bold font-headline text-[10px] active:scale-95 transition-all flex items-center justify-center gap-1" onclick="startLiveAnalysis()">
+                <span class="material-symbols-outlined text-xs">play_arrow</span> Start
+              </button>
+              <button class="flex-1 border border-[#ffb4ab]/30 text-[#ffb4ab] py-1.5 rounded-lg font-bold text-[10px] active:scale-95 transition-all flex items-center justify-center gap-1 hover:bg-[#ffb4ab]/10" onclick="stopLiveAnalysis()">
+                <span class="material-symbols-outlined text-xs">stop</span> Stop
+              </button>
             </div>
 
             <!-- Live Analysis Results -->
@@ -1182,7 +1183,7 @@ tailwind.config = {
     </div>
 
     <!-- ══════════════════════════════════════════════ -->
-    <!-- TAB 4: MORE (Command Centre)                   -->
+    <!-- TAB 4: MORE (Settings)                   -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="pg" id="pg-more">
       <div class="px-4 pb-6 max-w-[460px] md:max-w-full md:px-6 mx-auto space-y-5">
@@ -1191,7 +1192,7 @@ tailwind.config = {
         <section class="cc-top-actions">
           <div class="flex items-center justify-between mb-4">
             <div class="flex items-center gap-2">
-              <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-[#d0c6ab] uppercase">Command Centre</span>
+              <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-[#d0c6ab] uppercase">Settings</span>
               <div class="h-[1px] w-12 bg-[#353534]"></div>
             </div>
             <div class="flex gap-2">
@@ -2738,7 +2739,7 @@ function updateApiStatusDots(health) {
     }
     if (vDot) {
       const hasVertex = health.hasVertexAI || (health.vertexAI && health.vertexAI.configured);
-      vDot.className = 'w-2 h-2 rounded-full ' + (hasVertex ? 'bg-[#47e266]' : 'bg-[#636366]');
+      vDot.className = 'w-2 h-2 rounded-full ' + (hasVertex ? 'bg-[#47e266]' : 'bg-[#ffb4ab]');
       vDot.title = hasVertex ? 'Service account loaded' : 'Not configured';
     }
   } catch(e) {}
@@ -2778,41 +2779,75 @@ async function loadAiTrackingData() {
 }
 
 async function saveSettings() {
-  const settings = {
-    upstox: {key:document.getElementById('uk').value, secret:document.getElementById('us').value, redirect:document.getElementById('uc').value},
-    zerodha: {key:document.getElementById('zk').value, secret:document.getElementById('zs').value, callback:document.getElementById('zc').value},
-    gemini: {key:document.getElementById('gk').value}
-  };
+  const settings = {};
+  const uk = document.getElementById('uk').value.trim();
+  const us = document.getElementById('us').value.trim();
+  const uc = document.getElementById('uc').value.trim();
+  const zk = document.getElementById('zk').value.trim();
+  const zs = document.getElementById('zs').value.trim();
+  const zc = document.getElementById('zc').value.trim();
+  const gk = document.getElementById('gk').value.trim();
+  if (uk) settings.apiKey = uk;
+  if (us) settings.apiSecret = us;
+  if (uc) settings.redirectUri = uc;
+  if (zk) settings.zApiKey = zk;
+  if (zs) settings.zApiSecret = zs;
+  if (zc) settings.zRedirectUri = zc;
+  if (gk) settings.geminiKey = gk;
+  if (!Object.keys(settings).length) { toast('No settings to save'); return; }
   try {
-    await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(settings)});
-    toast('Settings saved ✅');
+    const r = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(settings)});
+    const d = await r.json();
+    if (d.success) { toast('Settings saved ✅'); fetchStatus(); }
+    else toast('Error: ' + (d.error || 'Save failed'));
   } catch { toast('Error saving settings'); }
 }
 
 async function testUpstox() {
-  toast('Testing Upstox connection...');
+  toast('Checking Upstox...');
   try {
     const r = await fetch('/api/upstox-test').then(x=>x.json());
-    toast(r.ok ? 'Upstox connected ✅' : 'Connection failed');
-  } catch { toast('Error testing'); }
+    if (r.ok) { toast('Upstox connected ✅'); fetchStatus(); return; }
+    // Not connected — try to start OAuth login flow
+    toast('Opening Upstox login...');
+    const auth = await fetch('/auth/login').then(x=>x.json());
+    if (auth.url) window.open(auth.url, '_blank');
+    else toast(auth.error || 'Configure API keys first');
+  } catch { toast('Save API keys first, then Connect'); }
 }
 
 async function testGemini() {
   const key = document.getElementById('gk').value;
-  if (!key) { toast('Enter Gemini API key'); return; }
+  if (!key) { toast('Enter Gemini API key first'); return; }
   toast('Testing Gemini...');
+  const el = document.getElementById('gemini-test-result');
   try {
     const r = await fetch('/api/gemini-test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})}).then(x=>x.json());
-    document.getElementById('gemini-test-result').textContent = r.ok ? '✅ Connected' : '❌ Failed';
-  } catch { document.getElementById('gemini-test-result').textContent = '❌ Error'; }
+    if (r.ok) {
+      if (el) el.innerHTML = '<span class="text-[#47e266]">✅ Connected — ' + (r.model||'OK') + '</span>';
+      toast('Gemini connected ✅');
+    } else {
+      if (el) el.innerHTML = '<span class="text-[#ffb4ab]">❌ ' + (r.reason||'Failed') + '</span>';
+      toast('Gemini connection failed');
+    }
+    fetchStatus();
+  } catch(e) {
+    if (el) el.innerHTML = '<span class="text-[#ffb4ab]">❌ Network error</span>';
+    toast('Error testing Gemini');
+  }
 }
 
 async function doZerodhaRefresh() {
-  toast('Refreshing Zerodha token...');
+  toast('Checking Zerodha...');
   try {
     const r = await fetch('/api/zerodha-refresh').then(x=>x.json());
-    toast(r.ok ? 'Token refreshed ✅' : 'Failed');
-  } catch { toast('Error'); }
+    if (r.ok) { toast('Zerodha connected ✅'); fetchStatus(); return; }
+    // Not connected — try OAuth login flow
+    toast('Opening Zerodha login...');
+    const auth = await fetch('/zerodha/login').then(x=>x.json());
+    if (auth.url) window.open(auth.url, '_blank');
+    else toast(auth.error || 'Configure API keys first');
+  } catch { toast('Save API keys first, then Connect'); }
 }
 
 async function fetchStatus() {

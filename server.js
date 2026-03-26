@@ -1335,11 +1335,13 @@ app.post('/api/trades/import-csv', (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/api/settings', (req, res) => {
   const { apiKey, apiSecret, pin, redirectUri, geminiKey, zApiKey, zApiSecret, zRedirectUri } = req.body;
-  if (!apiKey || !apiSecret || !pin) return res.status(400).json({ error: 'Upstox keys and PIN required' });
-  if (!/^\d{4}$/.test(pin)) return res.status(400).json({ error: 'PIN must be 4 digits' });
-  appConfig.apiKey      = apiKey.trim();
-  appConfig.apiSecret   = apiSecret.trim();
-  appConfig.pin         = hash(pin);
+  // Allow partial saves — only update fields that are provided
+  if (pin) {
+    if (!/^\d{4}$/.test(pin)) return res.status(400).json({ error: 'PIN must be 4 digits' });
+    appConfig.pin = hash(pin);
+  }
+  if (apiKey)       appConfig.apiKey      = apiKey.trim();
+  if (apiSecret)    appConfig.apiSecret   = apiSecret.trim();
   if (redirectUri)  appConfig.redirectUri  = redirectUri.trim();
   if (geminiKey)    appConfig.geminiKey    = geminiKey.trim();
   if (zApiKey)      appConfig.zApiKey      = zApiKey.trim();
@@ -1394,6 +1396,37 @@ app.get('/api/system-health', (req, res) => {
     lastUpdate: Object.values(liveStocks)[0]?.lastUpdate || null,
     tests:      testResults
   });
+});
+
+// Connection test endpoints
+app.get('/api/upstox-test', (req, res) => {
+  if (!appConfig.apiKey || !appConfig.apiSecret) return res.json({ ok: false, reason: 'API keys not configured' });
+  if (accessToken && connectionStatus === 'live') return res.json({ ok: true, status: 'Connected with live data' });
+  if (accessToken) return res.json({ ok: true, status: 'Token present, not live yet' });
+  res.json({ ok: false, reason: 'Not authenticated. Use the login flow.' });
+});
+
+app.get('/api/zerodha-refresh', (req, res) => {
+  if (!appConfig.zApiKey || !appConfig.zApiSecret) return res.json({ ok: false, reason: 'Zerodha keys not configured' });
+  if (zAccessToken) return res.json({ ok: true, status: 'Token active', holdings: zerodhaHoldings.length });
+  res.json({ ok: false, reason: 'Not authenticated. Use the login flow.' });
+});
+
+app.post('/api/gemini-test', async (req, res) => {
+  const key = req.body.key || appConfig.geminiKey;
+  if (!key) return res.json({ ok: false, reason: 'No API key' });
+  try {
+    // Temporarily use the provided key
+    const origKey = appConfig.geminiKey;
+    appConfig.geminiKey = key;
+    const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 10000 });
+    appConfig.geminiKey = origKey; // restore
+    log('OK', 'Gemini test passed — model: ' + g.model);
+    res.json({ ok: true, model: g.model });
+  } catch(e) {
+    log('ERR', 'Gemini test failed: ' + (e.message || ''));
+    res.json({ ok: false, reason: e.response?.data?.error?.message || e.message });
+  }
 });
 
 app.get('/api/logs', (req, res) => {
