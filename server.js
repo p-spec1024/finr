@@ -1580,6 +1580,26 @@ app.get('/api/live', (req, res) => {
   res.json({ stocks: liveStocks, indices: liveIndices, signals: signalCache, universe: stockUniverse, vix: vixData, fiiDii: fiiDiiData, globalMarkets });
 });
 
+// Symbol search + LTP for Live Analysis autocomplete
+app.get('/api/symbol-search', (req, res) => {
+  const q = (req.query.q || '').toUpperCase().replace(/\s+/g, '');
+  if (!q || q.length < 1) return res.json({ results: [] });
+  const indexSyms = [
+    { symbol: 'NIFTY', name: 'Nifty 50', price: liveIndices?.NIFTY?.value || null },
+    { symbol: 'BANKNIFTY', name: 'Bank Nifty', price: liveIndices?.BANKNIFTY?.value || null },
+    { symbol: 'FINNIFTY', name: 'Finnifty', price: liveIndices?.FINNIFTY?.value || null },
+    { symbol: 'MIDCPNIFTY', name: 'Midcap Nifty', price: liveIndices?.MIDCPNIFTY?.value || null },
+    { symbol: 'SENSEX', name: 'BSE Sensex', price: liveIndices?.SENSEX?.value || null }
+  ];
+  const stockResults = STOCK_UNIVERSE
+    .filter(s => s.symbol.includes(q) || s.name.toUpperCase().includes(q))
+    .slice(0, 15)
+    .map(s => ({ symbol: s.symbol, name: s.name, price: liveStocks[s.symbol]?.price || null }));
+  const indexResults = indexSyms.filter(s => s.symbol.includes(q) || s.name.toUpperCase().includes(q));
+  const results = [...indexResults, ...stockResults].slice(0, 12);
+  res.json({ results });
+});
+
 app.get('/api/global', (req, res) => {
   res.json({ globalMarkets, isPostMarket: isPostMarketWindow(), symbolCount: TWELVE_DATA_SYMBOLS.length });
 });

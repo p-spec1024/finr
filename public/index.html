@@ -764,13 +764,15 @@ tailwind.config = {
                   </div>
                   <!-- Row 1: Symbol, Strike, Expiry -->
                   <div class="grid grid-cols-3 gap-2">
-                    <div>
+                    <div class="relative">
                       <label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Symbol</label>
-                      <input type="text" class="la-symbol w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-headline" placeholder="NIFTY" oninput="this.value=this.value.toUpperCase();suggestExpiries(this)">
+                      <input type="text" class="la-symbol w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-headline" placeholder="NIFTY" oninput="this.value=this.value.toUpperCase();suggestExpiries(this);symbolAutocomplete(this)" autocomplete="off">
+                      <div class="la-symbol-dropdown absolute z-50 left-0 right-0 top-full mt-1 bg-[#1c1b1b] border border-[#353534] rounded-lg overflow-hidden shadow-xl hidden max-h-48 overflow-y-auto"></div>
                     </div>
-                    <div>
+                    <div class="relative">
                       <label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Strike</label>
-                      <input type="number" class="la-strike w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono" placeholder="24000">
+                      <input type="number" class="la-strike w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono" placeholder="24000" onfocus="suggestStrikes(this)">
+                      <div class="la-strike-suggestions flex flex-wrap gap-1 mt-1"></div>
                     </div>
                     <div>
                       <label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Expiry</label>
@@ -2268,6 +2270,92 @@ function suggestExpiries(symbolInput) {
   }).join('');
 }
 
+// Symbol autocomplete
+let _symbolSearchTimeout = null;
+let _lastSymbolLTP = {};
+
+function symbolAutocomplete(input) {
+  clearTimeout(_symbolSearchTimeout);
+  const dropdown = input.closest('.relative')?.querySelector('.la-symbol-dropdown');
+  if (!dropdown) return;
+  const q = input.value.trim();
+  if (q.length < 1) { dropdown.classList.add('hidden'); return; }
+  _symbolSearchTimeout = setTimeout(async () => {
+    try {
+      const r = await fetch('/api/symbol-search?q=' + encodeURIComponent(q)).then(x=>x.json());
+      if (!r.results || !r.results.length) { dropdown.classList.add('hidden'); return; }
+      dropdown.innerHTML = r.results.map(s => {
+        const priceStr = s.price ? '<span class="font-mono text-[#47e266]">₹' + s.price.toLocaleString('en-IN') + '</span>' : '';
+        return `<div class="px-3 py-2 hover:bg-[#353534] cursor-pointer flex items-center justify-between transition-colors" data-symbol="${s.symbol}" data-price="${s.price||''}" onclick="pickSymbol(this)">
+          <div><span class="text-xs font-bold text-[#e5e2e1]">${s.symbol}</span> <span class="text-[10px] text-[#d0c6ab]">${s.name}</span></div>
+          <div class="text-[10px]">${priceStr}</div>
+        </div>`;
+      }).join('');
+      dropdown.classList.remove('hidden');
+    } catch { dropdown.classList.add('hidden'); }
+  }, 200);
+}
+
+function pickSymbol(el) {
+  const sym = el.dataset.symbol;
+  const price = parseFloat(el.dataset.price) || 0;
+  const leg = el.closest('.la-leg');
+  if (!leg) return;
+  const input = leg.querySelector('.la-symbol');
+  input.value = sym;
+  if (price) _lastSymbolLTP[sym] = price;
+  el.closest('.la-symbol-dropdown').classList.add('hidden');
+  suggestExpiries(input);
+  // Auto-suggest strikes after picking
+  setTimeout(() => { const strikeInput = leg.querySelector('.la-strike'); if (strikeInput) suggestStrikes(strikeInput); }, 100);
+}
+
+// Hide dropdown on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.la-symbol-dropdown') && !e.target.classList.contains('la-symbol')) {
+    document.querySelectorAll('.la-symbol-dropdown').forEach(d => d.classList.add('hidden'));
+  }
+});
+
+// Strike suggestions based on current price
+function suggestStrikes(strikeInput) {
+  const leg = strikeInput.closest('.la-leg');
+  if (!leg) return;
+  const sugDiv = leg.querySelector('.la-strike-suggestions');
+  if (!sugDiv) return;
+  const sym = (leg.querySelector('.la-symbol')?.value || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!sym) { sugDiv.innerHTML = ''; return; }
+  const price = _lastSymbolLTP[sym];
+  if (!price) {
+    // Try to fetch price
+    fetch('/api/symbol-search?q=' + encodeURIComponent(sym)).then(r=>r.json()).then(d => {
+      const match = d.results?.find(s => s.symbol === sym);
+      if (match?.price) { _lastSymbolLTP[sym] = match.price; suggestStrikes(strikeInput); }
+    }).catch(() => {});
+    sugDiv.innerHTML = '<span class="text-[9px] text-[#636366]">Enter symbol first</span>';
+    return;
+  }
+  // Determine step size based on price level
+  let step;
+  if (price > 50000) step = 500;
+  else if (price > 20000) step = 100;
+  else if (price > 5000) step = 100;
+  else if (price > 1000) step = 50;
+  else if (price > 500) step = 20;
+  else if (price > 100) step = 10;
+  else step = 5;
+  const atm = Math.round(price / step) * step;
+  const strikes = [];
+  for (let i = -4; i <= 4; i++) {
+    strikes.push(atm + i * step);
+  }
+  sugDiv.innerHTML = strikes.map(s => {
+    const isATM = s === atm;
+    const cls = isATM ? 'bg-[#ffd60a]/25 text-[#ffd60a] ring-1 ring-[#ffd60a]/40' : 'bg-[#ffd60a]/10 text-[#ffd60a]/80';
+    return `<button type="button" class="px-1.5 py-0.5 rounded ${cls} text-[9px] font-bold font-mono hover:bg-[#ffd60a]/30 transition-colors cursor-pointer" onclick="this.closest('.la-leg').querySelector('.la-strike').value='${s}'">${s}${isATM?' ATM':''}</button>`;
+  }).join('');
+}
+
 function addLiveLeg() {
   laLegCount++;
   const container = document.getElementById('la-legs');
@@ -2280,8 +2368,8 @@ function addLiveLeg() {
       <button class="text-[#ffb4ab] text-[9px] font-bold font-mono hover:underline" onclick="removeLiveLeg(this)">Remove</button>
     </div>
     <div class="grid grid-cols-3 gap-2">
-      <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Symbol</label><input type="text" class="la-symbol w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-headline" placeholder="NIFTY" oninput="this.value=this.value.toUpperCase();suggestExpiries(this)"></div>
-      <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Strike</label><input type="number" class="la-strike w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono" placeholder="24000"></div>
+      <div class="relative"><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Symbol</label><input type="text" class="la-symbol w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-headline" placeholder="NIFTY" oninput="this.value=this.value.toUpperCase();suggestExpiries(this);symbolAutocomplete(this)" autocomplete="off"><div class="la-symbol-dropdown absolute z-50 left-0 right-0 top-full mt-1 bg-[#1c1b1b] border border-[#353534] rounded-lg overflow-hidden shadow-xl hidden max-h-48 overflow-y-auto"></div></div>
+      <div class="relative"><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Strike</label><input type="number" class="la-strike w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono" placeholder="24000" onfocus="suggestStrikes(this)"><div class="la-strike-suggestions flex flex-wrap gap-1 mt-1"></div></div>
       <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Expiry</label><input type="date" class="la-expiry w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono"><div class="la-expiry-suggestions flex flex-wrap gap-1.5 mt-1.5"></div></div>
     </div>
     <div class="grid grid-cols-5 gap-2">
