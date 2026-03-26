@@ -1,0 +1,230 @@
+I'm continuing to design my stock market app "FINR". I already have the 4 main tab pages designed. Now I need to design the additional screens/components within those pages. Use the same design system:
+
+- Background: #0a0a0a, Cards: #1c1c1e, Accent: #ffd60a (golden yellow)
+- Green: #30d158, Red: #ff453a, Blue: #0a84ff
+- Text: #f2f2f7 (primary), #aeaeb2 (secondary), #636366 (muted)
+- Font: Inter for UI, DM Mono for numbers
+- Border radius: 16px cards, 50px pills
+- Mobile-first (390px width)
+
+═══════════════════════════════════════
+COMPONENT 1: LIVE MARKET NEWS (Home Page — redesigned)
+═══════════════════════════════════════
+This replaces the simple news list on the Home page. Design a compact, scrollable news widget:
+
+- Title bar: "📰 Live Market News" on left, timestamp "Updated 2:30 PM" on right
+- Shows exactly 2 news headlines visible at once (stacked vertically)
+- Each headline is a card with:
+  - Left: icon (📰/⚠️/📊/💰)
+  - Center: headline title (13px bold, 1 line, truncate with "...")
+  - Right: priority badge pill (HIGH = red background, MEDIUM = yellow, LOW = green)
+  - Below title: tiny gray text "Bullish · 5 min ago"
+- Below the 2 visible headlines: smooth vertical scroll reveals 3 more headlines (total 5 visible in the widget, scrollable)
+- Each headline is tappable (shows a tap/press state)
+
+When tapped, a MODAL/POPUP slides up from the bottom covering 75% of the screen:
+- Rounded top corners (20px)
+- Top: small gray drag handle bar (centered)
+- News title (16px bold)
+- Row: priority badge + sentiment + time
+- Divider line
+- "Impact Analysis" section: 2-3 lines of text explaining market impact
+- "Affected Sectors" section: colored tag pills
+  - Green tags: "Buy: IT", "Buy: Banking"
+  - Red tags: "Avoid: Auto"
+  - Yellow tags: "Watch: Pharma"
+- "AI Insight" section: italic gray text with AI analysis
+- Bottom: "Close" button or swipe down to dismiss
+
+═══════════════════════════════════════
+COMPONENT 2: AI PICKS — EXPANDED REASONING (Insights Tab)
+═══════════════════════════════════════
+When user taps "Expand reasoning" on any AI Pick stock card, the card smoothly expands inline to reveal:
+
+- Full reasoning text (no truncation, 12px, gray text, line-height 1.6)
+- A mini data table (2 columns, compact):
+  | Metric       | Value    |
+  | P/E Ratio    | 24.5     |
+  | ROE          | 18.2%    |
+  | Debt/Equity  | 0.3      |
+  | Dividend     | 1.2%     |
+  | 52W High     | ₹3,200   |
+  | 52W Low      | ₹2,100   |
+- "Bull Case" box: green left border, green tinted background, bullet points
+- "Bear Case" box: red left border, red tinted background, bullet points
+- "Collapse" link at bottom to shrink back
+
+═══════════════════════════════════════
+COMPONENT 3: OPTIONS LAB — FULL TRADE VIEW (Insights Tab)
+═══════════════════════════════════════
+When user taps an options trade card in Options Lab, the card expands inline:
+
+- Full strategy explanation text
+- "Greeks" row: Delta, Theta, Gamma, Vega (4 mini boxes in a row)
+  - Each box: Greek name (tiny gray label), value (bold number)
+- "Risk Profile" section:
+  - Max Profit: ₹value (green)
+  - Max Loss: ₹value (red)
+  - Breakeven: ₹value
+- "Market Conditions" section:
+  - VIX level + trend
+  - Underlying trend (Bullish/Bearish/Sideways)
+  - Volume indicator
+- "AI Confidence" bar: horizontal progress bar (0-100%), filled in yellow
+- "Collapse" link
+
+═══════════════════════════════════════
+COMPONENT 4: VERIFY PICK — FULL ANALYSIS (Insights Tab)
+═══════════════════════════════════════
+After user enters a stock symbol and taps "Analyse", the result appears inline below the input:
+
+- Header card (dark background):
+  - Left: Stock symbol (18px bold) + company name below
+  - Right: Verdict badge (BUY = green pill, HOLD = yellow pill, SELL = red pill, AVOID = dark red pill)
+- Row of 4 mini metric boxes:
+  - Confidence (%), Risk Level, Target Price (₹), Stop Loss (₹)
+- "Fundamentals" card:
+  - Mini table: P/E, ROE, Debt/Equity, Market Cap, Dividend Yield, Promoter Holding
+- "✓ Positives" card:
+  - Green left border, light green tinted background
+  - Bullet points of positive factors
+- "⚠ Risks & Red Flags" card:
+  - Red left border, light red tinted background
+  - Bullet points of risk factors
+- "📰 Recent News" card:
+  - 2-3 recent news items about this stock (title + sentiment badge)
+- "🔄 Alternatives" section:
+  - 2-3 alternative stock suggestions as small horizontal cards (symbol, price, upside%)
+- "Verdict Summary" card at bottom:
+  - 2-3 line AI summary in italic
+  - "Overall Score: 72/100" with a small progress bar
+
+═══════════════════════════════════════
+COMPONENT 5: ADD TRADE FORM (P&L Tab)
+═══════════════════════════════════════
+Full-screen form inside the P&L tab when "➕ Add Trade" sub-tab is selected:
+
+- Title: "Add New Trade" (15px bold)
+- Form fields (dark input backgrounds #242426, yellow border on focus):
+  - Symbol input (full width, uppercase auto)
+  - Row of 2: Quantity (number) | Type dropdown (Equity / Options / Spread)
+  - Row of 2: Buy Price ₹ | Sell Price ₹
+  - Row of 2: Buy Date (date picker) | Sell Date (date picker)
+
+- When "Spread" is selected, a collapsible section expands:
+  - "Leg 1 (Buy)" header
+    - Row of 2: Type (CE/PE dropdown) | Strike Price
+    - Row of 2: Premium ₹ | Quantity
+  - "Leg 2 (Sell)" header
+    - Row of 2: Type (CE/PE dropdown) | Strike Price
+    - Row of 2: Premium ₹ | Quantity
+
+- Charges box (gray #242426 background, rounded):
+  - Title: "Charges (Auto-calculated)" with a calculator icon
+  - Rows: Brokerage, STT, Exchange + SEBI + Stamp, GST (18%)
+  - Divider
+  - "Gross P&L: ₹2,000" (normal)
+  - "Total Charges: ₹47.20" (red)
+  - "Net P&L: ₹1,952.80" (bold, green if profit, red if loss, larger font)
+
+- "💾 Save Trade" yellow button (full width)
+
+═══════════════════════════════════════
+COMPONENT 6: IMPORT CSV (P&L Tab)
+═══════════════════════════════════════
+Inside P&L tab when "📥 Import CSV" sub-tab is selected:
+
+- Title: "Import Trades from CSV"
+- Large dropzone area:
+  - Dashed border (#636366), rounded corners
+  - Center: 📁 icon (32px)
+  - "Drop CSV file here or click to upload" (bold)
+  - "Supports: Zerodha Tradebook, Custom CSV" (tiny gray text)
+  - Accepted format hint: "Columns: Symbol, Qty, BuyPrice, SellPrice, BuyDate, SellDate"
+- "Or paste CSV data" label
+  - Textarea (6 rows, mono font, dark background)
+  - Placeholder showing example CSV with header row
+- "📥 Import Trades" yellow button
+- Result area (appears after import):
+  - Success: green left border card "✅ Imported 12 trades — Total P&L: ₹24,500"
+  - Error: red left border card "❌ 3 rows failed — check format"
+
+═══════════════════════════════════════
+COMPONENT 7: COMMAND CENTRE — CONNECTIONS (More Tab — redesigned)
+═══════════════════════════════════════
+Redesign the Settings section in the More tab. Rename it "Command Centre":
+
+Section title: "COMMAND CENTRE" (mono, uppercase, gray, small)
+
+- Top: A large "🔗 Connect All" button (full width, yellow background, black text, bold)
+  - When tapped, it tries to connect/test all 3 APIs at once
+  - Shows a loading state, then results for each
+
+- Below: 3 individual API cards (NOT accordion — always visible as cards):
+
+  CARD 1: Upstox API
+  - Left: 🔐 icon + "Upstox API" title + "Real-time market data" subtitle
+  - Right: Status badge (🟢 Connected / 🔴 Disconnected / 🟡 Checking)
+  - Expanded content:
+    - API Key input, API Secret input, Redirect URI input
+    - "🔗 Connect" button (outline style, individual connect for this API only)
+    - "🧪 Test Connection" button (smaller, gray)
+    - Last connected: "Mar 26, 2:30 PM" (tiny gray text)
+
+  CARD 2: Zerodha API
+  - Left: 🦓 icon + "Zerodha API" + "Holdings & positions sync"
+  - Right: Status badge
+  - Expanded: API Key, API Secret, Callback URL inputs
+    - "🔗 Connect" button
+    - "🔄 Refresh Token" button
+    - Last synced: timestamp
+
+  CARD 3: Gemini AI
+  - Left: 🤖 icon + "Gemini AI" + "AI analysis engine"
+  - Right: Status badge
+  - Expanded: API Key input
+    - "🔗 Connect" button
+    - "🧪 Test" button
+    - Model info: "gemini-2.0-flash" (tiny text)
+
+- Below the 3 cards:
+  - Row of 2 buttons: "💾 Save All" (dark) + "↻ Recheck All" (outline)
+
+═══════════════════════════════════════
+COMPONENT 8: EVENT CALENDAR — FULL VIEW (More Tab — redesigned)
+═══════════════════════════════════════
+Replace the accordion event calendar with a scrollable calendar view:
+
+Section title: "📅 EVENT CALENDAR" (mono, uppercase, gray)
+
+- Filter chips row (horizontal scroll): "All" | "RBI" | "FOMC" | "Earnings" | "Holidays" | "IPO"
+  - Active chip: yellow background, black text
+  - Inactive: dark background, gray text, border
+
+- Scrollable list of event cards (vertically, show all events whose dates are published):
+  Each event card:
+  - Left: Date box (compact, stacked — "MAR" on top in tiny text, "28" below in large bold, day "FRI" tiny below)
+  - Center:
+    - Event title (14px bold)
+    - Description (12px gray)
+    - Sector impact tags:
+      - Green pills: "Buy: Banking", "Buy: IT"
+      - Red pills: "Avoid: NBFC"
+      - Gray pills: "Watch: Pharma"
+  - Right: Priority indicator
+    - 🔴 HIGH (red dot)
+    - 🟡 MEDIUM (yellow dot)
+    - 🟢 LOW (green dot)
+  - Bottom of card: "⚡ VIX Impact: High volatility expected" (tiny mono text)
+
+- Show at least 8-10 upcoming events in the scroll
+- Events should be sorted by date (nearest first)
+- Past events should be grayed out or hidden
+
+═══════════════════════════════════════
+IMPORTANT NOTES:
+- All these components exist WITHIN the 4 main tab pages (not separate pages)
+- The news detail is a bottom-sheet modal popup
+- All Insights expansions happen inline (card expands, no page navigation)
+- Keep the same dark premium aesthetic throughout
+- Design each component separately so I can drag and position them in my layouts

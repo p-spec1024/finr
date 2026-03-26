@@ -1,0 +1,48 @@
+Design a mobile app screen (390px wide) for a stock market app called "FINR". DARK THEME ONLY — background #0a0a0a, cards #1c1c1e, accent yellow #ffd60a, green #30d158, red #ff453a. Text white #f2f2f7. NO white backgrounds anywhere.
+
+This is the EVENT CALENDAR section within the MORE tab.
+
+Top bar: "FINR" logo on left.
+
+Section title: "📅 EVENT CALENDAR" (tiny mono uppercase gray)
+
+Filter chips (horizontal scrollable row):
+- "All" (active — yellow background, black text)
+- "RBI" (inactive — #1c1c1e background, gray text, border)
+- "FOMC", "Earnings", "Holidays", "IPO" (all inactive)
+
+Scrollable list of 8 event cards (#1c1c1e):
+
+Event 1:
+- Left: date box — "MAR" tiny on top, "28" large bold center, "FRI" tiny below
+- Center: "RBI MPC Decision" (14px bold), "Interest rate announcement — policy impact on banking and NBFC sectors" (12px gray)
+- Sector tags: green pill "Buy: Banking", red pill "Avoid: NBFC", yellow pill "Watch: Auto"
+- Right: 🔴 red priority dot (HIGH)
+- Bottom tiny: "⚡ VIX Impact: High volatility expected"
+
+Event 2:
+- Date: APR 15 TUE
+- "Q4 FY26 Results Season" — "Major IT and banking companies reporting"
+- Tags: yellow "Watch: IT", yellow "Watch: Banking"
+- 🟡 yellow dot (MEDIUM)
+
+Event 3:
+- Date: MAY 01 THU
+- "FOMC Meeting" — "US Federal Reserve interest rate decision"
+- Tags: red "Avoid: Export IT", green "Buy: Pharma"
+- 🔴 red dot (HIGH)
+
+Event 4:
+- Date: MAY 15 FRI
+- "NSE Expiry Week" — "Monthly F&O expiry — high volatility expected"
+- 🟡 yellow dot
+
+Event 5:
+- Date: JUN 01 MON
+- "IMD Monsoon Forecast" — "Critical for agriculture and FMCG stocks"
+- Tags: yellow "Watch: FMCG", green "Buy: Fertilizer"
+- 🟢 green dot (LOW)
+
+Show 3 more events scrolled partially visible to indicate scrollability.
+
+Bottom nav: 🏠 Home | 💡 Insights | 📈 P&L | ⚙️ More (active, yellow)

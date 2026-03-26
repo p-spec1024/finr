@@ -1,0 +1,15 @@
+Design a mobile app screen (390px wide) for a stock market app called "FINR". DARK THEME ONLY — background #0a0a0a, cards #1c1c1e, accent yellow #ffd60a, green #30d158, red #ff453a. Text white #f2f2f7. NO white backgrounds.
+
+This is the HOME tab. Elements top to bottom:
+
+1. Thin black ticker strip at very top with scrolling stock names and prices
+2. Top bar: "FINR" logo (R is yellow) on left, green dot "LIVE" pill + refresh icon on right
+3. Hero: small gray "Nifty 50" label, giant "22,543.75" price, green "+1.23%" badge, "Market Open" text
+4. Horizontal scrollable index chips: Nifty 100, Bank Nifty, Nifty 50, VIX — each chip shows name, price, change%
+5. Live Market News card: shows 2 headlines visible with scroll for 3 more. Each headline has icon, title, priority badge (HIGH red/MEDIUM yellow/LOW green), sentiment text
+6. Market Health card: semicircular gauge (score 72/100) on left, 3x2 mini grid (Trend, Momentum, Breadth, VIX, FII, Volatility) on right
+7. Market Breadth card: green/red horizontal bar showing stocks up vs down, text "85 Up | 62% | 52 Down"
+8. Upcoming Events card: list with colored dots, event title, date, description
+9. FII/DII Flow card: rows for FII, DII, USD/INR, Crude Oil with values
+
+Bottom nav bar: 🏠 Home (active, yellow) | 💡 Insights | 📈 P&L | ⚙️ More

@@ -1,0 +1,30 @@
+Design a mobile app screen (390px wide) for a stock market app called "FINR". DARK THEME ONLY — background #0a0a0a, cards #1c1c1e, accent yellow #ffd60a, green #30d158, red #ff453a. Text white #f2f2f7. NO white backgrounds anywhere.
+
+This is the P&L TRACKER tab showing the DASHBOARD sub-tab.
+
+Top bar: "FINR" logo on left, "LIVE" pill on right.
+
+Sub-tab bar: "📊 Dashboard" (active — yellow text, yellow underline) | "➕ Add Trade" | "📥 Import CSV". Dark background.
+
+Content:
+1. 2x2 summary grid:
+   - Total P&L: "₹42,840" (24px bold green) with label below
+   - Win Rate: "68.5%" with "High Conviction" tiny text
+   - Total Trades: "142" with "Last 30 Days" tiny text
+   - Charges Paid: "₹1,842" with "Brokerage + STT" tiny text
+
+2. "Recent Activity" card (#1c1c1e):
+   - Column headers: Symbol, Qty, Buy, Sell, P&L (small gray)
+   - 5-6 trade rows with data:
+     - RELIANCE, 25, ₹2,800, ₹3,050, +₹6,250 (green)
+     - HDFCBANK, 100, ₹1,650, ₹1,580, -₹7,000 (red)
+     - INFY, 18, ₹1,780, ₹1,894, +₹2,052 (green)
+     - TCS, 10, ₹3,800, ₹3,920, +₹1,200 (green)
+     - ZOMATO, 500, ₹145, ₹138, -₹3,500 (red)
+
+3. "Strategy Insight" card (#1c1c1e, yellow left border):
+   - AI insight: "Your win rate on Large Cap stocks is significantly higher than mid-cap at 42%. Consider focusing your strategy accordingly."
+
+4. "Download Full Report" yellow text link at bottom
+
+Bottom nav: 🏠 Home | 💡 Insights | 📈 P&L (active, yellow) | ⚙️ More

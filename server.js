@@ -296,9 +296,12 @@ function evaluatePicksNextDay() {
 // ── Logging ───────────────────────────────────────────────────────────────────
 const LOGS = [];
 function log(level, msg) {
-  const entry = { ts: new Date().toISOString(), level, msg };
+  const now = new Date();
+  const ts = now.toISOString();
+  const timeStr = now.toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const entry = { ts, level, msg: `[${timeStr}] [${level}] ${msg}` };
   LOGS.unshift(entry);
-  if (LOGS.length > 200) LOGS.pop();
+  if (LOGS.length > 500) LOGS.pop();
   const icon = level === 'OK' ? '✅' : level === 'WARN' ? '⚠️' : level === 'ERR' ? '❌' : 'ℹ️';
   console.log(`[FINR] ${icon} ${msg}`);
 }
@@ -1385,6 +1388,7 @@ app.get('/api/system-health', (req, res) => {
     upstox:    { connected: connectionStatus === 'live', status: connectionStatus, tokenValid: !!accessToken && appConfig.tokenExpiry > now, expiresIn: appConfig.tokenExpiry ? Math.round((appConfig.tokenExpiry - now) / 60000) : 0 },
     zerodha:   { connected: !!zAccessToken, tokenValid: !!zAccessToken && appConfig.zTokenExpiry > now, holdingsCount: zerodhaHoldings.length, positionsCount: zerodhaPositions.length },
     gemini:    { configured: !!appConfig.geminiKey, status: appConfig.geminiKey ? 'configured' : 'not_configured' },
+    vertexAI:  { configured: !!gcpServiceAccount, projectId: gcpServiceAccount?.project_id || null, clientEmail: gcpServiceAccount?.client_email || null },
     server:    { uptime: Math.round(process.uptime()), memMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024), stocksLoaded: stockUniverse.length, signalsCalc: Object.keys(signalCache).length },
     marketOpen: isMarketOpen(),
     lastUpdate: Object.values(liveStocks)[0]?.lastUpdate || null,
@@ -2732,9 +2736,10 @@ async function initLiveData() {
 const clients = new Set();
 wss.on('connection', ws => {
   clients.add(ws);
+  log('INFO', `WS client connected (total: ${clients.size})`);
   ws.send(JSON.stringify({ type:'init', stocks:liveStocks, indices:liveIndices, signals:signalCache, status:connectionStatus, vix:vixData, fiiDii:fiiDiiData, globalMarkets }));
-  ws.on('close', () => clients.delete(ws));
-  ws.on('error', () => clients.delete(ws));
+  ws.on('close', () => { clients.delete(ws); log('INFO', `WS client disconnected (total: ${clients.size})`); });
+  ws.on('error', (e) => { clients.delete(ws); log('WARN', `WS client error: ${e.message}`); });
   ws.on('message', m => { if (m.toString()==='ping') ws.send('pong'); });
 });
 function broadcastLiveData() {

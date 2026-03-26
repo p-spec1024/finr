@@ -1,0 +1,91 @@
+FINR v2.0 — Desktop Responsive Layout Implementation
+=====================================================
+
+PROJECT: Professional Stock Intelligence Platform for Indian NSE market
+DEPLOYED ON: Railway (auto-deploys on git push to main)
+FOLDER: C:\Users\prash\Documents\FINR
+
+WHAT'S ALREADY DONE:
+- Complete mobile-first SPA at public/index.html (~1800 lines) with Stitch "Precision Vault" design system
+- Backend at server.js (~2600 lines) with all features working
+- All 116 unit tests passing
+- Current mobile layout: 4 bottom tabs (Home, Insights, P&L Tracker, More/Command Centre)
+- Options Lab and Verify Pick are standalone full pages with back-arrow navigation
+- News opens as bottom-sheet modal
+
+DESIGN SYSTEM TOKENS (already in use — DO NOT change):
+- Dark theme ONLY
+- Backgrounds: #0a0a0a (base), #131313 (surface), #1c1b1b (card), #242426 (elevated), #353534 (active)
+- Accent: #ffd60a (gold), #47e266 (green/profit), #ffb4ab (red/loss)
+- Text: #e5e2e1 (primary), #d0c6ab (secondary/labels), #999077 (muted)
+- Fonts: Manrope (headlines), Inter (body), DM Mono (numbers) — all via Google Fonts CDN
+- Icons: Material Symbols Outlined
+- Tailwind CSS via CDN with custom color tokens configured
+
+WHAT NEEDS TO BE DONE NOW:
+I'm uploading a Stitch export zip with desktop web layouts for FINR. Implement these desktop designs into the EXISTING public/index.html as a responsive layer. The approach:
+
+1. KEEP all existing JavaScript logic — do NOT touch any JS functions, API calls, WebSocket handling, rendering functions, event handlers. Every function must remain working exactly as-is.
+
+2. KEEP the existing mobile HTML structure — but wrap/extend it with responsive classes so that:
+   - <768px: Current mobile layout (bottom tabs, single column) — NO CHANGES
+   - 768-1279px: Collapsed sidebar (icons only) + 2-column content
+   - 1280px+: Full sidebar (240px, icon + label) + multi-column content
+
+3. ADD a left sidebar for desktop that contains navigation links for: Dashboard (Home), Insights, AI Picks, Options Lab, Verify Pick, P&L Tracker, Command Centre. The sidebar should:
+   - Use glassmorphism (backdrop-blur, semi-transparent #131313)
+   - Show FINR logo at top
+   - Active item: gold left border + gold text
+   - Connection status badge at bottom
+   - Wire sidebar nav items to existing goTab() and goPage() functions
+   - HIDE on mobile (<768px), show on desktop
+
+4. ADD a top ticker bar for desktop showing scrolling stock prices, market status, VIX, IST clock
+
+5. CONVERT existing single-column sections to multi-column on desktop:
+   - Home: Hero indices 3-col, FII/DII + Global Markets 2-col, News + Events 2-col
+   - AI Picks: 3-column card grid
+   - Options Lab: 2-column card grid with option chain summary bar at top
+   - P&L: Strategy cards with side panel for Add Trade form
+   - Command Centre: 3-column layout (APIs, Health, Logs)
+
+6. On desktop, HIDE the bottom tab navigation (it's mobile-only)
+
+7. All existing element IDs must remain unchanged — the JS functions reference them by ID
+
+KEY ARCHITECTURE DETAILS:
+- SPA navigation: goTab(tabName) switches main tabs, goPage(pageName) opens standalone pages
+- goSubTab(group, subtab) switches sub-tabs within a tab
+- WebSocket connection: connectWS() on page load, receives 'init' and 'tick' messages
+- State variables: S (stocks), IDX (indices), SIG (signals), VIX, FIIDII
+- Options Lab has Signal Alignment (X/10 factors) with factor chips display
+- P&L has strategy-grouped view (groups by underlying + expiry month, shows rolling positions)
+- Pick tracker shows AI accuracy stats widget
+- News bottom-sheet modal: openNewsModal() / closeNewsModal()
+
+RECENT FEATURES ADDED (make sure desktop layout includes these):
+- Option Chain Summary bar (PCR, Max Pain, Avg IV) at top of Options Lab
+- Signal Alignment score (X/10) with colored factor chips on each options trade card
+- Strategy-grouped P&L with roll count badges, expiry grouping, date ranges
+- AI Pick Accuracy widget (accuracy %, correct/wrong counts)
+- Hedge suggestion boxes on options trade cards
+- Rolling level indicators on options trades
+
+USER'S TRADING STYLE (relevant for P&L display):
+- BUYS options (CE/PE) as primary directional trades
+- Hedges with FUTURES (buy futures to offset option risk)
+- ROLLS positions: closes profitable strike, opens new strike, keeps rolling
+- All legs in same underlying + expiry month = ONE strategy in P&L view
+- Also takes naked long options without hedge
+
+AFTER IMPLEMENTATION:
+1. Run tests: node tests/unit.js — all 116 must pass (tests are backend-only, no DOM testing)
+2. Commit with descriptive message
+3. Push to Railway: git push origin main
+
+DO NOT:
+- Change any JavaScript function logic
+- Remove or rename any element IDs
+- Break the mobile layout
+- Change the design tokens/colors
+- Add any new npm dependencies (frontend is vanilla JS + Tailwind CDN)

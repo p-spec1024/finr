@@ -1,0 +1,32 @@
+Design a mobile app screen (390px wide) for a stock market app called "FINR". DARK THEME ONLY — background #0a0a0a, cards #1c1c1e, accent yellow #ffd60a, green #30d158, red #ff453a. Text white #f2f2f7. NO white backgrounds anywhere.
+
+This is the P&L TRACKER tab showing the IMPORT CSV sub-tab.
+
+Top bar: "FINR" logo on left.
+
+Sub-tab bar: "📊 Dashboard" | "➕ Add Trade" | "📥 Import CSV" (active — yellow underline). Dark background.
+
+Content — a card (#1c1c1e):
+
+Title: "Import Trades from CSV" (15px bold)
+
+1. Dropzone area:
+   - Dashed border (gray #636366), rounded 16px corners, padding 24px
+   - Center: 📁 icon (32px)
+   - "Drop CSV file here or click to upload" (13px bold white)
+   - "Supports: Zerodha Tradebook, Custom CSV" (10px gray)
+   - "Columns: Symbol, Qty, BuyPrice, SellPrice, BuyDate, SellDate" (9px mono gray)
+
+2. "Or paste CSV data" label (tiny gray uppercase)
+   - Textarea: 6 rows, mono font, dark #242426 background
+   - Placeholder text showing example:
+     symbol,qty,buyprice,sellprice,buydate,selldate
+     RELIANCE,10,2800,3000,2024-01-15,2024-01-20
+
+3. "📥 Import Trades" full width yellow button
+
+4. Success result (show this below the button):
+   - Green left border card: "✅ Imported 12 trades successfully"
+   - Mini summary: "Total P&L: ₹24,500 | Charges: ₹960"
+
+Bottom nav: 🏠 Home | 💡 Insights | 📈 P&L (active, yellow) | ⚙️ More

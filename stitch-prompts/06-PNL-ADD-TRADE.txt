@@ -1,0 +1,37 @@
+Design a mobile app screen (390px wide) for a stock market app called "FINR". DARK THEME ONLY — background #0a0a0a, cards #1c1c1e, accent yellow #ffd60a, green #30d158, red #ff453a. Text white #f2f2f7. NO white backgrounds anywhere. Input fields use #242426 background.
+
+This is the P&L TRACKER tab showing the ADD TRADE sub-tab.
+
+Top bar: "FINR" logo on left.
+
+Sub-tab bar: "📊 Dashboard" | "➕ Add Trade" (active — yellow underline) | "📥 Import CSV". Dark background.
+
+Content — a form card (#1c1c1e):
+
+Title: "Add New Trade" (15px bold)
+
+Form fields (all inputs dark #242426 background, yellow border on focus, white text):
+- Symbol: full width text input, placeholder "RELIANCE"
+- Row of 2: Quantity (number input) | Type (dropdown: Equity / Options / Spread)
+- Row of 2: Buy Price ₹ (number) | Sell Price ₹ (number)
+- Row of 2: Buy Date (date picker) | Sell Date (date picker)
+
+Spread section (visible, showing expanded state):
+- "Leg 1 (Buy)" label (12px bold)
+  - Row of 2: Type dropdown (CE/PE) | Strike Price input
+  - Row of 2: Premium ₹ input | Quantity input
+- "Leg 2 (Sell)" label (12px bold)
+  - Row of 2: Type dropdown (CE/PE) | Strike Price input
+  - Row of 2: Premium ₹ input | Quantity input
+
+Charges calculation box (#242426 rounded):
+- Title: "🧮 Charges (Auto-calculated)" bold
+- Rows: Brokerage ₹40 | STT ₹28.00 | Exchange+SEBI+Stamp ₹3.45 | GST (18%) ₹7.82
+- Divider line
+- Gross P&L: ₹2,000
+- Total Charges: -₹79.27 (red)
+- Net P&L: ₹1,920.73 (bold green, slightly larger font)
+
+"💾 Save Trade" full width yellow button (#ffd60a background, black text)
+
+Bottom nav: 🏠 Home | 💡 Insights | 📈 P&L (active, yellow) | ⚙️ More

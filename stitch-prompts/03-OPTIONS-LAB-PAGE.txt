@@ -1,0 +1,45 @@
+Design a mobile app screen (390px wide) for a stock market app called "FINR". DARK THEME ONLY — background #0a0a0a, cards #1c1c1e, accent yellow #ffd60a, green #30d158, red #ff453a. Text white #f2f2f7. NO white backgrounds anywhere.
+
+This is a STANDALONE full page for OPTIONS LAB. User navigates here by tapping "Options Lab" from the Insights tab.
+
+Top bar: "←" back arrow on left + "Options Lab" page title center + "FINR" logo right.
+
+Content:
+
+1. Header section:
+   - "📊 AI Options Scanner" (18px bold)
+   - "AI scans the market and recommends the best option trades right now" (12px gray)
+   - Row: "Last scanned: 2:30 PM" gray left | "🔄 Scan Now" yellow outline button right
+
+2. Filter chips (horizontal scroll):
+   - "All" (active — yellow bg, black text) | "CE Only" | "PE Only" | "Low Risk" | "High Reward"
+
+3. List of 4-5 option trade cards (each #1c1c1e, 16px rounded):
+
+   CARD 1:
+   - Header: "NIFTY" (15px bold) + "CE" green pill badge on right
+   - Strategy label: "Bull Call Spread" (mono, 10px, yellow text)
+   - 3-column grid (#242426 boxes): Entry ₹280 | Target ₹350 | SL ₹240
+   - 2-column grid: Risk:Reward 1:2.5 | Confidence 85%
+   - Row: Max Profit ₹5,250 (green) | Max Loss ₹2,100 (red)
+   - "Greeks" row: 4 tiny boxes — δ 0.65 | θ -0.03 | γ 0.02 | ν 0.15
+   - Market context: "VIX 16.2 · Trend Bullish · Volume High" (mono tiny gray)
+   - AI Confidence bar: yellow progress bar (85% filled on dark track)
+   - "View Full Analysis ▸" yellow text link
+
+   CARD 2:
+   - "BANKNIFTY" + "PE" red pill
+   - Strategy: "Bear Put Spread"
+   - Entry ₹180 | Target ₹260 | SL ₹140
+   - Risk:Reward 1:2.0 | Confidence 72%
+
+   CARD 3:
+   - "RELIANCE" + "CE" green pill
+   - Strategy: "Long Call"
+   - Entry ₹120 | Target ₹200 | SL ₹80
+
+   Show 2 more cards partially visible at bottom to indicate scroll.
+
+4. Bottom info text: "⚠ Options involve risk. These are AI suggestions, not financial advice." (tiny gray)
+
+Bottom nav: 🏠 Home | 💡 Insights (active, yellow) | 📈 P&L | ⚙️ More

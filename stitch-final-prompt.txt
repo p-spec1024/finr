@@ -1,0 +1,243 @@
+Design a 4-page mobile stock market app called "FINR" for the Indian NSE market. EVERY page MUST use a DARK theme — NO white backgrounds anywhere. This is critical.
+
+STRICT DESIGN SYSTEM (apply to ALL pages):
+- Background: #0a0a0a (deep black) — NEVER white or light
+- Card/surface: #1c1c1e — NEVER white
+- Elevated surface: #242426
+- Accent: #ffd60a (golden yellow)
+- Profit/Up: #30d158 (green)
+- Loss/Down: #ff453a (red)
+- Blue: #0a84ff, Orange: #ff9f0a, Purple: #bf5af2
+- Text primary: #f2f2f7 (white), secondary: #aeaeb2 (gray), muted: #636366
+- Borders: rgba(255,255,255,0.07)
+- Font: Inter for UI, DM Mono (monospace) for ALL numbers and data
+- Card border-radius: 16px, Pills/badges: 50px radius
+- Cards: subtle shadow, 1px border rgba(255,255,255,0.07)
+- Width: 390px mobile
+- THEME: Dark premium like Bloomberg Terminal meets Robinhood Dark Mode
+
+SHARED ELEMENTS ON ALL PAGES:
+
+TOP: Scrolling ticker strip (26px, black #000) with stock symbols and prices scrolling horizontally.
+
+TOP BAR: "FINR" logo (R is yellow #ffd60a) on left. Right side: green dot + "LIVE" pill, refresh icon, theme toggle icon.
+
+BOTTOM NAV (64px height, #141414 background):
+4 tabs: 🏠 Home | 💡 Insights | 📈 P&L | ⚙️ More
+Active tab: yellow #ffd60a text. Inactive: gray #636366.
+
+══════════════════════════════════════════════════════════
+PAGE 1: HOME (dark background #0a0a0a)
+══════════════════════════════════════════════════════════
+
+1. HERO SECTION
+   - Small mono label "Nifty 50" in gray
+   - Giant price: "22,543" (46px, bold white) with ".75" in smaller gray
+   - Below: green badge "+1.23%" and text "🟢 Market Open — Live data"
+
+2. INDEX CHIPS (horizontal scroll row)
+   - 4 small rounded cards (#1c1c1e background): Nifty 100, Bank Nifty, Nifty 50, India VIX
+   - Each: name (tiny gray), price (19px bold white), change % (green or red)
+
+3. LIVE MARKET NEWS (card, #1c1c1e)
+   - Header: "📰 Live Market News" left, "Updated 2:30 PM" right (gray mono)
+   - Shows 2 headlines visible, scroll to reveal 3 more (5 total)
+   - Each headline row:
+     - Left: emoji icon (📰/⚠️/📊)
+     - Center: title (13px bold white, 1 line, truncate "...")
+     - Right: priority pill (HIGH=red bg, MEDIUM=yellow bg, LOW=green bg)
+     - Below title: "Bullish · 5 min ago" tiny gray
+   - Tapping a headline opens a BOTTOM SHEET MODAL (slides up, covers 75%):
+     - Dark background #1c1c1e, rounded top 20px
+     - Gray drag handle bar centered at top
+     - Title (16px bold), priority badge + sentiment + time
+     - Divider
+     - "Impact Analysis" text section
+     - "Affected Sectors" tag pills (green=Buy, red=Avoid, yellow=Watch)
+     - "AI Insight" section in italic gray
+     - Close by swiping down or tapping outside
+
+4. MARKET HEALTH GAUGE (card, #1c1c1e)
+   - "Market Health" title
+   - Left: semicircular arc gauge, score number (e.g. "72") in center, "/100" tiny below
+   - Right: 3x2 grid of mini boxes (#242426): Trend, Momentum, Breadth, VIX, FII Flow, Volatility
+
+5. MARKET BREADTH (card, #1c1c1e)
+   - "📊 Market Breadth" title
+   - Horizontal split bar (green left portion, red right portion)
+   - Below: "🟢 85 Up | 📊 62% | 🔴 52 Down" in mono text
+
+6. UPCOMING EVENTS (card, #1c1c1e)
+   - "📅 Upcoming Events" title
+   - List: colored priority dot + event title + date + short description
+
+7. FII / DII FLOW (card, #1c1c1e)
+   - "FII / DII Flow" title
+   - Rows: FII value (green/red), DII value (green/red), USD/INR, Crude Oil
+
+══════════════════════════════════════════════════════════
+PAGE 2: INSIGHTS (dark background #0a0a0a) — NOT WHITE!
+══════════════════════════════════════════════════════════
+
+Sub-tab bar at top: "🎯 AI Picks" | "📊 Options Lab" | "✓ Verify Pick"
+Active sub-tab: yellow text + yellow underline. Inactive: gray text. Dark background.
+
+--- SUB-TAB: AI PICKS ---
+- Row: "Cache updated: 2:30 PM" (gray) left, "🔄 Refresh" button right
+- List of stock recommendation CARDS (each card is #1c1c1e with rounded corners):
+  - Left side 4px border accent (green if bullish, red if bearish)
+  - Top row: Symbol "INFY" (16px bold white) + company name "Infosys Ltd" (tiny gray) on left. Right: "₹1,894" (16px bold) + "+12.4% UPSIDE" (green text)
+  - 2x2 grid of data boxes (#242426 background):
+    - Target: ₹2,120 | Confidence: 94%
+    - Timeframe: 3-6 Months | Risk: Moderate
+  - Reasoning preview (2 lines gray text, truncated)
+  - "View AI Reasoning ▸" yellow link text
+  - Tag pills: "Large Cap", "IT Sector", "Momentum" (yellow tinted background)
+
+  When "View AI Reasoning" is tapped, card EXPANDS INLINE:
+  - Full reasoning text (no truncation)
+  - Mini data table (2 columns, #242426 rows):
+    P/E: 24.5 | ROE: 18.2%
+    Debt/Equity: 0.3 | Dividend: 1.2%
+    52W High: ₹3,200 | 52W Low: ₹2,100
+  - "Bull Case" box (green left border, green tinted bg): bullet points
+  - "Bear Case" box (red left border, red tinted bg): bullet points
+  - "Collapse ▴" link
+
+--- SUB-TAB: OPTIONS LAB ---
+- Row: "Options trades: 2:30 PM" left, "🔄 Refresh" right
+- List of option trade CARDS (#1c1c1e):
+  - Header: Symbol "NIFTY" + direction badge "CE" (green pill) or "PE" (red pill)
+  - 3-column grid (#242426): Entry ₹280 | Target ₹350 | SL ₹240
+  - Row: Strategy "Bull Call Spread" | Risk:Reward "1:2.5" | Confidence "85%"
+
+  When tapped, card EXPANDS INLINE:
+  - Strategy explanation text
+  - "Greeks" row: 4 mini boxes — Delta, Theta, Gamma, Vega
+  - Risk Profile: Max Profit (green), Max Loss (red), Breakeven
+  - Market Conditions: VIX level, trend, volume
+  - AI Confidence progress bar (yellow fill on dark track)
+  - "Collapse ▴" link
+
+--- SUB-TAB: VERIFY PICK ---
+- Card (#1c1c1e):
+  - Row: text input "Enter stock symbol (e.g., RELIANCE)" + "Analyse" yellow button
+  - After analysis, result appears INLINE below:
+    - Header: Symbol (18px bold) + verdict badge (BUY=green, HOLD=yellow, SELL=red)
+    - 4 mini metric boxes: Confidence %, Risk Level, Target ₹, Stop Loss ₹
+    - Fundamentals mini table: P/E, ROE, D/E, Market Cap, Dividend, Promoter Holding
+    - "✓ Positives" card (green border + green tint): bullet points
+    - "⚠ Risks" card (red border + red tint): bullet points
+    - "📰 Recent News" — 2-3 news items about this stock
+    - "🔄 Alternatives" — 2-3 small horizontal stock cards
+    - "Overall Score: 72/100" with progress bar
+
+══════════════════════════════════════════════════════════
+PAGE 3: P&L TRACKER (dark background #0a0a0a)
+══════════════════════════════════════════════════════════
+
+Sub-tab bar: "📊 Dashboard" | "➕ Add Trade" | "📥 Import CSV"
+
+--- SUB-TAB: DASHBOARD ---
+- 2x2 summary grid of cards:
+  - Total P&L: "₹42,840" (24px bold, green) | Win Rate: "68.5%"
+  - Total Trades: "142" | Charges Paid: "₹1,842"
+- "Recent Activity" card with scrollable table:
+  - Columns: Symbol, Qty, Buy, Sell, P&L
+  - Each row: symbol (bold), qty, buy price, sell price, P&L (green/red)
+- "Strategy Insight" card: AI insight about trading patterns
+- "Download Full Report" yellow link
+
+--- SUB-TAB: ADD TRADE ---
+- Card: "Add New Trade" title
+- Form fields (inputs have #242426 background, yellow border on focus):
+  - Symbol (full width, auto uppercase)
+  - Row: Quantity | Type (Equity/Options/Spread dropdown)
+  - Row: Buy Price ₹ | Sell Price ₹
+  - Row: Buy Date | Sell Date
+- Spread section (shows when "Spread" selected):
+  - "Leg 1 (Buy)": Type CE/PE | Strike | Premium ₹ | Qty
+  - "Leg 2 (Sell)": Type CE/PE | Strike | Premium ₹ | Qty
+- Charges box (#242426, rounded):
+  - "Charges (Auto-calculated)" title with 🧮 icon
+  - Brokerage: ₹40 | STT: ₹28 | Exchange+SEBI+Stamp: ₹3.45 | GST: ₹7.82
+  - Divider
+  - Gross P&L: ₹2,000 | Total Charges: -₹79.27 (red)
+  - Net P&L: ₹1,920.73 (bold green, larger text)
+- "💾 Save Trade" full width yellow button
+
+--- SUB-TAB: IMPORT CSV ---
+- Card: "Import Trades from CSV" title
+- Dropzone: dashed border, 📁 icon, "Drop CSV or click to upload", format hint below
+- "Or paste CSV data" textarea (mono font, 6 rows)
+- "📥 Import Trades" yellow button
+- Result: green success card or red error card
+
+══════════════════════════════════════════════════════════
+PAGE 4: MORE / COMMAND CENTRE (dark background #0a0a0a)
+══════════════════════════════════════════════════════════
+
+--- SECTION: COMMAND CENTRE ---
+Section label: "COMMAND CENTRE" (mono, uppercase, tiny, gray)
+
+TOP: "🔗 Connect All" button (full width, yellow bg, black text, bold)
+— Connects/tests all 3 APIs at once, shows loading then results
+
+3 API cards (always visible, NOT accordion, each #1c1c1e):
+
+  CARD: 🔐 Upstox API
+  - Top: icon + "Upstox API" title + "Real-time market data" subtitle | Right: status dot (🟢/🔴/🟡) + "Connected"/"Disconnected"
+  - Inputs: API Key, API Secret, Redirect URI
+  - Buttons: "🔗 Connect" (outline) + "🧪 Test" (small gray)
+  - "Last connected: Mar 26, 2:30 PM" tiny gray
+
+  CARD: 🦓 Zerodha API
+  - Top: icon + "Zerodha API" + "Holdings & positions sync" | Status dot
+  - Inputs: API Key, API Secret, Callback URL
+  - Buttons: "🔗 Connect" + "🔄 Refresh Token"
+  - Last synced timestamp
+
+  CARD: 🤖 Gemini AI
+  - Top: icon + "Gemini AI" + "AI analysis engine" | Status dot
+  - Input: API Key
+  - Buttons: "🔗 Connect" + "🧪 Test"
+  - "Model: gemini-2.0-flash" tiny text
+
+Row: "💾 Save All" (dark button) + "↻ Recheck All" (outline button)
+
+--- SECTION: SYSTEM ---
+Label: "SYSTEM" (mono, uppercase, tiny, gray)
+- 🔌 System Health (expandable accordion):
+  - Status rows: Upstox, Zerodha, Gemini, Server, Market
+  - Each: name + detail + OK/WARN/ERR badge (green/yellow/red)
+  - "↻ Refresh" button
+- 📋 System Logs (expandable accordion):
+  - "Load Logs" button + scrollable log list (color-coded lines)
+
+--- SECTION: EVENT CALENDAR ---
+Label: "📅 EVENT CALENDAR" (mono, uppercase, tiny, gray)
+
+Filter chips (horizontal scroll): All | RBI | FOMC | Earnings | Holidays | IPO
+Active chip: yellow bg black text. Inactive: dark bg gray text.
+
+Scrollable list of event cards (#1c1c1e):
+Each event:
+- Left: date box (month "MAR" tiny on top, day "28" large bold, weekday "FRI" tiny below)
+- Center: title (14px bold), description (12px gray), sector tags (green/red/yellow pills)
+- Right: priority dot (🔴 HIGH / 🟡 MEDIUM / 🟢 LOW)
+- Bottom: "⚡ VIX Impact: High volatility expected" mono tiny text
+Show 8-10 events, sorted by nearest date first.
+
+--- FOOTER ---
+Centered: "FINR v2.0 · AES-256 · Gemini AI · Railway · 🇮🇳" tiny gray text
+
+══════════════════════════════════════════════════════════
+CRITICAL REMINDERS:
+- EVERY page must have #0a0a0a dark background — NO white anywhere
+- EVERY card must be #1c1c1e — NO light/white cards
+- EVERY text must be light colored on dark — NO dark text on white
+- All 4 pages must look visually consistent with the same dark theme
+- Use the exact color codes specified above
+- Make it look premium, clean, minimal — like a professional trading terminal
+- Generate each page as a separate screen
+══════════════════════════════════════════════════════════

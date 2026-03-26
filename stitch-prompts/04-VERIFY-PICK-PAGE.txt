@@ -1,0 +1,60 @@
+Design a mobile app screen (390px wide) for a stock market app called "FINR". DARK THEME ONLY — background #0a0a0a, cards #1c1c1e, accent yellow #ffd60a, green #30d158, red #ff453a. Text white #f2f2f7. NO white backgrounds anywhere.
+
+This is a STANDALONE full page for VERIFY PICK. User navigates here by tapping "Verify Pick" from the Insights tab. This page is used to verify a stock suggestion from a friend — AI does deep unbiased analysis.
+
+Top bar: "←" back arrow on left + "Verify Pick" page title center + "FINR" logo right.
+
+Content — show the page with a completed analysis for "RELIANCE":
+
+1. Search section:
+   - "🔍 Check any stock" (16px bold)
+   - "Get unbiased AI analysis before you invest" (12px gray)
+   - Row: large text input with "RELIANCE" typed (#242426 bg) + yellow "Analyse" button
+
+2. Result header card (#242426, rounded):
+   - Left: "RELIANCE" (20px bold white) + "Reliance Industries Ltd" (12px gray) below
+   - Right: large green "BUY" verdict badge pill (bold)
+
+3. Row of 4 mini metric boxes (#1c1c1e):
+   - Confidence: 88% | Risk: Moderate | Target: ₹3,240 | Stop Loss: ₹2,680
+
+4. "Overall Score" card (#1c1c1e):
+   - "Score: 82/100" with yellow horizontal progress bar
+   - Below: "Strong fundamentals with growth potential" italic gray
+
+5. "📊 Fundamentals" card (#1c1c1e):
+   - 2-column table rows (#242426 alternating):
+     P/E Ratio: 28.5 | ROE: 12.4%
+     Debt/Equity: 0.4 | Market Cap: ₹18.2L Cr
+     Dividend Yield: 0.3% | Promoter Holding: 50.3%
+
+6. "✓ Positives" card (#1c1c1e, 4px green left border, subtle green tint):
+   - "What's working:" (12px bold green)
+   - • Strong cash flow generation across all segments
+   - • Jio subscriber base growing 8% QoQ
+   - • Retail expansion — 500 new stores this quarter
+   - • Green energy investment — long term catalyst
+
+7. "⚠ Risks & Red Flags" card (#1c1c1e, 4px red left border, subtle red tint):
+   - "Watch out for:" (12px bold red)
+   - • P/E above sector average (28.5 vs 22.0)
+   - • ₹2.8L Cr debt on books
+   - • Crude oil price sensitivity in O2C segment
+   - • Regulatory risk in telecom sector
+
+8. "📰 Recent News" card (#1c1c1e):
+   - 3 news items with title + sentiment badge:
+     "Reliance Q3 results beat estimates" — Bullish (green)
+     "Jio tariff hike expected in Q4" — Neutral (gray)
+     "Oil prices surge impacts refining margins" — Bearish (red)
+
+9. "🔄 Better Alternatives" card (#1c1c1e):
+   - 3 small horizontal scrollable cards:
+     TCS ₹3,890 ↑8% | INFY ₹1,894 ↑12% | HCL ₹1,650 ↑15%
+   - Each card: symbol, price, expected upside, tiny tag "Lower Risk"
+
+10. AI Summary card (#242426, yellow top border):
+    - "AI Verdict" (14px bold yellow)
+    - "Reliance is a BUY for long-term investors with 3-6 month horizon. Strong fundamentals across Jio and Retail offset O2C volatility. Entry below ₹2,900 offers good risk-reward." (12px white)
+
+Bottom nav: 🏠 Home | 💡 Insights (active, yellow) | 📈 P&L | ⚙️ More

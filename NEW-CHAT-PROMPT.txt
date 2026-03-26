@@ -1,0 +1,74 @@
+I'm building FINR v2.0 — a Professional Stock Intelligence Platform for the Indian NSE market, deployed on Railway. I need you to implement a new UI design for the frontend.
+
+PROJECT STRUCTURE:
+- server.js (~2100 lines) — Node.js + Express + WebSocket backend
+- public/index.html (~1500 lines) — Single-page HTML app (current frontend, needs UI overhaul)
+- tests/unit.js (802 lines) — 13 suites, 116 tests (ALL MUST PASS before any push)
+- lib/marketContext.js — Market context engine
+
+TECH STACK:
+- Backend: Node.js, Express, WebSocket, Google Gemini AI (@google/genai)
+- Data: Upstox v2 REST API (2s polling, batches of 25), Twelve Data (post-market)
+- Frontend: Single-page HTML app, CSS variables, vanilla JS
+- Security: AES-256 encryption, PIN lock
+- Deploy: Railway (auto-deploys on git push to main)
+
+APP ARCHITECTURE — 4 TABS:
+Tab 1: HOME — Hero (Nifty 50 price), index chips, live news (scrollable, tappable → bottom sheet modal), market health gauge, breadth bar, upcoming events, FII/DII flow
+Tab 2: INSIGHTS — AI Picks list (main view), with navigation to separate pages: Options Lab + Verify Pick
+Tab 3: P&L TRACKER — Dashboard, Add Trade (with Zerodha charge calculator), Import CSV
+Tab 4: MORE (Command Centre) — API connections (Upstox, Zerodha, Gemini) with individual Connect buttons + Connect All, System Health, Logs, Event Calendar with filter chips
+
+SERVER API ENDPOINTS (already built and working):
+- GET /api/ai-picks — AI long-term stock recommendations (4-hour cache)
+- POST /api/verify-stock — Deep unbiased stock analysis
+- GET /api/options-lab — AI options trade scanner (30-min cache)
+- POST /api/trades/import-csv — Zerodha CSV import
+- GET /api/market-context — Dynamic event calendar
+- GET /api/system-health — Connection status for all APIs
+- GET /api/news — Gemini-powered market news
+- GET /api/live — Live stock prices
+- GET /api/signals — Signal engine data
+- GET /api/market-health — Market health score
+- GET /api/logs — Server logs
+- POST /api/settings — Save API keys
+- POST /api/verify-pin — PIN verification
+- GET /api/config-status — Check if PIN is set
+- WebSocket — Real-time quotes (sends type:'init' on connect with all data, then type:'quote' for updates)
+
+STOCK DATA:
+- STOCK_UNIVERSE: 165 stocks with instrumentKey (NSE_EQ|ISIN format), symbol, name, sector, pe, roe, de, div, target, cap
+- PENNY_STOCKS: 48 stocks (no instrumentKey, no live prices)
+- ISINs: All 165 verified and corrected (41 were wrong, now fixed)
+- Symbol corrections: TATAMOTORS→TMCV, MAZAGON→MAZDOCK, DEEPAKNITRITE→DEEPAKNTR, PVR→PVRINOX
+
+CURRENT FRONTEND STATE:
+The current index.html has all the JS logic working:
+- PIN system, WebSocket connection, theme toggle
+- goTab() navigation, goSubTab() for sub-tabs
+- All API fetch functions: loadAiPicks(), loadOptionsLab(), verifyPick(), fetchNews(), renderNews(), loadEventCalendar(), loadHealth(), loadLogs(), fetchStatus()
+- P&L: saveTrade() with full Zerodha charge calculation, importCsv() (server + client fallback), renderPnlDashboard()
+- Indian number formatting: fmt() with comma grouping, fmtCr() for crore/lakh
+- Settings: saveSettings(), testUpstox(), testGemini(), doZerodhaRefresh()
+
+WHAT I NEED:
+I designed the UI in Google Stitch. I'm uploading the exported .zip file with HTML/CSS for all pages. Please:
+1. Take the Stitch designs and implement them into the existing index.html
+2. Keep ALL existing JavaScript logic (API calls, WebSocket, PIN, data rendering)
+3. Replace only the HTML structure and CSS with the new Stitch designs
+4. Wire the new HTML elements to the existing JS functions
+5. Options Lab and Verify Pick are SEPARATE FULL PAGES (not sub-tabs) — navigated from Insights tab with back arrows
+6. News headlines open as bottom-sheet modals when tapped
+7. Command Centre has individual "Connect" buttons per API + a "Connect All" button
+8. Event Calendar has filter chips and scrollable event list
+9. Run tests (node tests/unit.js) — all 116 must pass
+10. Commit and push to Railway
+
+DESIGN SYSTEM (from Stitch):
+- Background: #0a0a0a, Cards: #1c1c1e, Surface: #242426
+- Accent: #ffd60a (yellow), Green: #30d158, Red: #ff453a, Blue: #0a84ff
+- Text: #f2f2f7 primary, #aeaeb2 secondary, #636366 muted
+- Font: Inter + DM Mono, Border-radius: 16px cards, 50px pills
+- Dark theme throughout — NO white backgrounds
+
+I'm uploading the Stitch export zip file now.

@@ -1,0 +1,157 @@
+I'm building a mobile-first stock market intelligence app called "FINR" (Indian stock market — NSE). I need to design 4 pages (tabs) with a bottom navigation bar. The app uses a dark theme.
+
+DESIGN SYSTEM:
+- Background: #0a0a0a (deep black)
+- Card background: #1c1c1e
+- Accent/highlight: #ffd60a (golden yellow)
+- Green (profit/up): #30d158
+- Red (loss/down): #ff453a
+- Blue: #0a84ff
+- Text primary: #f2f2f7, secondary: #aeaeb2, muted: #636366
+- Font: Inter for UI, DM Mono for numbers/data
+- Border radius: 16px for cards, 50px for pills/badges
+- All cards have subtle borders (rgba white 7%) and soft shadows
+- Mobile width: 390px, bottom nav height: 64px
+
+BOTTOM NAVIGATION (shared across all 4 pages):
+4 tabs with icons + labels:
+- 🏠 Home
+- 💡 Insights
+- 📈 P&L
+- ⚙️ More
+Active tab highlighted in yellow (#ffd60a)
+
+TOP BAR (shared):
+- Left: "FINR" logo (the R is yellow)
+- Right: connection status pill (green dot + "LIVE" text), refresh button, theme toggle
+
+SCROLLING TICKER (top-most, above the top bar):
+- Thin black strip (26px height) with horizontally scrolling stock symbols + prices
+
+═══════════════════════════════════════
+PAGE 1: HOME
+═══════════════════════════════════════
+This is the main dashboard. Elements from top to bottom:
+
+1. HERO SECTION
+   - Large label "Nifty 50" (small, mono font, gray)
+   - Giant price number: "22,543.75" (46px, bold)
+   - Below: green/red badge "+1.23%" and market status "🟢 Market Open"
+
+2. INDEX CHIPS (horizontal scrollable row)
+   - Small cards for: Nifty 100, Bank Nifty, Nifty 50, India VIX
+   - Each chip: name (tiny, gray), price (19px bold), change % (green/red)
+
+3. LIVE MARKET NEWS (card)
+   - Title "📰 Live Market News" with timestamp on right
+   - List of news items, each with:
+     - Icon (📰/⚠️/📊), title (bold), priority badge (HIGH=red, MEDIUM=yellow, LOW=green)
+     - Sentiment text + time
+     - Expandable detail section on tap
+
+4. MARKET HEALTH GAUGE (card)
+   - Title "Market Health"
+   - Left: semicircular gauge (SVG arc) with score 0-100 in center
+   - Right: 3x2 grid of mini boxes showing: Trend, Momentum, Breadth, VIX, FII Flow, Volatility
+
+5. MARKET BREADTH (card)
+   - Title "📊 Market Breadth"
+   - Horizontal bar (green left, red right) showing % of stocks up vs down
+   - Below: "🟢 85 Up | 📊 62% | 🔴 52 Down"
+
+6. UPCOMING EVENTS (card)
+   - Title "📅 Upcoming Events"
+   - List of events with: colored priority dot (red/orange/green), title, date, description
+
+7. FII / DII FLOW (card)
+   - Title "FII / DII Flow"
+   - Rows: FII (value in green/red), DII (value in green/red), USD/INR, Crude Oil price
+
+═══════════════════════════════════════
+PAGE 2: INSIGHTS (has 3 sub-tabs at top)
+═══════════════════════════════════════
+Sub-tab bar: "🎯 AI Picks" | "📊 Options Lab" | "✓ Verify Pick"
+Active sub-tab has yellow underline.
+
+SUB-TAB 2A: AI PICKS
+- Small row: "Cache updated: 2:30 PM" on left, "🔄 Refresh" button on right
+- List of stock recommendation cards, each card has:
+  - Header: Symbol (16px bold) + Company name (tiny gray) on left, Price + upside% on right
+  - 2x2 grid: Target price, Confidence %, Timeframe, Risk level
+  - Expandable reasoning text (2-3 lines, "Expand reasoning" link)
+  - Bottom: tag pills (e.g., "Large Cap", "IT Sector", "Momentum")
+  - Left border: green (bullish) or red (bearish) 4px accent
+
+SUB-TAB 2B: OPTIONS LAB
+- Small row: "Options trades: 2:30 PM" on left, "🔄 Refresh" button on right
+- List of option trade cards, each card has:
+  - Header: Symbol name + CE/PE badge (green for CE, red for PE)
+  - 3-column grid: Entry price, Target price, Stop Loss
+  - Row: Strategy name, Risk:Reward ratio, Confidence %
+
+SUB-TAB 2C: VERIFY PICK
+- Card with:
+  - Input field "Enter stock symbol (e.g., RELIANCE)" + "Analyse" button (yellow)
+  - Below (after analysis): Result card showing:
+    - Symbol + verdict badge (BUY=green, HOLD=yellow, SELL=red)
+    - Confidence %, Risk Level, Target, Stop Loss
+    - Green box: "✓ Positives" with text
+    - Red box: "⚠ Risks" with text
+
+═══════════════════════════════════════
+PAGE 3: P&L TRACKER (has 3 sub-tabs)
+═══════════════════════════════════════
+Sub-tab bar: "📊 Dashboard" | "➕ Add Trade" | "📥 Import CSV"
+
+SUB-TAB 3A: DASHBOARD
+- 4 summary cards in 2x2 grid:
+  - Total P&L (₹ value, large bold), Win Rate (%), Total Trades (count), Charges Paid (₹)
+- "Trade List" card with a scrollable table:
+  - Columns: Date, Symbol, Qty, Buy Price, Sell Price, P&L (green/red)
+
+SUB-TAB 3B: ADD TRADE
+- Form card with title "Add New Trade":
+  - Symbol input
+  - Row: Quantity + Type dropdown (Equity/Options/Spread)
+  - Row: Buy Price + Sell Price
+  - Row: Buy Date + Sell Date
+  - Collapsible "Spread" section (2 legs with Type/Strike/Premium/Qty each)
+  - Auto-calculated charges box (gray background):
+    - Brokerage, STT, Exchange, GST, and Net P&L (bold, green/red)
+  - "💾 Save Trade" yellow button
+
+SUB-TAB 3C: IMPORT CSV
+- Card with:
+  - Dashed border dropzone area: "📁 Drop CSV or click to upload" with format hint
+  - "Or paste CSV data" textarea
+  - "📥 Import Trades" yellow button
+  - Result area below
+
+═══════════════════════════════════════
+PAGE 4: MORE
+═══════════════════════════════════════
+Organized in sections with accordion/collapsible items:
+
+SECTION: "Settings"
+- 🔐 Upstox API (expandable → API Key, Secret, Redirect URI inputs + Test button)
+- 🦓 Zerodha API (expandable → API Key, Secret, Callback URL + Refresh Token button)
+- 🤖 Gemini AI (expandable → API Key input + Test button)
+- Two buttons row: "💾 Save All Settings" (dark) + "↻ Recheck Status" (outline)
+
+SECTION: "System"
+- 🔌 System Health (expandable → status rows: Upstox, Zerodha, Gemini, Server, Market — each with name, detail, and OK/WARN/ERR badge)
+- 📋 System Logs (expandable → Load Logs button + scrollable log list with colored lines)
+
+SECTION: "Market"
+- 📅 Event Calendar (expandable → list of upcoming RBI, FOMC, earnings events with priority dots, dates, descriptions, sector impact tags)
+
+Footer: "FINR v2.0 · AES-256 · Gemini AI · Railway · 🇮🇳"
+
+═══════════════════════════════════════
+IMPORTANT NOTES:
+- Design for mobile (390px width) but it should look good on desktop too
+- Keep it clean, minimal, premium feel — like a Bloomberg/Robinhood hybrid
+- Use glassmorphism subtly on cards
+- All numbers should use monospace font
+- I want to be able to drag and rearrange elements manually after generation
+- Generate each page as a separate screen so I can customize the layout of each one individually

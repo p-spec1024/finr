@@ -1,0 +1,42 @@
+Design a mobile app screen (390px wide) for a stock market app called "FINR". DARK THEME ONLY — background #0a0a0a, cards #1c1c1e, accent yellow #ffd60a, green #30d158, red #ff453a. Text white #f2f2f7. NO white backgrounds anywhere.
+
+This is the MORE tab showing the COMMAND CENTRE and SYSTEM sections.
+
+Top bar: "FINR" logo on left.
+
+Content:
+
+SECTION 1 — "COMMAND CENTRE" (tiny mono uppercase gray label)
+
+- Big yellow button: "🔗 Connect All" (full width, #ffd60a background, black bold text) — connects all APIs at once
+
+- 3 API connection cards (always visible, NOT collapsed):
+
+  Card 1 (#1c1c1e):
+  - Top row: 🔐 icon + "Upstox API" (bold) + "Real-time market data" (gray) on left | Right: green dot + "Connected" (or red dot + "Disconnected")
+  - Input: API Key (#242426 background)
+  - Input: API Secret
+  - Input: Redirect URI
+  - Row: "🔗 Connect" outline button + "🧪 Test" small gray button
+  - "Last connected: Mar 26, 2:30 PM" tiny gray
+
+  Card 2 (#1c1c1e):
+  - Top: 🦓 + "Zerodha API" + "Holdings & positions sync" | Status dot
+  - Input: API Key, API Secret, Callback URL
+  - Row: "🔗 Connect" + "🔄 Refresh Token"
+
+  Card 3 (#1c1c1e):
+  - Top: 🤖 + "Gemini AI" + "AI analysis engine" | Status dot
+  - Input: API Key
+  - Row: "🔗 Connect" + "🧪 Test"
+  - "Model: gemini-2.0-flash" tiny text
+
+- Button row: "💾 Save All" (dark button) + "↻ Recheck All" (outline button)
+
+SECTION 2 — "SYSTEM" (tiny mono uppercase gray label)
+- System Health accordion card: rows showing Upstox, Zerodha, Gemini, Server status with OK/WARN/ERR badges
+- System Logs accordion card: "Load Logs" button + scrollable log list
+
+Footer: "FINR v2.0 · AES-256 · Gemini AI · Railway · 🇮🇳" centered tiny gray
+
+Bottom nav: 🏠 Home | 💡 Insights | 📈 P&L | ⚙️ More (active, yellow)

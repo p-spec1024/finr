@@ -1,0 +1,25 @@
+Design a mobile app screen (390px wide) for a stock market app called "FINR". DARK THEME ONLY — background #0a0a0a, cards #1c1c1e, accent yellow #ffd60a, green #30d158, red #ff453a. Text white #f2f2f7. NO white backgrounds anywhere.
+
+This is the INSIGHTS tab showing the OPTIONS LAB sub-tab.
+
+Top bar: "FINR" logo on left, "LIVE" pill on right.
+
+Sub-tab bar: "🎯 AI Picks" | "📊 Options Lab" (active — yellow text, yellow underline) | "✓ Verify Pick". Dark background.
+
+Content:
+- Row: "Options trades: 2:30 PM" gray text left, "🔄 Refresh" outline button right
+
+- 3 options trade cards stacked. Each card (#1c1c1e, 16px rounded):
+  - Header row: "NIFTY" symbol (15px bold) left + "CE" green pill badge (or "PE" red pill)
+  - 3-column data grid (#242426 boxes): Entry ₹280 | Target ₹350 | SL ₹240
+  - Row of 3 items: Strategy "Bull Call Spread" | Risk:Reward "1:2.5" | Confidence "85%"
+
+- Show one card EXPANDED to reveal detail view:
+  - Strategy explanation text
+  - "Greeks" — 4 mini boxes in a row: Delta 0.65, Theta -0.03, Gamma 0.02, Vega 0.15
+  - Risk Profile section: Max Profit ₹5,250 (green) | Max Loss ₹2,100 (red) | Breakeven ₹18,280
+  - Market Conditions: VIX 16.2 (stable), Trend Bullish, Volume High
+  - AI Confidence: horizontal progress bar (85% filled, yellow on dark track)
+  - "Collapse ▴" link
+
+Bottom nav: 🏠 Home | 💡 Insights (active, yellow) | 📈 P&L | ⚙️ More

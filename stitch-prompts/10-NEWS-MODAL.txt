@@ -1,0 +1,33 @@
+Design a mobile app screen (390px wide) for a stock market app called "FINR". DARK THEME ONLY — background #0a0a0a, cards #1c1c1e, accent yellow #ffd60a, green #30d158, red #ff453a. Text white #f2f2f7. NO white backgrounds anywhere.
+
+This shows a BOTTOM SHEET MODAL that appears when a news headline is tapped on the Home page.
+
+Behind the modal: dimmed/blurred home page visible at top (25%)
+
+The modal covers bottom 75% of screen:
+- Dark background #1c1c1e
+- Rounded top corners (20px radius)
+- Small gray drag handle bar centered at top (40px wide, 4px height)
+
+Content inside modal:
+1. Title: "RBI Holds Repo Rate at 6.5% — Markets React Positively" (16px bold white)
+
+2. Row: red "HIGH" priority pill + "Bullish" green text + "15 min ago" gray text
+
+3. Thin divider line (rgba white 7%)
+
+4. "Impact Analysis" section heading (12px bold, yellow)
+   - Paragraph: "The RBI's decision to maintain the repo rate signals continued accommodation. Banking stocks likely to benefit from stable lending rates. NBFC sector may see margin pressure ease." (12px gray, line-height 1.6)
+
+5. "Affected Sectors" section heading (12px bold, yellow)
+   - Green pills: "Buy: Banking", "Buy: Housing Finance"
+   - Red pills: "Avoid: NBFC"
+   - Yellow pills: "Watch: Auto", "Watch: IT"
+
+6. "AI Insight" section heading (12px bold, yellow)
+   - Italic gray text: "Historical data shows Nifty typically rallies 1.2-1.8% in the week following dovish RBI policy. Consider accumulating banking stocks on any dip."
+
+7. "Related Stocks" row:
+   - Small horizontal cards: HDFCBANK +2.1%, SBIN +1.8%, KOTAKBANK +1.5%
+
+Modal can be dismissed by swiping down or tapping the dimmed area above.
