@@ -231,18 +231,18 @@ tailwind.config = {
       border-radius:12px;transition:outline-color 0.2s;
     }
     .layout-editing .grid-widget:hover{outline-color:rgba(255,214,10,0.6);}
-    .layout-editing .grid-widget.dragging{opacity:0.4;outline-color:#ffd60a;}
-    .layout-editing .grid-widget.drag-over{outline:2px solid #ffd60a;outline-offset:2px;}
+    .layout-editing .grid-widget.dragging{opacity:0;pointer-events:none;}
 
     /* Drag handle */
     .widget-handle{
       display:none;position:absolute;top:6px;left:6px;z-index:10;
       background:rgba(28,27,27,0.9);border:1px solid rgba(255,214,10,0.3);
-      border-radius:6px;padding:3px 6px;cursor:grab;
+      border-radius:6px;padding:4px 8px;cursor:grab;
       font-size:14px;color:#ffd60a;backdrop-filter:blur(8px);
-      line-height:1;
+      line-height:1;touch-action:none;user-select:none;
     }
     .widget-handle:active{cursor:grabbing;}
+    .widget-handle:hover{background:rgba(255,214,10,0.15);border-color:#ffd60a;}
     .layout-editing .widget-handle{display:flex;align-items:center;gap:4px;}
 
     /* Resize controls */
@@ -2061,7 +2061,6 @@ function injectWidgetControls(pageId) {
 
   widgets.forEach((w, idx) => {
     w.classList.add('grid-widget');
-    w.setAttribute('draggable', 'true');
     w.dataset.widgetIdx = idx;
 
     // Get a label for the section
@@ -2093,12 +2092,8 @@ function injectWidgetControls(pageId) {
     resize.appendChild(hideBtn);
     w.prepend(resize);
 
-    // Drag events
-    w.addEventListener('dragstart', onDragStart);
-    w.addEventListener('dragend', onDragEnd);
-    w.addEventListener('dragover', onDragOver);
-    w.addEventListener('dragleave', onDragLeave);
-    w.addEventListener('drop', onDrop);
+    // Pointer-based drag via handle only
+    handle.addEventListener('pointerdown', (e) => startWidgetDrag(e, w));
   });
 }
 
@@ -2107,12 +2102,6 @@ function removeWidgetControls() {
   document.querySelectorAll('.widget-resize').forEach(r => r.remove());
   document.querySelectorAll('.grid-widget').forEach(w => {
     w.classList.remove('grid-widget', 'dragging', 'drag-over');
-    w.removeAttribute('draggable');
-    w.removeEventListener('dragstart', onDragStart);
-    w.removeEventListener('dragend', onDragEnd);
-    w.removeEventListener('dragover', onDragOver);
-    w.removeEventListener('dragleave', onDragLeave);
-    w.removeEventListener('drop', onDrop);
   });
 }
 
@@ -2148,53 +2137,103 @@ function setWidgetSpan(el, span, maxCols, resizeContainer) {
   });
 }
 
-// Drag and drop handlers
-let draggedWidget = null;
+// Pointer-based drag system (replaces HTML5 DnD which doesn't work on complex sections)
+let _dragState = null;
 
-function onDragStart(e) {
-  draggedWidget = this;
-  this.classList.add('dragging');
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', this.dataset.widgetIdx);
-}
-
-function onDragEnd(e) {
-  this.classList.remove('dragging');
-  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-  draggedWidget = null;
-}
-
-function onDragOver(e) {
+function startWidgetDrag(e, widget) {
   e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  if (this !== draggedWidget) {
-    this.classList.add('drag-over');
+  e.stopPropagation();
+
+  const container = widget.parentNode;
+  const rect = widget.getBoundingClientRect();
+  const scrollEl = document.getElementById('content');
+  const scrollRect = scrollEl.getBoundingClientRect();
+
+  // Create a floating clone for visual feedback
+  const ghost = widget.cloneNode(true);
+  ghost.style.cssText = `
+    position:fixed;width:${rect.width}px;pointer-events:none;z-index:9999;
+    opacity:0.85;transform:scale(0.97);transition:none;
+    border:2px solid #ffd60a;border-radius:12px;
+    box-shadow:0 12px 40px rgba(0,0,0,0.7);
+  `;
+  ghost.querySelectorAll('.widget-handle,.widget-resize').forEach(el => el.remove());
+  document.body.appendChild(ghost);
+
+  // Create a placeholder to show drop target
+  const placeholder = document.createElement('div');
+  placeholder.className = 'drag-placeholder';
+  placeholder.style.cssText = `
+    border:2px dashed #ffd60a;border-radius:12px;background:rgba(255,214,10,0.05);
+    min-height:${rect.height}px;grid-column:${getComputedStyle(widget).gridColumn};
+    transition:min-height 0.15s ease;
+  `;
+
+  widget.classList.add('dragging');
+  widget.style.display = 'none';
+  container.insertBefore(placeholder, widget);
+
+  const offsetX = e.clientX - rect.left;
+  const offsetY = e.clientY - rect.top;
+
+  function moveGhost(cx, cy) {
+    ghost.style.left = (cx - offsetX) + 'px';
+    ghost.style.top = (cy - offsetY) + 'px';
   }
-}
+  moveGhost(e.clientX, e.clientY);
 
-function onDragLeave(e) {
-  this.classList.remove('drag-over');
-}
-
-function onDrop(e) {
-  e.preventDefault();
-  this.classList.remove('drag-over');
-  if (!draggedWidget || this === draggedWidget) return;
-
-  const parent = this.parentNode;
-  const allChildren = Array.from(parent.children);
-  const dragIdx = allChildren.indexOf(draggedWidget);
-  const dropIdx = allChildren.indexOf(this);
-
-  if (dragIdx < dropIdx) {
-    parent.insertBefore(draggedWidget, this.nextSibling);
-  } else {
-    parent.insertBefore(draggedWidget, this);
+  function getDropTarget(cx, cy) {
+    const siblings = Array.from(container.querySelectorAll('.grid-widget:not(.dragging)'));
+    let closest = null, closestDist = Infinity;
+    for (const sib of siblings) {
+      const r = sib.getBoundingClientRect();
+      const midX = r.left + r.width / 2;
+      const midY = r.top + r.height / 2;
+      const dist = Math.abs(cy - midY) * 2 + Math.abs(cx - midX);
+      if (dist < closestDist) { closestDist = dist; closest = sib; }
+    }
+    return closest;
   }
 
-  // Re-index
-  parent.querySelectorAll('.grid-widget').forEach((w, i) => w.dataset.widgetIdx = i);
-  toast('Section moved');
+  function onPointerMove(ev) {
+    moveGhost(ev.clientX, ev.clientY);
+
+    // Auto-scroll when near edges
+    const edgeZone = 60;
+    if (ev.clientY - scrollRect.top < edgeZone) scrollEl.scrollTop -= 8;
+    if (scrollRect.bottom - ev.clientY < edgeZone) scrollEl.scrollTop += 8;
+
+    // Find closest sibling and move placeholder there
+    const target = getDropTarget(ev.clientX, ev.clientY);
+    if (target) {
+      const tRect = target.getBoundingClientRect();
+      if (ev.clientY < tRect.top + tRect.height / 2) {
+        container.insertBefore(placeholder, target);
+      } else {
+        container.insertBefore(placeholder, target.nextSibling);
+      }
+    }
+  }
+
+  function onPointerUp(ev) {
+    document.removeEventListener('pointermove', onPointerMove);
+    document.removeEventListener('pointerup', onPointerUp);
+
+    // Move the actual widget to where the placeholder is
+    container.insertBefore(widget, placeholder);
+    placeholder.remove();
+    ghost.remove();
+
+    widget.style.display = '';
+    widget.classList.remove('dragging');
+
+    // Re-index
+    container.querySelectorAll('.grid-widget').forEach((w, i) => w.dataset.widgetIdx = i);
+    toast('Section moved');
+  }
+
+  document.addEventListener('pointermove', onPointerMove);
+  document.addEventListener('pointerup', onPointerUp);
 }
 
 function saveLayout() {
