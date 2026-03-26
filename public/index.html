@@ -1412,21 +1412,36 @@ async function loadStrategyGroupedView(container) {
   try {
     const d = await fetch('/api/trades/strategies').then(r=>r.json());
     if (d.strategies && d.strategies.length) {
-      const typeColors = {'HEDGED WITH FUTURES':'#ffd60a','CALL SPREAD':'#47e266','PUT SPREAD':'#ffb4ab','IRON CONDOR':'#d0c6ab','STRADDLE/STRANGLE':'#ffe171','COMPLEX STRATEGY':'#ffb4aa','FUTURES':'#47e266','EQUITY':'#e5e2e1','LONG CE':'#47e266','LONG PE':'#ffb4ab','MULTI-LEG':'#ffd60a','FUTURES SPREAD':'#e9c400'};
+      const typeColor = (type) => {
+        if (type.includes('HEDGED')) return '#ffd60a';
+        if (type.includes('ROLLING')) return '#e9c400';
+        if (type.includes('NAKED LONG CE') || type.includes('MULTIPLE CE')) return '#47e266';
+        if (type.includes('NAKED LONG PE') || type.includes('MULTIPLE PE')) return '#ffb4ab';
+        if (type.includes('STRADDLE') || type.includes('STRANGLE')) return '#ffe171';
+        if (type.includes('FUTURES')) return '#d0c6ab';
+        if (type.includes('EQUITY')) return '#e5e2e1';
+        return '#d0c6ab';
+      };
       container.innerHTML = `
         <div class="flex items-center justify-between mb-3">
-          <div class="text-[10px] text-[#d0c6ab] uppercase font-mono font-bold tracking-widest">Strategy Groups</div>
+          <div class="text-[10px] text-[#d0c6ab] uppercase font-mono font-bold tracking-widest">Strategy Groups (by Underlying + Expiry)</div>
           <div class="text-[10px] font-mono text-[#d0c6ab]">${d.summary.wins}W / ${d.summary.losses}L (${d.summary.winRate}%)</div>
         </div>
         <div class="space-y-3">${d.strategies.map(s => {
-          const col = typeColors[s.type] || '#d0c6ab';
+          const col = typeColor(s.type);
+          const rollBadge = s.rollCount > 0 ? `<span class="text-[8px] px-1.5 py-0.5 rounded bg-[#ffd60a]/10 text-[#ffd60a] font-mono font-bold ml-1">${s.rollCount} ROLL${s.rollCount>1?'S':''}</span>` : '';
           return `<div class="bg-[#1c1c1e] rounded-xl p-4 border-l-4" style="border-color:${col}">
             <div class="flex justify-between items-start mb-2">
-              <div><span class="text-sm font-bold font-headline text-white">${s.underlying}</span><span class="text-[9px] px-2 py-0.5 rounded ml-2 font-mono font-bold uppercase" style="color:${col};background:${col}15">${s.type}</span></div>
-              <span class="text-sm font-bold tnum font-mono" style="color:${s.netPnl>=0?'#47e266':'#ffb4ab'}">${s.netPnl>=0?'+':''}₹${fmt(s.netPnl)}</span>
+              <div>
+                <div class="flex items-center gap-1 flex-wrap"><span class="text-sm font-bold font-headline text-white">${s.underlying}</span><span class="text-[9px] px-2 py-0.5 rounded font-mono font-bold uppercase" style="color:${col};background:${col}15">${s.type}</span>${rollBadge}</div>
+                <div class="text-[9px] text-[#999077] font-mono mt-0.5">${s.expiry} | ${s.dateRange || s.date} | ${s.status}</div>
+              </div>
+              <div class="text-right">
+                <span class="text-sm font-bold tnum font-mono" style="color:${s.netPnl>=0?'#47e266':'#ffb4ab'}">${s.netPnl>=0?'+':''}₹${fmt(s.netPnl)}</span>
+                <div class="text-[8px] text-[#999077] font-mono">${s.legs.length} leg${s.legs.length>1?'s':''} (${s.closedLegs} closed${s.openLegs > 0 ? ', '+s.openLegs+' open' : ''})</div>
+              </div>
             </div>
-            <div class="text-[9px] text-[#999077] font-mono">${s.legs.length} leg${s.legs.length>1?'s':''} | ${s.date} | ${s.status}</div>
-            <div class="mt-2 space-y-1">${s.legs.map(l => `<div class="flex justify-between text-[9px] font-mono tnum text-[#d0c6ab]"><span>${l.symbol} ×${l.qty}</span><span>₹${fmt(l.buyPrice)} → ₹${fmt(l.sellPrice)}</span><span style="color:${l.pnl>=0?'#47e266':'#ffb4ab'}">${l.pnl>=0?'+':''}₹${fmt(l.pnl)}</span></div>`).join('')}
+            <div class="mt-2 space-y-1">${s.legs.map(l => `<div class="flex justify-between text-[9px] font-mono tnum text-[#d0c6ab]"><span class="truncate max-w-[120px]">${l.symbol} ×${l.qty}</span><span>₹${fmt(l.buyPrice)} → ₹${fmt(l.sellPrice)}</span><span style="color:${l.pnl>=0?'#47e266':'#ffb4ab'}">${l.pnl>=0?'+':''}₹${fmt(l.pnl)}</span></div>`).join('')}
             </div>
           </div>`;
         }).join('')}</div>`;

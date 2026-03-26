@@ -902,7 +902,14 @@ app.get('/api/options-lab', async (req, res) => {
 
     const prompt = `You are an expert NSE F&O options strategist with access to REAL-TIME option chain data. Recommend the BEST options trades based on ACTUAL market data.
 
-IMPORTANT: The user primarily SELLS options and hedges with futures or spreads. Prioritize credit strategies (sell premium) with built-in hedges. Do NOT recommend naked buys unless momentum is extremely strong.
+IMPORTANT — USER'S TRADING STYLE:
+- PRIMARY: BUYS options (CE or PE) as directional bets
+- HEDGE: Buys FUTURES to hedge the option position (e.g. buy PE + buy FUT to limit risk)
+- ROLLS positions: books profit on winning strike, re-enters at new strike, keeps rolling until net profit
+- Example: Buy 24500 PE → market drops → book profit → buy 23500 PE → keep adjusting, futures hedge stays open
+- Also takes NAKED BUY options when conviction is strong
+- Prioritize BUY strategies. For hedged trades, always specify the exact futures hedge.
+- DO NOT recommend sell/credit strategies unless explicitly labeled as alternatives
 
 LIVE MARKET DATA:
 Nifty=${nifty?.price||'?'}(${nifty?.changePct>=0?'+':''}${nifty?.changePct||0}%) BankNifty=${bankNifty?.price||'?'}(${bankNifty?.changePct>=0?'+':''}${bankNifty?.changePct||0}%)
@@ -911,30 +918,31 @@ Market:${isMarketOpen()?'OPEN':'CLOSED'} Trend:${trendSignal} PCR_Signal:${pcrSi
 Time:${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}
 ${ocStr}
 
-TOP GAINERS (momentum):
+TOP GAINERS (momentum for CE buys):
 ${gainStr}
 
-TOP LOSERS (momentum):
+TOP LOSERS (momentum for PE buys):
 ${loseStr}
 
 STRATEGY SELECTION RULES (market-adaptive):
-1. HIGH VIX (>18): SELL premium — Iron Condors, Credit Spreads, Strangles with hedge
-2. LOW VIX (<13): BUY options only if strong directional signal, otherwise avoid
-3. NORMAL VIX (13-18): Spreads (Bull Put/Bear Call), Hedged positions
-4. PCR > 1.3: Market oversold → BULLISH bias (sell puts, buy calls on dips)
-5. PCR < 0.7: Market overbought → BEARISH bias (sell calls, buy puts on rallies)
-6. ALWAYS suggest hedge for each trade (futures hedge or protective option)
-7. Use REAL OI data: high OI strikes = strong support/resistance
-8. Use REAL IV: sell high IV strikes, buy low IV for directional
-9. Max Pain = likely expiry gravitational pull — factor this into strike selection
-10. Recommend 4-8 trades — ONLY strategies that make sense TODAY. Do NOT force variety.
+1. TRENDING MARKET: Naked long CE (uptrend) or naked long PE (downtrend) — ride momentum
+2. UNCERTAIN/VOLATILE: Hedged long — buy option + buy futures as hedge, roll strikes as market moves
+3. HIGH VIX (>18): Buy OTM options (cheaper premiums, explosive moves) + hedge with futures
+4. LOW VIX (<13): Buy ATM/slightly ITM (delta advantage), or avoid if no clear direction
+5. PCR > 1.3: Oversold → BULLISH bias (buy CE or close PE, market likely to bounce)
+6. PCR < 0.7: Overbought → BEARISH bias (buy PE or close CE, market likely to drop)
+7. Use REAL OI data: high OI = support/resistance walls, trade around these levels
+8. Use REAL IV: low IV = cheap options (good for buying), high IV = expensive (need stronger signal)
+9. Max Pain: if price is far from max pain near expiry, expect mean reversion toward it
+10. ROLLING LEVELS: For each trade, specify where to book profit and roll to next strike
+11. Recommend 4-8 trades — ONLY what makes sense TODAY. Quality over variety.
 
 SIGNAL ALIGNMENT — rate each trade on 10 factors:
 [1]VIX_Level [2]PCR_Direction [3]FII_Flow [4]Market_Trend [5]OI_Buildup [6]IV_Percentile [7]MaxPain_Distance [8]Momentum [9]Volume_Confirmation [10]Risk_Reward
 Report alignment as "X/10 factors aligned" with breakdown.
 
 Reply ONLY valid JSON array, NO markdown fences:
-[{"symbol":"SYMBOL","direction":"CE/PE","strategy":"Bear Call Spread 23200-23400 / Iron Condor 22800-23200 / etc","strategyType":"CREDIT_SPREAD/IRON_CONDOR/HEDGED_SELL/STRADDLE/DIRECTIONAL","currentPrice":"₹xxx","strikePrice":"Sell xxxx CE + Buy xxxx CE","entry":"₹xx-₹xx net credit/debit","target":"₹xx target","stopLoss":"₹xx SL","expiry":"weekly/monthly","targetTime":"1-3 days / 1 week","riskReward":"1:2","maxLoss":"₹xxx per lot","lotSize":"lot size","margin":"approx margin required","signalAlignment":{"score":7,"total":10,"factors":{"vix":"ALIGNED","pcr":"ALIGNED","fii":"NEUTRAL","trend":"ALIGNED","oi":"ALIGNED","iv":"ALIGNED","maxPain":"NEUTRAL","momentum":"ALIGNED","volume":"MISALIGNED","riskReward":"ALIGNED"},"summary":"7/10 factors aligned — strong setup"},"riskType":"AGGRESSIVE/MODERATE/CONSERVATIVE","reasoning":"80-word analysis: why this trade, OI/IV logic, PCR reading, max pain proximity, key levels, hedge rationale","hedgeSuggestion":"Buy NIFTY FUT as delta hedge / Buy xxxx PE as protection","sentiment":"BULLISH/BEARISH/NEUTRAL"}]`;
+[{"symbol":"SYMBOL","direction":"CE/PE","strategy":"Long 23000 PE + Hedge with APR FUT / Naked Long 23200 CE / etc","strategyType":"NAKED_LONG/HEDGED_LONG/ROLLING_STRATEGY","currentPrice":"₹xxx","strikePrice":"Buy xxxx PE/CE","entry":"₹xx-₹xx premium range to buy","target":"₹xx target premium (book profit here)","stopLoss":"₹xx SL on premium","rollLevel":"If profitable, book at ₹xx and roll to xxxx strike","expiry":"weekly/monthly","targetTime":"1-3 days / 1 week","riskReward":"1:2","maxLoss":"₹xxx per lot (premium paid)","lotSize":"lot size","margin":"premium cost per lot","signalAlignment":{"score":7,"total":10,"factors":{"vix":"ALIGNED","pcr":"ALIGNED","fii":"NEUTRAL","trend":"ALIGNED","oi":"ALIGNED","iv":"ALIGNED","maxPain":"NEUTRAL","momentum":"ALIGNED","volume":"MISALIGNED","riskReward":"ALIGNED"},"summary":"7/10 factors aligned — strong setup"},"riskType":"AGGRESSIVE/MODERATE/CONSERVATIVE","reasoning":"80-word analysis: why BUY this option, OI/IV logic, PCR reading, max pain proximity, key levels, rolling plan","hedgeSuggestion":"Buy NIFTY APR FUT at ₹xxxxx as delta hedge (covers xx% of premium risk)","sentiment":"BULLISH/BEARISH/NEUTRAL"}]`;
 
     const g = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 8000, timeout: 60000 });
     const raw = g.text || '[]';
@@ -1586,91 +1594,139 @@ app.get('/api/trades/strategies', (req, res) => {
   });
 });
 
-// Improved strategy grouper: groups by underlying + date + detects hedges/spreads
+// Strategy grouper: groups by UNDERLYING + EXPIRY MONTH
+// User's style: BUYS options (PE/CE), hedges with futures, ROLLS strikes within same expiry
+// All legs in same underlying + expiry = ONE strategy (shows combined net P&L)
 function groupTradeHistoryIntoStrategies(trades) {
-  // Group trades by date + underlying (strip expiry/strike to get underlying)
   const groups = {};
   for (const t of trades) {
     const underlying = extractUnderlying(t.symbol);
-    const date = t.sellDate || t.buyDate;
-    const key = `${date}_${underlying}`;
-    if (!groups[key]) groups[key] = { underlying, date, legs: [] };
+    const expiry = extractExpiryMonth(t.symbol, t.buyDate || t.sellDate);
+    const key = `${underlying}_${expiry}`;
+    if (!groups[key]) groups[key] = { underlying, expiry, legs: [], firstDate: null, lastDate: null };
     groups[key].legs.push(t);
+    const date = t.sellDate || t.buyDate;
+    if (!groups[key].firstDate || date < groups[key].firstDate) groups[key].firstDate = date;
+    if (!groups[key].lastDate || date > groups[key].lastDate) groups[key].lastDate = date;
   }
 
   const strategies = [];
   for (const [key, group] of Object.entries(groups)) {
     const legs = group.legs;
-    if (legs.length === 1) {
-      // Single trade — check if it's a standalone or part of bigger picture
-      const t = legs[0];
-      const pnl = (t.sellPrice - t.buyPrice) * t.qty;
-      strategies.push({
-        id: key, underlying: group.underlying, date: group.date,
-        type: classifySingleLeg(t),
-        legs: legs.map(formatLeg),
-        netPnl: +pnl.toFixed(2),
-        totalCharges: 0,
-        status: t.sellPrice > 0 ? 'CLOSED' : 'OPEN'
-      });
-    } else {
-      // Multiple legs — classify strategy
-      const type = classifyMultiLeg(legs);
-      const netPnl = legs.reduce((s, t) => {
-        const direction = isSellLeg(t) ? -1 : 1;
-        return s + (t.sellPrice - t.buyPrice) * t.qty * (direction === -1 && t.sellPrice === 0 ? 0 : 1);
-      }, 0);
-      strategies.push({
-        id: key, underlying: group.underlying, date: group.date,
-        type,
-        legs: legs.map(formatLeg),
-        netPnl: +netPnl.toFixed(2),
-        totalCharges: 0,
-        status: legs.every(t => t.sellPrice > 0) ? 'CLOSED' : 'OPEN'
-      });
-    }
+    const type = classifyStrategy(legs);
+    const netPnl = legs.reduce((s, t) => s + (t.sellPrice - t.buyPrice) * t.qty, 0);
+    const hasOpenLegs = legs.some(t => !t.sellPrice || t.sellPrice === 0);
+
+    // Separate into rolled legs (closed with profit/loss) and active legs
+    const closedLegs = legs.filter(t => t.sellPrice && t.sellPrice > 0);
+    const openLegs = legs.filter(t => !t.sellPrice || t.sellPrice === 0);
+    const rollCount = countRolls(legs);
+
+    strategies.push({
+      id: key,
+      underlying: group.underlying,
+      expiry: group.expiry,
+      dateRange: group.firstDate === group.lastDate ? group.firstDate : `${group.firstDate} → ${group.lastDate}`,
+      date: group.lastDate, // for sorting
+      type,
+      legs: legs.map(formatLeg).sort((a, b) => (a.date || '').localeCompare(b.date || '')),
+      closedLegs: closedLegs.length,
+      openLegs: openLegs.length,
+      rollCount,
+      netPnl: +netPnl.toFixed(2),
+      totalCharges: 0,
+      status: hasOpenLegs ? 'OPEN' : 'CLOSED'
+    });
   }
-  return strategies.sort((a, b) => b.date.localeCompare(a.date));
+  return strategies.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
 function extractUnderlying(symbol) {
-  // NIFTY2630523000CE → NIFTY, BANKNIFTY26MAR49000PE → BANKNIFTY, RELIANCE → RELIANCE
-  const m = symbol.match(/^([A-Z]+?)(?:\d{2}(?:[A-Z]{3}|[0-9])|\s|$)/);
+  // NIFTY2630523000CE → NIFTY, BANKNIFTY26MAR49000PE → BANKNIFTY
+  // NIFTY26APR24500PE → NIFTY, RELIANCE → RELIANCE
+  // Also handle: NIFTY26MARFUT → NIFTY
+  const m = symbol.match(/^([A-Z]+?)(?:\d{2}(?:[A-Z]{3}|\d))/);
   return m ? m[1] : symbol;
 }
 
-function isSellLeg(trade) {
-  // In the user's style: they SELL options and hedge with futures
-  // If buyPrice > sellPrice and it's options, it was likely a sell (collected premium)
-  return trade.symbol.match(/[CP]E$/) && trade.buyPrice > trade.sellPrice;
+function extractExpiryMonth(symbol, fallbackDate) {
+  // NIFTY26APR24500PE → 2026-APR, NIFTY2640424500PE → 2026-04
+  // Try extracting month name: 26APR, 26MAR etc.
+  const monthMatch = symbol.match(/(\d{2})([A-Z]{3})/);
+  if (monthMatch) {
+    const yr = '20' + monthMatch[1];
+    const mon = monthMatch[2]; // APR, MAR, etc.
+    return `${yr}-${mon}`;
+  }
+  // Try extracting numeric date: 26405 (year=26, month=4, day=05)
+  const numMatch = symbol.match(/(\d{2})(\d)(\d{2})/);
+  if (numMatch) {
+    const yr = '20' + numMatch[1];
+    const mon = numMatch[2].padStart(2, '0');
+    return `${yr}-${mon}`;
+  }
+  // Fallback to trade date month
+  if (fallbackDate) return fallbackDate.slice(0, 7);
+  return 'unknown';
+}
+
+function classifyStrategy(legs) {
+  const hasFut = legs.some(l => l.symbol.includes('FUT'));
+  const hasCE = legs.some(l => l.symbol.match(/CE$/));
+  const hasPE = legs.some(l => l.symbol.match(/PE$/));
+  const ceLegs = legs.filter(l => l.symbol.match(/CE$/));
+  const peLegs = legs.filter(l => l.symbol.match(/PE$/));
+  const futLegs = legs.filter(l => l.symbol.includes('FUT'));
+  const optionLegs = legs.filter(l => l.symbol.match(/[CP]E$/));
+  const rollCount = countRolls(legs);
+
+  // Primary: Buy options + Futures hedge (user's main style)
+  if (hasFut && (hasCE || hasPE)) {
+    if (rollCount > 0) return `HEDGED ROLLING (${rollCount} rolls)`;
+    return 'HEDGED WITH FUTURES';
+  }
+
+  // Multiple option legs on same side = rolling
+  if (ceLegs.length >= 2 && !hasPE && !hasFut) {
+    if (rollCount > 0) return `CE ROLLING (${rollCount} rolls)`;
+    return 'MULTIPLE CE';
+  }
+  if (peLegs.length >= 2 && !hasCE && !hasFut) {
+    if (rollCount > 0) return `PE ROLLING (${rollCount} rolls)`;
+    return 'MULTIPLE PE';
+  }
+
+  // CE + PE without futures
+  if (hasCE && hasPE && !hasFut) return 'STRADDLE/STRANGLE';
+
+  // Single legs
+  if (legs.length === 1) {
+    const sym = legs[0].symbol;
+    if (sym.includes('FUT')) return 'NAKED FUTURES';
+    if (sym.match(/CE$/)) return 'NAKED LONG CE';
+    if (sym.match(/PE$/)) return 'NAKED LONG PE';
+    return 'EQUITY';
+  }
+
+  return 'MULTI-LEG';
+}
+
+// Count how many times user rolled (closed one strike, opened another in same direction)
+function countRolls(legs) {
+  const optLegs = legs.filter(l => l.symbol.match(/[CP]E$/));
+  if (optLegs.length <= 1) return 0;
+  // Different strikes on same side = rolls
+  const ceStrikes = new Set(legs.filter(l => l.symbol.match(/CE$/)).map(l => l.symbol));
+  const peStrikes = new Set(legs.filter(l => l.symbol.match(/PE$/)).map(l => l.symbol));
+  return Math.max(0, ceStrikes.size - 1) + Math.max(0, peStrikes.size - 1);
 }
 
 function classifySingleLeg(trade) {
   const sym = trade.symbol;
-  if (sym.includes('FUT')) return 'FUTURES';
-  if (sym.match(/CE$/)) return 'LONG CE';
-  if (sym.match(/PE$/)) return 'LONG PE';
+  if (sym.includes('FUT')) return 'NAKED FUTURES';
+  if (sym.match(/CE$/)) return 'NAKED LONG CE';
+  if (sym.match(/PE$/)) return 'NAKED LONG PE';
   return 'EQUITY';
-}
-
-function classifyMultiLeg(legs) {
-  const hasFut = legs.some(l => l.symbol.includes('FUT'));
-  const hasCE = legs.some(l => l.symbol.match(/CE$/));
-  const hasPE = legs.some(l => l.symbol.match(/PE$/));
-  const allOptions = legs.every(l => l.symbol.match(/[CP]E$/));
-  const ceLegs = legs.filter(l => l.symbol.match(/CE$/));
-  const peLegs = legs.filter(l => l.symbol.match(/PE$/));
-
-  if (hasFut && (hasCE || hasPE)) return 'HEDGED WITH FUTURES';
-  if (hasCE && hasPE && !hasFut) {
-    if (ceLegs.length === 1 && peLegs.length === 1) return 'STRADDLE/STRANGLE';
-    if (ceLegs.length >= 1 && peLegs.length >= 1) return 'IRON CONDOR';
-  }
-  if (allOptions && ceLegs.length >= 2 && peLegs.length === 0) return 'CALL SPREAD';
-  if (allOptions && peLegs.length >= 2 && ceLegs.length === 0) return 'PUT SPREAD';
-  if (allOptions && legs.length >= 3) return 'COMPLEX STRATEGY';
-  if (hasFut && legs.length >= 2) return 'FUTURES SPREAD';
-  return 'MULTI-LEG';
 }
 
 function formatLeg(trade) {
