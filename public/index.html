@@ -217,12 +217,11 @@ tailwind.config = {
 
     /* ---- P&L TRACKER ---- */
     #pg-pnl > div{display:block;}
-    #ptab-dashboard > section.grid{grid-template-columns:repeat(4,1fr)!important;}
+    #ptab-dashboard > section.grid{grid-template-columns:repeat(6,1fr)!important;}
+    #ptab-add{display:flex;justify-content:center;}
 
-    /* ---- COMMAND CENTRE: 2-col ---- */
-    #pg-more > div{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
-    #pg-more > div > section:first-child{grid-column:1/-1;} /* Command Centre header + Connect All */
-    #pg-more > div > section:last-child{grid-column:1/-1;} /* System section spans full */
+    /* ---- COMMAND CENTRE: 3-col ---- */
+    #pg-more > div > .cc-top-actions{grid-column:1/-1;}
     #pg-more > div > footer{grid-column:1/-1;}
 
     /* Desktop bottom sheet becomes centered modal */
@@ -336,15 +335,13 @@ tailwind.config = {
     /* ---- P&L: main + side panel ---- */
     #pg-pnl > div{display:grid!important;grid-template-columns:1fr 380px;gap:24px;align-items:start;}
     #pg-pnl > div > #pnl-tabs{grid-column:1/-1;}
-    #ptab-dashboard > section.grid{grid-template-columns:repeat(4,1fr)!important;grid-column:1/-1;}
+    #ptab-dashboard > section.grid{grid-template-columns:repeat(6,1fr)!important;grid-column:1/-1;}
     #ptab-dashboard > section:last-child{grid-column:1;} /* Trade list stays left */
-    #ptab-add{grid-column:2;grid-row:2/5;} /* Add Trade form in right panel */
+    #ptab-add{grid-column:2;grid-row:2/5;display:flex;justify-content:center;} /* Add Trade form in right panel */
     #ptab-import{grid-column:1/-1;}
 
-    /* ---- COMMAND CENTRE: 3-col ---- */
-    #pg-more > div{grid-template-columns:1fr 1fr 1fr;}
-    #pg-more > div > section:first-child{grid-column:1/-1;}
-    #pg-more > div > section:last-child{grid-column:1/-1;}
+    /* ---- COMMAND CENTRE ---- */
+    #pg-more > div > .cc-top-actions{grid-column:1/-1;}
     #pg-more > div > footer{grid-column:1/-1;}
 
     /* Desktop content max-width */
@@ -771,7 +768,7 @@ tailwind.config = {
                   <div class="grid grid-cols-3 gap-2">
                     <div>
                       <label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Symbol</label>
-                      <input type="text" class="la-symbol w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-headline" placeholder="NIFTY" oninput="this.value=this.value.toUpperCase()">
+                      <input type="text" class="la-symbol w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-headline" placeholder="NIFTY" oninput="this.value=this.value.toUpperCase();suggestExpiries(this)">
                     </div>
                     <div>
                       <label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Strike</label>
@@ -780,6 +777,7 @@ tailwind.config = {
                     <div>
                       <label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Expiry</label>
                       <input type="date" class="la-expiry w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono">
+                      <div class="la-expiry-suggestions flex flex-wrap gap-1.5 mt-1.5"></div>
                     </div>
                   </div>
                   <div class="grid grid-cols-4 gap-2">
@@ -1192,11 +1190,11 @@ tailwind.config = {
     <div class="pg" id="pg-more">
       <div class="px-4 pb-6 max-w-[460px] md:max-w-full md:px-6 mx-auto space-y-5">
 
-        <!-- ROW 1: API CONNECTIONS -->
-        <section>
-          <div class="flex items-center justify-between mb-3">
+        <!-- Top action buttons -->
+        <section class="cc-top-actions">
+          <div class="flex items-center justify-between mb-4">
             <div class="flex items-center gap-2">
-              <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-[#d0c6ab] uppercase">API CONNECTIONS</span>
+              <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-[#d0c6ab] uppercase">Command Centre</span>
               <div class="h-[1px] w-12 bg-[#353534]"></div>
             </div>
             <div class="flex gap-2">
@@ -1208,14 +1206,23 @@ tailwind.config = {
               </button>
             </div>
           </div>
+        </section>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <!-- 3-Column Grid -->
+        <div class="cc-grid grid grid-cols-1 md:grid-cols-3 gap-4">
+
+          <!-- COLUMN 1: API CONNECTORS -->
+          <section class="space-y-2">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-[#d0c6ab] uppercase">API CONNECTORS</span>
+              <div class="h-[1px] flex-grow bg-[#353534]"></div>
+            </div>
             <!-- Upstox -->
             <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5 api-card">
               <div class="px-4 py-3 flex items-center justify-between">
                 <div class="flex items-center gap-3 cursor-pointer flex-1" onclick="toggleApiCard(this.parentElement)">
                   <div class="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center"><span class="material-symbols-outlined text-[#ffd60a] text-base" style="font-variation-settings:'FILL' 1">lock</span></div>
-                  <div><span class="font-bold text-sm text-[#e5e2e1]">Upstox</span><span class="text-[10px] text-[#d0c6ab] ml-2">Market Data</span></div>
+                  <div><span class="font-bold text-sm text-[#e5e2e1]">Upstox</span></div>
                 </div>
                 <div class="flex items-center gap-2">
                   <span id="upstox-status-dot" class="w-2 h-2 rounded-full bg-[#636366]"></span>
@@ -1237,7 +1244,7 @@ tailwind.config = {
               <div class="px-4 py-3 flex items-center justify-between">
                 <div class="flex items-center gap-3 cursor-pointer flex-1" onclick="toggleApiCard(this.parentElement)">
                   <div class="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center"><span class="material-symbols-outlined text-[#ffd60a] text-base">rebase_edit</span></div>
-                  <div><span class="font-bold text-sm text-[#e5e2e1]">Zerodha</span><span class="text-[10px] text-[#d0c6ab] ml-2">Holdings Sync</span></div>
+                  <div><span class="font-bold text-sm text-[#e5e2e1]">Zerodha</span></div>
                 </div>
                 <div class="flex items-center gap-2">
                   <span id="zerodha-status-dot" class="w-2 h-2 rounded-full bg-[#636366]"></span>
@@ -1259,7 +1266,7 @@ tailwind.config = {
               <div class="px-4 py-3 flex items-center justify-between">
                 <div class="flex items-center gap-3 cursor-pointer flex-1" onclick="toggleApiCard(this.parentElement)">
                   <div class="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center"><span class="material-symbols-outlined text-[#ffd60a] text-base">smart_toy</span></div>
-                  <div><span class="font-bold text-sm text-[#e5e2e1]">Gemini AI</span><span class="text-[10px] text-[#d0c6ab] ml-2">Analysis Engine</span></div>
+                  <div><span class="font-bold text-sm text-[#e5e2e1]">Gemini AI</span></div>
                 </div>
                 <div class="flex items-center gap-2">
                   <span id="gemini-status-dot" class="w-2 h-2 rounded-full bg-[#636366]"></span>
@@ -1280,7 +1287,7 @@ tailwind.config = {
               <div class="px-4 py-3 flex items-center justify-between">
                 <div class="flex items-center gap-3 cursor-pointer flex-1" onclick="toggleApiCard(this.parentElement)">
                   <div class="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center"><span class="material-symbols-outlined text-[#ffd60a] text-base">cloud</span></div>
-                  <div><span class="font-bold text-sm text-[#e5e2e1]">Vertex AI</span><span class="text-[10px] text-[#d0c6ab] ml-2">Grounded Search</span></div>
+                  <div><span class="font-bold text-sm text-[#e5e2e1]">Vertex AI</span></div>
                 </div>
                 <div class="flex items-center gap-2">
                   <span id="vertex-status-dot" class="w-2 h-2 rounded-full bg-[#636366]"></span>
@@ -1294,12 +1301,9 @@ tailwind.config = {
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <!-- ROW 2: SYSTEM (left) + AI PERFORMANCE (right) -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <!-- SYSTEM -->
+          <!-- COLUMN 2: SYSTEM -->
           <section class="space-y-2">
             <div class="flex items-center gap-2 mb-1">
               <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-[#d0c6ab] uppercase">SYSTEM</span>
@@ -1327,8 +1331,8 @@ tailwind.config = {
                     <p class="text-[#636366]">Expand to load server activity</p>
                   </div>
                   <div class="flex gap-2 mt-2">
-                    <button class="flex-1 py-1.5 rounded-lg bg-[#353534] text-[#ffb4ab] text-[10px] font-bold active:scale-95" onclick="copyRecentErrors()">Copy Errors</button>
-                    <button class="flex-1 py-1.5 rounded-lg bg-[#353534] text-[#d0c6ab] text-[10px] font-bold active:scale-95" onclick="copyAllLogs()">Copy All</button>
+                    <button class="flex-1 py-1.5 rounded-lg bg-[#353534] text-[#ffb4ab] text-[10px] font-bold active:scale-95" onclick="copyRecentErrors()">Copy Errors (1hr)</button>
+                    <button class="flex-1 py-1.5 rounded-lg bg-[#353534] text-[#d0c6ab] text-[10px] font-bold active:scale-95" onclick="copyAllLogs()">Copy Recent (50)</button>
                   </div>
                 </div>
               </div>
@@ -1355,7 +1359,7 @@ tailwind.config = {
             </div>
           </section>
 
-          <!-- AI PERFORMANCE -->
+          <!-- COLUMN 3: AI PERFORMANCE -->
           <section class="space-y-2">
             <div class="flex items-center gap-2 mb-1">
               <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-[#d0c6ab] uppercase">AI PERFORMANCE</span>
@@ -1399,6 +1403,7 @@ tailwind.config = {
               </div>
             </div>
           </section>
+
         </div>
 
         <!-- Footer -->
@@ -2188,6 +2193,51 @@ let liveAnalysisInterval = null;
 let liveAnalysisSessionId = null;
 let laLegCount = 1;
 
+const INDEX_SYMBOLS = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX'];
+
+function suggestExpiries(symbolInput) {
+  const leg = symbolInput.closest('.la-leg');
+  if (!leg) return;
+  const sugDiv = leg.querySelector('.la-expiry-suggestions');
+  const expiryInput = leg.querySelector('.la-expiry');
+  if (!sugDiv) return;
+  const sym = symbolInput.value.trim().toUpperCase();
+  if (!sym) { sugDiv.innerHTML = ''; return; }
+  const isIndex = INDEX_SYMBOLS.includes(sym);
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const expiries = [];
+  if (isIndex) {
+    // Weekly expiry: next 6 Thursdays
+    let d = new Date(today);
+    while (expiries.length < 6) {
+      d.setDate(d.getDate() + 1);
+      if (d.getDay() === 4) { // Thursday
+        expiries.push(new Date(d));
+      }
+    }
+  } else {
+    // Monthly expiry: last Thursday of current month and next 2 months
+    for (let m = 0; m < 3; m++) {
+      const year = today.getFullYear();
+      const month = today.getMonth() + m;
+      // Find last Thursday of this month
+      const lastDay = new Date(year, month + 1, 0); // last day of month
+      let d = new Date(lastDay);
+      while (d.getDay() !== 4) d.setDate(d.getDate() - 1);
+      if (d > today) expiries.push(new Date(d));
+    }
+  }
+  sugDiv.innerHTML = expiries.map(dt => {
+    const dd = String(dt.getDate()).padStart(2,'0');
+    const mmm = dt.toLocaleString('en-IN',{month:'short'});
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth()+1).padStart(2,'0');
+    const val = `${yyyy}-${mm}-${dd}`;
+    return `<button type="button" class="px-2 py-0.5 rounded-md bg-[#ffd60a]/15 text-[#ffd60a] text-[9px] font-bold font-mono hover:bg-[#ffd60a]/30 transition-colors cursor-pointer" onclick="this.closest('.la-leg').querySelector('.la-expiry').value='${val}'">${dd} ${mmm}</button>`;
+  }).join('');
+}
+
 function addLiveLeg() {
   laLegCount++;
   const container = document.getElementById('la-legs');
@@ -2200,9 +2250,9 @@ function addLiveLeg() {
       <button class="text-[#ffb4ab] text-[9px] font-bold font-mono hover:underline" onclick="removeLiveLeg(this)">Remove</button>
     </div>
     <div class="grid grid-cols-3 gap-2">
-      <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Symbol</label><input type="text" class="la-symbol w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-headline" placeholder="NIFTY" oninput="this.value=this.value.toUpperCase()"></div>
+      <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Symbol</label><input type="text" class="la-symbol w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-headline" placeholder="NIFTY" oninput="this.value=this.value.toUpperCase();suggestExpiries(this)"></div>
       <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Strike</label><input type="number" class="la-strike w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono" placeholder="24000"></div>
-      <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Expiry</label><input type="date" class="la-expiry w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono"></div>
+      <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Expiry</label><input type="date" class="la-expiry w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono"><div class="la-expiry-suggestions flex flex-wrap gap-1.5 mt-1.5"></div></div>
     </div>
     <div class="grid grid-cols-4 gap-2">
       <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Type</label><select class="la-type w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2 py-2 text-xs font-bold text-[#e5e2e1] outline-none font-mono"><option value="CE">CE</option><option value="PE">PE</option><option value="EQ">EQ</option><option value="FUT">FUT</option></select></div>
@@ -2826,19 +2876,30 @@ async function loadLogs() {
 function copyRecentErrors() {
   const el = document.getElementById('log-list');
   if (!el) return;
+  const now = new Date();
+  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
   const lines = Array.from(el.querySelectorAll('p'))
     .filter(p => p.classList.contains('text-[#ffb4ab]') || p.classList.contains('text-[#ffd60a]'))
+    .filter(p => {
+      const match = p.textContent.match(/^\[(\d{2}):(\d{2}):(\d{2})\]/);
+      if (!match) return false;
+      const logTime = new Date(now);
+      logTime.setHours(parseInt(match[1]), parseInt(match[2]), parseInt(match[3]), 0);
+      // Handle midnight wrap: if log time is in the future, it's from yesterday
+      if (logTime > now) logTime.setDate(logTime.getDate() - 1);
+      return logTime >= oneHourAgo;
+    })
     .map(p => p.textContent);
-  if (!lines.length) { toast('No errors or warnings found'); return; }
-  navigator.clipboard.writeText(lines.join('\n')).then(() => toast('Errors copied ✅')).catch(() => toast('Copy failed'));
+  if (!lines.length) { toast('No errors/warnings in the last hour'); return; }
+  navigator.clipboard.writeText(lines.join('\n')).then(() => toast(`${lines.length} error(s) copied ✅`)).catch(() => toast('Copy failed'));
 }
 
 function copyAllLogs() {
   const el = document.getElementById('log-list');
   if (!el) return;
-  const lines = Array.from(el.querySelectorAll('p')).map(p => p.textContent);
+  const lines = Array.from(el.querySelectorAll('p')).slice(0, 50).map(p => p.textContent);
   if (!lines.length) { toast('No logs to copy'); return; }
-  navigator.clipboard.writeText(lines.join('\n')).then(() => toast('All logs copied ✅')).catch(() => toast('Copy failed'));
+  navigator.clipboard.writeText(lines.join('\n')).then(() => toast(`${lines.length} recent logs copied ✅`)).catch(() => toast('Copy failed'));
 }
 
 // ══════════════════════════════════════════════════════════
