@@ -512,6 +512,283 @@ async function callGemini(prompt, opts = {}) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// VERTEX AI — GROUNDED GEMINI (Service Account JWT Auth + Google Search Grounding)
+// ══════════════════════════════════════════════════════════════════════════════
+const nodeCrypto = require('crypto');
+const GCP_SA_PATH = path.join(__dirname, '.gcp-service-account.json');
+let gcpServiceAccount = null;
+let vertexAccessToken = null;
+let vertexTokenExpiry = 0;
+
+function loadGcpServiceAccount() {
+  try {
+    if (fs.existsSync(GCP_SA_PATH)) {
+      gcpServiceAccount = JSON.parse(fs.readFileSync(GCP_SA_PATH, 'utf8'));
+      log('OK', `Vertex AI service account loaded: ${gcpServiceAccount.client_email}`);
+      return true;
+    }
+  } catch (e) { log('WARN', 'Failed to load GCP service account: ' + e.message); }
+  return false;
+}
+
+function createJWT(sa) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    iss: sa.client_email,
+    scope: 'https://www.googleapis.com/auth/cloud-platform',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now
+  })).toString('base64url');
+  const sign = nodeCrypto.createSign('RSA-SHA256');
+  sign.update(`${header}.${payload}`);
+  const signature = sign.sign(sa.private_key, 'base64url');
+  return `${header}.${payload}.${signature}`;
+}
+
+async function getVertexAccessToken() {
+  if (vertexAccessToken && Date.now() < vertexTokenExpiry - 60000) return vertexAccessToken;
+  if (!gcpServiceAccount) { if (!loadGcpServiceAccount()) throw new Error('No GCP service account configured'); }
+  const jwt = createJWT(gcpServiceAccount);
+  const r = await axios.post('https://oauth2.googleapis.com/token', new URLSearchParams({
+    grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+    assertion: jwt
+  }).toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10000 });
+  vertexAccessToken = r.data.access_token;
+  vertexTokenExpiry = Date.now() + (r.data.expires_in * 1000);
+  log('OK', 'Vertex AI access token refreshed');
+  return vertexAccessToken;
+}
+
+async function callVertexAI(prompt, opts = {}) {
+  const { temperature = 0.3, maxOutputTokens = 2000, timeout = 60000, grounding = true, model = 'gemini-2.0-flash' } = opts;
+  const token = await getVertexAccessToken();
+  const projectId = gcpServiceAccount.project_id;
+  const url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${projectId}/locations/us-central1/publishers/google/models/${model}:generateContent`;
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { temperature, maxOutputTokens }
+  };
+  if (grounding) {
+    body.tools = [{ google_search_retrieval: { dynamic_retrieval_config: { mode: 'MODE_DYNAMIC', dynamic_threshold: 0.3 } } }];
+  }
+  const r = await axios.post(url, body, {
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    timeout
+  });
+  const text = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const groundingMeta = r.data.candidates?.[0]?.groundingMetadata || null;
+  return { text, model, grounded: !!groundingMeta, groundingMeta };
+}
+
+// Prefer Vertex AI (grounded) over plain Gemini for accuracy-critical calls
+async function callAI(prompt, opts = {}) {
+  const { preferGrounded = false, ...rest } = opts;
+  if (preferGrounded && gcpServiceAccount) {
+    try { return await callVertexAI(prompt, { ...rest, grounding: true }); }
+    catch (e) { log('WARN', 'Vertex AI failed, falling back to Gemini: ' + e.message); }
+  }
+  return await callGemini(prompt, rest);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MARKET PREDICTION — Grounded AI analysis of market behavior + next-day outlook
+// ══════════════════════════════════════════════════════════════════════════════
+let marketPredictionCache = { data: null, lastFetch: 0 };
+const PREDICTION_CACHE_MS = 15 * 60 * 1000; // 15 min cache
+
+app.get('/api/market-prediction', async (req, res) => {
+  if (marketPredictionCache.data && (Date.now() - marketPredictionCache.lastFetch) < PREDICTION_CACHE_MS) {
+    return res.json({ ...marketPredictionCache.data, cached: true });
+  }
+  if (!appConfig.geminiKey && !gcpServiceAccount) {
+    return res.json({ error: 'Neither Gemini API key nor Vertex AI configured', configured: false });
+  }
+  try {
+    const nifty = liveIndices['Nifty 50'] || liveIndices['NIFTY50'] || {};
+    const bank = liveIndices['NIFTYBANK'] || liveIndices['Nifty Bank'] || {};
+    const vix = vixData;
+    const fii = fiiDiiData;
+    const stocks = Object.values(liveStocks).filter(s => s.price);
+    const advancers = stocks.filter(s => s.changePct >= 0).length;
+    const decliners = stocks.filter(s => s.changePct < 0).length;
+    const signals = Object.values(signalCache);
+    const avgScore = signals.length ? Math.round(signals.reduce((a, s) => a + (s.score || 0), 0) / signals.length) : 50;
+
+    // Global markets data
+    const globalStr = Object.values(globalMarkets).map(g => `${g.name}: ${g.price} (${g.changePct >= 0 ? '+' : ''}${g.changePct}%)`).join(', ');
+
+    const prompt = `You are an elite Indian stock market analyst. Analyze the CURRENT market state and provide:
+1. TODAY'S MARKET BEHAVIOR — classify as: STRONG_UPTREND, UPTREND, SIDEWAYS, DOWNTREND, STRONG_DOWNTREND, or VOLATILE
+2. NEXT SESSION OUTLOOK — predict the most likely market direction for the next trading session
+
+CURRENT MARKET DATA:
+- Nifty 50: ${nifty.price || '?'} (${nifty.chgPct >= 0 ? '+' : ''}${nifty.chgPct || 0}%)
+- Bank Nifty: ${bank.price || '?'} (${bank.chgPct >= 0 ? '+' : ''}${bank.chgPct || 0}%)
+- India VIX: ${vix.value} (trend: ${vix.trend})
+- FII Flow: ₹${fii.fii} Cr | DII Flow: ₹${fii.dii} Cr
+- USD/INR: ${fii.usdInr} | Crude: $${fii.crude}
+- Market Breadth: ${advancers} advancing / ${decliners} declining
+- Overall Signal Score: ${avgScore}/100
+- Global Markets: ${globalStr || 'Data unavailable'}
+
+TOP GAINERS: ${stocks.sort((a, b) => b.changePct - a.changePct).slice(0, 5).map(s => `${s.symbol}(${s.changePct >= 0 ? '+' : ''}${s.changePct?.toFixed(1)}%)`).join(', ')}
+TOP LOSERS: ${stocks.sort((a, b) => a.changePct - b.changePct).slice(0, 5).map(s => `${s.symbol}(${s.changePct?.toFixed(1)}%)`).join(', ')}
+
+IMPORTANT: Search for the LATEST global market news, US futures, Asian market movements, and any overnight developments that could impact Indian markets tomorrow. Factor in Gift Nifty, SGX Nifty, US Fed commentary, crude oil movements, and geopolitical events.
+
+Reply ONLY valid JSON (no markdown fences):
+{
+  "todayBehavior": "UPTREND/DOWNTREND/SIDEWAYS/VOLATILE/STRONG_UPTREND/STRONG_DOWNTREND",
+  "todayExplanation": "30-word explanation of today's market behavior",
+  "todayConfidence": 85,
+  "nextSessionOutlook": "BULLISH/BEARISH/NEUTRAL/CAUTIOUSLY_BULLISH/CAUTIOUSLY_BEARISH",
+  "nextSessionExplanation": "50-word prediction with specific catalysts and expected Nifty range",
+  "nextSessionConfidence": 70,
+  "keyFactors": ["factor1", "factor2", "factor3", "factor4"],
+  "riskLevel": "LOW/MODERATE/HIGH/VERY_HIGH",
+  "suggestedStrategy": "Brief 20-word trading strategy suggestion",
+  "giftNifty": "Gift Nifty indication if available, or 'N/A'",
+  "globalSentiment": "RISK_ON/RISK_OFF/MIXED",
+  "sectorRotation": {"bullish": ["sector1"], "bearish": ["sector2"]},
+  "updatedAt": "${new Date().toISOString()}"
+}`;
+
+    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.3, maxOutputTokens: 2000, timeout: 60000 });
+    const raw = g.text || '{}';
+    log('OK', `Market prediction generated (${g.model}, grounded:${g.grounded || false}), ${raw.length} chars`);
+
+    let prediction = {};
+    const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    try { prediction = JSON.parse(cleaned); } catch (_) {
+      const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
+      if (s >= 0 && e > s) { try { prediction = JSON.parse(cleaned.slice(s, e + 1)); } catch (_) {} }
+    }
+    prediction.grounded = g.grounded || false;
+    prediction.model = g.model;
+
+    marketPredictionCache = { data: prediction, lastFetch: Date.now() };
+    res.json({ ...prediction, cached: false });
+  } catch (e) {
+    log('ERR', 'Market prediction failed: ' + e.message);
+    res.status(500).json({ error: 'Market prediction failed: ' + e.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LIVE ANALYSIS — Real-time trade monitoring with AI exit suggestions
+// ══════════════════════════════════════════════════════════════════════════════
+let liveAnalysisState = {}; // { sessionId: { trade, lastAnalysis, history } }
+
+app.post('/api/live-analysis', async (req, res) => {
+  const { symbol, strike, optionType, entryPrice, qty, positionType, lotSize, sessionId } = req.body;
+  if (!symbol || !entryPrice) return res.status(400).json({ error: 'Symbol and entry price required' });
+  if (!appConfig.geminiKey && !gcpServiceAccount) return res.json({ error: 'AI not configured', configured: false });
+
+  const sid = sessionId || `LA-${Date.now()}`;
+  const nifty = liveIndices['Nifty 50'] || liveIndices['NIFTY50'] || {};
+  const bank = liveIndices['NIFTYBANK'] || {};
+  const vix = vixData;
+  const fii = fiiDiiData;
+  const stockData = liveStocks[symbol] || {};
+  const signals = signalCache[symbol] || {};
+
+  // Get current LTP for the option/stock
+  const currentPrice = stockData.price || stockData.ltp || 0;
+  const pnlPerUnit = positionType === 'SELL' ? (entryPrice - currentPrice) : (currentPrice - entryPrice);
+  const pnlTotal = pnlPerUnit * (qty || 1) * (lotSize || 1);
+  const pnlPct = entryPrice > 0 ? ((pnlPerUnit / entryPrice) * 100).toFixed(2) : 0;
+
+  const globalStr = Object.values(globalMarkets).map(g => `${g.name}:${g.price}(${g.changePct >= 0 ? '+' : ''}${g.changePct}%)`).join(', ');
+
+  // Build history context
+  const prevAnalysis = liveAnalysisState[sid]?.history?.slice(-3) || [];
+  const historyStr = prevAnalysis.length ? `\nPREVIOUS ANALYSIS HISTORY:\n${prevAnalysis.map(h => `[${h.time}] Action: ${h.action} | Price: ${h.price} | Reason: ${h.reason}`).join('\n')}` : '';
+
+  const prompt = `You are an expert options/equity trader providing LIVE trade monitoring for an Indian market position.
+
+POSITION DETAILS:
+- Instrument: ${symbol} ${strike ? strike + ' ' + (optionType || 'CE') : 'Equity'}
+- Position: ${positionType || 'BUY'} @ ₹${entryPrice}
+- Current Price: ₹${currentPrice || 'unknown'}
+- Qty: ${qty || 1} × ${lotSize || 1} = ${(qty || 1) * (lotSize || 1)} units
+- Current P&L: ₹${pnlTotal.toFixed(2)} (${pnlPct}%)
+
+MARKET CONTEXT:
+- Nifty: ${nifty.price || '?'} (${nifty.chgPct >= 0 ? '+' : ''}${nifty.chgPct || 0}%)
+- Bank Nifty: ${bank.price || '?'} (${bank.chgPct >= 0 ? '+' : ''}${bank.chgPct || 0}%)
+- VIX: ${vix.value} (${vix.trend}) | FII: ₹${fii.fii}Cr | USD/INR: ${fii.usdInr}
+- Signal Score: ${signals.score || 'N/A'}/100
+- Global: ${globalStr || 'N/A'}
+${historyStr}
+
+Analyze this position RIGHT NOW. Consider: price action, momentum, support/resistance levels, VIX impact on premiums, time decay (if option), market trend, and risk management.
+
+Reply ONLY valid JSON (no markdown fences):
+{
+  "action": "HOLD/EXIT_NOW/PARTIAL_EXIT/TRAIL_STOPLOSS/ADD_MORE",
+  "urgency": "LOW/MEDIUM/HIGH/CRITICAL",
+  "confidence": 75,
+  "reasoning": "50-word analysis of current position state",
+  "targetPrice": 0,
+  "stopLoss": 0,
+  "trailingStop": "Suggested trailing stop strategy if applicable",
+  "riskReward": "Current risk-reward assessment",
+  "timeDecayImpact": "For options: theta impact assessment",
+  "marketAlignment": "Is the broader market supporting this position?",
+  "exitStrategy": "Specific exit plan with price levels"
+}`;
+
+  try {
+    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.2, maxOutputTokens: 1500, timeout: 45000 });
+    const raw = g.text || '{}';
+    let analysis = {};
+    const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    try { analysis = JSON.parse(cleaned); } catch (_) {
+      const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
+      if (s >= 0 && e > s) { try { analysis = JSON.parse(cleaned.slice(s, e + 1)); } catch (_) {} }
+    }
+
+    analysis.sessionId = sid;
+    analysis.currentPrice = currentPrice;
+    analysis.pnl = pnlTotal;
+    analysis.pnlPct = +pnlPct;
+    analysis.timestamp = new Date().toISOString();
+    analysis.grounded = g.grounded || false;
+    analysis.model = g.model;
+
+    // Store in state for history tracking
+    if (!liveAnalysisState[sid]) liveAnalysisState[sid] = { trade: req.body, history: [] };
+    liveAnalysisState[sid].lastAnalysis = analysis;
+    liveAnalysisState[sid].history.push({
+      time: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }),
+      action: analysis.action,
+      price: currentPrice,
+      reason: (analysis.reasoning || '').substring(0, 80)
+    });
+    if (liveAnalysisState[sid].history.length > 20) liveAnalysisState[sid].history.shift();
+
+    log('OK', `Live analysis for ${symbol}: ${analysis.action} (${g.model}, grounded:${g.grounded || false})`);
+    res.json(analysis);
+  } catch (e) {
+    log('ERR', 'Live analysis failed: ' + e.message);
+    res.status(500).json({ error: 'Live analysis failed: ' + e.message });
+  }
+});
+
+app.get('/api/live-analysis/:sessionId', (req, res) => {
+  const state = liveAnalysisState[req.params.sessionId];
+  if (!state) return res.json({ error: 'Session not found' });
+  res.json(state);
+});
+
+app.delete('/api/live-analysis/:sessionId', (req, res) => {
+  delete liveAnalysisState[req.params.sessionId];
+  res.json({ ok: true });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 // GEMINI AI — OPTIONS VALIDATOR
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/api/options-validate', async (req, res) => {
@@ -1082,6 +1359,7 @@ app.get('/api/config-status', (req, res) => {
     isAuthenticated:  !!accessToken,
     hasZerodha:       !!zAccessToken,
     hasGemini:        !!appConfig.geminiKey,
+    hasVertexAI:      !!gcpServiceAccount,
     tokenExpiry:      appConfig.tokenExpiry || null,
     zTokenExpiry:     appConfig.zTokenExpiry || null,
     connectionStatus,
@@ -2647,7 +2925,8 @@ server.listen(PORT, async () => {
   loadAlerts();
   loadTrades();
   loadPicks();
-  log('INFO', `Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey} TwelveData:${!!appConfig.twelveDataKey} Trades:${tradeHistory.length} Picks:${pickTracker.length}`);
+  loadGcpServiceAccount();
+  log('INFO', `Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey} VertexAI:${!!gcpServiceAccount} TwelveData:${!!appConfig.twelveDataKey} Trades:${tradeHistory.length} Picks:${pickTracker.length}`);
   await initLiveData();
   if (isPostMarketWindow()) startTwelveDataPolling();
   runUnitTests();

@@ -10,6 +10,10 @@ node_modules/
 .finr_portfolio.enc
 .finr_notes.enc
 
+# Google Cloud Service Account Key (NEVER commit)
+.gcp-service-account.json
+*.json.key
+
 # Logs
 *.log
 npm-debug.log*
