@@ -762,6 +762,7 @@ tailwind.config = {
                   <div class="flex items-center justify-between">
                     <span class="text-[9px] font-bold text-[#ffd60a] uppercase font-mono tracking-wider">Leg 1</span>
                   </div>
+                  <!-- Row 1: Symbol, Strike, Expiry -->
                   <div class="grid grid-cols-3 gap-2">
                     <div>
                       <label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Symbol</label>
@@ -777,7 +778,8 @@ tailwind.config = {
                       <div class="la-expiry-suggestions flex flex-wrap gap-1.5 mt-1.5"></div>
                     </div>
                   </div>
-                  <div class="grid grid-cols-4 gap-2">
+                  <!-- Row 2: Type, Side, Entry, Qty, Lot Size — evenly distributed -->
+                  <div class="grid grid-cols-5 gap-2">
                     <div>
                       <label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Type</label>
                       <select class="la-type w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2 py-2 text-xs font-bold text-[#e5e2e1] outline-none font-mono">
@@ -802,25 +804,23 @@ tailwind.config = {
                       <label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Qty</label>
                       <input type="number" class="la-qty w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono" placeholder="1" value="1">
                     </div>
-                  </div>
-                  <div class="grid grid-cols-2 gap-2">
                     <div>
                       <label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Lot Size</label>
                       <input type="number" class="la-lot w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono" placeholder="75" value="75">
                     </div>
-                    <div class="flex items-end">
-                      <!-- Remove leg button (hidden for leg 1) -->
-                    </div>
                   </div>
                 </div>
               </div>
-              <!-- Add Leg + Start Buttons -->
+              <!-- Add Leg + Start + Stop Buttons -->
               <div class="flex gap-2">
-                <button class="flex-1 border border-[#353534] text-[#d0c6ab] py-2.5 rounded-xl font-bold text-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 hover:border-[#ffd60a] hover:text-[#ffd60a]" onclick="addLiveLeg()">
+                <button class="flex-1 border border-[#353534] text-[#d0c6ab] py-2 rounded-xl font-bold text-[10px] active:scale-95 transition-all flex items-center justify-center gap-1.5 hover:border-[#ffd60a] hover:text-[#ffd60a]" onclick="addLiveLeg()">
                   <span class="material-symbols-outlined text-sm">add</span> Add Leg
                 </button>
-                <button class="flex-[2] bg-[#ffd60a] text-[#3b2f00] py-2.5 rounded-xl font-bold font-headline text-sm active:scale-95 transition-all flex items-center justify-center gap-2" onclick="startLiveAnalysis()">
-                  <span class="material-symbols-outlined text-sm">play_arrow</span> Start Monitoring
+                <button class="flex-1 bg-[#ffd60a] text-[#3b2f00] py-2 rounded-xl font-bold font-headline text-[11px] active:scale-95 transition-all flex items-center justify-center gap-1.5" onclick="startLiveAnalysis()">
+                  <span class="material-symbols-outlined text-sm">play_arrow</span> Start
+                </button>
+                <button class="flex-1 border border-[#ffb4ab]/30 text-[#ffb4ab] py-2 rounded-xl font-bold text-[10px] active:scale-95 transition-all flex items-center justify-center gap-1.5 hover:bg-[#ffb4ab]/10" onclick="stopLiveAnalysis()">
+                  <span class="material-symbols-outlined text-sm">stop</span> Stop
                 </button>
               </div>
             </div>
@@ -2190,7 +2190,7 @@ let liveAnalysisInterval = null;
 let liveAnalysisSessionId = null;
 let laLegCount = 1;
 
-const INDEX_SYMBOLS = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX', 'BANK NIFTY', 'FIN NIFTY', 'MIDCP NIFTY'];
+const INDEX_SYMBOLS_NORM = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'];
 
 function suggestExpiries(symbolInput) {
   const leg = symbolInput.closest('.la-leg');
@@ -2201,19 +2201,22 @@ function suggestExpiries(symbolInput) {
   if (!sym) { sugDiv.innerHTML = ''; return; }
   // Normalize: strip spaces for matching (BANK NIFTY → BANKNIFTY)
   const symNorm = sym.replace(/\s+/g, '');
-  const isIndex = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'].includes(symNorm);
+  const isIndex = INDEX_SYMBOLS_NORM.includes(symNorm);
   const today = new Date();
   today.setHours(0,0,0,0);
+  const curMonth = today.getMonth();
+  const nextMonth = curMonth + 1;
   const expiries = [];
   if (isIndex) {
-    // Weekly expiry: next 8 Thursdays
+    // Weekly expiry: all remaining Thursdays this month + all Thursdays next month
     let d = new Date(today);
-    while (expiries.length < 8) {
+    const limitDate = new Date(today.getFullYear(), nextMonth + 1, 0); // end of next month
+    while (d <= limitDate) {
       d.setDate(d.getDate() + 1);
-      if (d.getDay() === 4) expiries.push(new Date(d));
+      if (d.getDay() === 4 && d > today) expiries.push(new Date(d));
     }
   } else {
-    // Monthly expiry: last Thursday of current + next 5 months (gives 4-6 future dates)
+    // Monthly expiry (stock options): last Thursday of current + next 5 months
     for (let m = 0; m < 6; m++) {
       const year = today.getFullYear();
       const month = today.getMonth() + m;
@@ -2249,15 +2252,12 @@ function addLiveLeg() {
       <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Strike</label><input type="number" class="la-strike w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono" placeholder="24000"></div>
       <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Expiry</label><input type="date" class="la-expiry w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono"><div class="la-expiry-suggestions flex flex-wrap gap-1.5 mt-1.5"></div></div>
     </div>
-    <div class="grid grid-cols-4 gap-2">
+    <div class="grid grid-cols-5 gap-2">
       <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Type</label><select class="la-type w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2 py-2 text-xs font-bold text-[#e5e2e1] outline-none font-mono"><option value="CE">CE</option><option value="PE">PE</option><option value="EQ">EQ</option><option value="FUT">FUT</option></select></div>
       <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Side</label><select class="la-position w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2 py-2 text-xs font-bold text-[#e5e2e1] outline-none font-mono"><option value="BUY">Buy</option><option value="SELL">Sell</option></select></div>
       <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Entry ₹</label><input type="number" class="la-entry w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono" placeholder="250"></div>
       <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Qty</label><input type="number" class="la-qty w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono" placeholder="1" value="1"></div>
-    </div>
-    <div class="grid grid-cols-2 gap-2">
       <div><label class="text-[8px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider block mb-0.5">Lot Size</label><input type="number" class="la-lot w-full bg-[#0e0e0e] border border-[#353534] rounded-lg px-2.5 py-2 text-xs font-bold text-[#e5e2e1] focus:border-[#ffd60a] outline-none font-mono" placeholder="75" value="75"></div>
-      <div></div>
     </div>`;
   container.appendChild(legDiv);
 }
