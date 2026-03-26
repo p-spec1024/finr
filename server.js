@@ -56,6 +56,9 @@ let mockInterval     = null;
 let testResults      = [];
 let globalMarkets    = {}; // Twelve Data global market prices
 let twelveDataInterval = null;
+let optionChainCache = { nifty: null, banknifty: null, lastFetch: 0 }; // OI, IV, PCR, Max Pain
+let pickTracker      = []; // { id, type, symbol, direction, entryPrice, target, stopLoss, date, status, outcome }
+const PICK_TRACKER_FILE = path.join(__dirname, '.finr_picks.enc');
 
 // ── Twelve Data config ───────────────────────────────────────────────────────
 const TWELVE_DATA_SYMBOLS = [
@@ -123,6 +126,171 @@ function startTwelveDataPolling() {
 function stopTwelveDataPolling() {
   if (twelveDataInterval) { clearInterval(twelveDataInterval); twelveDataInterval = null; }
   log('INFO', 'Twelve Data polling stopped');
+}
+
+// ── Option Chain Fetcher (Upstox v2) ─────────────────────────────────────────
+const OC_CACHE_MS = 5 * 60 * 1000; // 5 min cache for option chain
+
+async function fetchOptionChain(underlying = 'NSE_INDEX|Nifty 50') {
+  if (!accessToken) return null;
+  try {
+    const res = await axios.get('https://api.upstox.com/v2/option/chain', {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      params: { instrument_key: underlying, expiry_date: getNextExpiry() },
+      timeout: 10000
+    });
+    const data = res.data?.data;
+    if (!data || !data.length) return null;
+
+    // Find ATM strike
+    const spot = underlying.includes('Nifty 50') ? (liveIndices['Nifty 50']?.price || 23000) :
+                 underlying.includes('Nifty Bank') ? (liveIndices['Nifty Bank']?.price || 49000) : 23000;
+    const sorted = [...data].sort((a, b) => Math.abs(a.strike_price - spot) - Math.abs(b.strike_price - spot));
+    const nearATM = sorted.slice(0, 20); // Top 10 strikes around ATM
+
+    let totalCallOI = 0, totalPutOI = 0, maxPainStrike = 0, maxPainLoss = Infinity;
+    const strikes = [];
+
+    for (const s of data) {
+      const ce = s.call_options?.market_data || {};
+      const pe = s.put_options?.market_data || {};
+      totalCallOI += (ce.oi || 0);
+      totalPutOI += (pe.oi || 0);
+    }
+
+    // Max Pain calculation: strike where total option buyer losses are maximum
+    for (const s of data) {
+      let callLoss = 0, putLoss = 0;
+      for (const other of data) {
+        const ceOI = other.call_options?.market_data?.oi || 0;
+        const peOI = other.put_options?.market_data?.oi || 0;
+        if (other.strike_price < s.strike_price) callLoss += ceOI * (s.strike_price - other.strike_price);
+        if (other.strike_price > s.strike_price) putLoss += peOI * (other.strike_price - s.strike_price);
+      }
+      const totalLoss = callLoss + putLoss;
+      if (totalLoss < maxPainLoss) { maxPainLoss = totalLoss; maxPainStrike = s.strike_price; }
+    }
+
+    // Extract near-ATM strikes with full data
+    for (const s of nearATM) {
+      const ce = s.call_options || {};
+      const pe = s.put_options || {};
+      const ceM = ce.market_data || {};
+      const peM = pe.market_data || {};
+      const ceG = ce.option_greeks || {};
+      const peG = pe.option_greeks || {};
+      strikes.push({
+        strike: s.strike_price,
+        ce: { ltp: ceM.ltp || 0, oi: ceM.oi || 0, volume: ceM.volume || 0, iv: ceG.iv || 0, delta: ceG.delta || 0, theta: ceG.theta || 0, bidQty: ceM.bid_qty || 0, askQty: ceM.ask_qty || 0 },
+        pe: { ltp: peM.ltp || 0, oi: peM.oi || 0, volume: peM.volume || 0, iv: peG.iv || 0, delta: peG.delta || 0, theta: peG.theta || 0, bidQty: peM.bid_qty || 0, askQty: peM.ask_qty || 0 }
+      });
+    }
+
+    const pcr = totalCallOI > 0 ? +(totalPutOI / totalCallOI).toFixed(2) : 0;
+    const avgIV = strikes.length > 0 ? +(strikes.reduce((s, x) => s + (x.ce.iv + x.pe.iv) / 2, 0) / strikes.length).toFixed(1) : 0;
+
+    return { spot, strikes, pcr, maxPain: maxPainStrike, totalCallOI, totalPutOI, avgIV };
+  } catch (e) {
+    log('WARN', `Option chain fetch failed for ${underlying}: ${e.message}`);
+    return null;
+  }
+}
+
+function getNextExpiry() {
+  // Get next Thursday (weekly expiry for Nifty/BankNifty)
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const day = now.getDay();
+  const daysToThurs = day <= 4 ? (4 - day) : (4 + 7 - day);
+  const expiry = new Date(now);
+  expiry.setDate(now.getDate() + (daysToThurs === 0 && now.getHours() >= 15 ? 7 : daysToThurs));
+  return expiry.toISOString().slice(0, 10);
+}
+
+async function refreshOptionChain() {
+  if (Date.now() - optionChainCache.lastFetch < OC_CACHE_MS) return optionChainCache;
+  const [nifty, banknifty] = await Promise.all([
+    fetchOptionChain('NSE_INDEX|Nifty 50'),
+    fetchOptionChain('NSE_INDEX|Nifty Bank')
+  ]);
+  optionChainCache = { nifty, banknifty, lastFetch: Date.now() };
+  if (nifty) log('OK', `Option chain refreshed — Nifty PCR:${nifty.pcr} MaxPain:${nifty.maxPain} AvgIV:${nifty.avgIV}%`);
+  return optionChainCache;
+}
+
+// ── Pick Tracker — persistence ───────────────────────────────────────────────
+function loadPicks() {
+  try { if (fs.existsSync(PICK_TRACKER_FILE)) { pickTracker = JSON.parse(CryptoJS.AES.decrypt(fs.readFileSync(PICK_TRACKER_FILE,'utf8'), ENC_KEY).toString(CryptoJS.enc.Utf8)); } }
+  catch(e) { log('WARN', 'Failed to load pick tracker: ' + e.message); pickTracker = []; }
+}
+function savePicks() {
+  try { fs.writeFileSync(PICK_TRACKER_FILE, CryptoJS.AES.encrypt(JSON.stringify(pickTracker), ENC_KEY).toString()); }
+  catch(e) { log('ERR', 'Failed to save pick tracker: ' + e.message); }
+}
+
+function trackPick(pick) {
+  const entry = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+    type: pick.type || 'options', // 'options' | 'equity'
+    symbol: pick.symbol,
+    direction: pick.direction || null,
+    strategy: pick.strategy || null,
+    entryPrice: pick.entryPrice || 0,
+    entryPremium: pick.entryPremium || null,
+    target: pick.target || 0,
+    stopLoss: pick.stopLoss || 0,
+    signalAlignment: pick.signalAlignment || null,
+    date: new Date().toISOString().slice(0,10),
+    expiry: pick.expiry || null,
+    status: 'ACTIVE', // ACTIVE → HIT_TARGET | HIT_SL | EXPIRED | DIRECTION_CORRECT | DIRECTION_WRONG
+    outcome: null, // filled next day
+    nextDayPrice: null,
+    nextDayCheck: null,
+    pnlEstimate: null
+  };
+  pickTracker.unshift(entry);
+  if (pickTracker.length > 500) pickTracker = pickTracker.slice(0, 500);
+  savePicks();
+  return entry;
+}
+
+// Check yesterday's picks against today's prices
+function evaluatePicksNextDay() {
+  const today = new Date().toISOString().slice(0, 10);
+  let evaluated = 0;
+  for (const pick of pickTracker) {
+    if (pick.status !== 'ACTIVE') continue;
+    if (pick.nextDayCheck) continue;
+    // Only evaluate picks from before today
+    if (pick.date >= today) continue;
+
+    const live = liveStocks[pick.symbol] || liveIndices[pick.symbol];
+    if (!live || !live.price) continue;
+
+    pick.nextDayPrice = live.price;
+    pick.nextDayCheck = today;
+
+    if (pick.type === 'options') {
+      // For options: check if underlying moved in predicted direction
+      const movedUp = live.price > pick.entryPrice;
+      const predictedUp = (pick.direction === 'CE');
+      pick.outcome = movedUp === predictedUp ? 'DIRECTION_CORRECT' : 'DIRECTION_WRONG';
+      // Estimate P&L based on underlying movement
+      const movePct = ((live.price - pick.entryPrice) / pick.entryPrice) * 100;
+      pick.pnlEstimate = predictedUp ? +movePct.toFixed(2) : +(-movePct).toFixed(2);
+    } else {
+      // For equity: check against target/SL
+      if (pick.target && live.price >= pick.target) { pick.status = 'HIT_TARGET'; pick.outcome = 'WIN'; }
+      else if (pick.stopLoss && live.price <= pick.stopLoss) { pick.status = 'HIT_SL'; pick.outcome = 'LOSS'; }
+      else {
+        const movedUp = live.price > pick.entryPrice;
+        pick.outcome = movedUp ? 'DIRECTION_CORRECT' : 'DIRECTION_WRONG';
+        pick.pnlEstimate = +(((live.price - pick.entryPrice) / pick.entryPrice) * 100).toFixed(2);
+      }
+    }
+    pick.status = pick.outcome === 'DIRECTION_CORRECT' || pick.outcome === 'WIN' ? 'CORRECT' : 'INCORRECT';
+    evaluated++;
+  }
+  if (evaluated > 0) { savePicks(); log('OK', `Evaluated ${evaluated} picks from previous days`); }
 }
 
 // ── Logging ───────────────────────────────────────────────────────────────────
@@ -683,7 +851,7 @@ const OPTIONS_LAB_CACHE_MS = 30 * 60 * 1000; // 30 min cache
 app.get('/api/options-lab', async (req, res) => {
   const force = req.query.force === 'true';
   if (!force && optionsLabCache.trades.length && (Date.now() - optionsLabCache.lastFetch) < OPTIONS_LAB_CACHE_MS) {
-    return res.json({ trades: optionsLabCache.trades, cached: true, generated: new Date(optionsLabCache.lastFetch).toISOString() });
+    return res.json({ trades: optionsLabCache.trades, cached: true, generated: new Date(optionsLabCache.lastFetch).toISOString(), chainData: optionChainCache });
   }
   if (!appConfig.geminiKey) return res.json({ trades: [], configured: false, error: 'Gemini API key not configured' });
   try {
@@ -692,6 +860,28 @@ app.get('/api/options-lab', async (req, res) => {
     const stocks = Object.values(liveStocks).filter(s => s.price && !s.isMock);
     const topGainers = [...stocks].sort((a,b) => b.changePct - a.changePct).slice(0,15);
     const topLosers = [...stocks].sort((a,b) => a.changePct - b.changePct).slice(0,15);
+
+    // Fetch real option chain data (OI, IV, Greeks, PCR, Max Pain)
+    const oc = await refreshOptionChain();
+    const niftyOC = oc.nifty;
+    const bnfOC = oc.banknifty;
+
+    // Build option chain context string
+    let ocStr = '';
+    if (niftyOC) {
+      ocStr += `\nNIFTY OPTION CHAIN (Real-Time):\nSpot:${niftyOC.spot} PCR:${niftyOC.pcr} MaxPain:${niftyOC.maxPain} AvgIV:${niftyOC.avgIV}%\nTotal Call OI:${(niftyOC.totalCallOI/100000).toFixed(1)}L Total Put OI:${(niftyOC.totalPutOI/100000).toFixed(1)}L`;
+      ocStr += '\nStrike|CE_LTP|CE_OI|CE_Vol|CE_IV|CE_Delta|PE_LTP|PE_OI|PE_Vol|PE_IV|PE_Delta';
+      for (const s of niftyOC.strikes.slice(0,12)) {
+        ocStr += `\n${s.strike}|₹${s.ce.ltp}|${(s.ce.oi/1000).toFixed(0)}K|${s.ce.volume}|${s.ce.iv}%|${s.ce.delta}|₹${s.pe.ltp}|${(s.pe.oi/1000).toFixed(0)}K|${s.pe.volume}|${s.pe.iv}%|${s.pe.delta}`;
+      }
+    }
+    if (bnfOC) {
+      ocStr += `\n\nBANKNIFTY OPTION CHAIN (Real-Time):\nSpot:${bnfOC.spot} PCR:${bnfOC.pcr} MaxPain:${bnfOC.maxPain} AvgIV:${bnfOC.avgIV}%`;
+      ocStr += '\nStrike|CE_LTP|CE_OI|CE_Vol|CE_IV|PE_LTP|PE_OI|PE_Vol|PE_IV';
+      for (const s of bnfOC.strikes.slice(0,10)) {
+        ocStr += `\n${s.strike}|₹${s.ce.ltp}|${(s.ce.oi/1000).toFixed(0)}K|${s.ce.volume}|${s.ce.iv}%|₹${s.pe.ltp}|${(s.pe.oi/1000).toFixed(0)}K|${s.pe.volume}|${s.pe.iv}%`;
+      }
+    }
 
     const gainStr = topGainers.map(s => {
       const f = STOCK_UNIVERSE.find(x => x.symbol === s.symbol);
@@ -704,35 +894,51 @@ app.get('/api/options-lab', async (req, res) => {
       return `${s.symbol}:₹${s.price}(${s.changePct.toFixed(1)}%) PE:${f?.pe||'?'} Sig:${sig?.score||'?'}`;
     }).join('\n');
 
-    const prompt = `You are an expert NSE F&O options strategist. Analyse the CURRENT market and recommend the TOP 6-8 BEST options trades to take RIGHT NOW.
+    // Build signal alignment factors for market context
+    const vixLevel = vixData.value > 18 ? 'HIGH' : vixData.value < 13 ? 'LOW' : 'NORMAL';
+    const pcrSignal = niftyOC ? (niftyOC.pcr > 1.3 ? 'BULLISH(oversold puts)' : niftyOC.pcr < 0.7 ? 'BEARISH(oversold calls)' : 'NEUTRAL') : '?';
+    const fiiSignal = fiiDiiData.fii > 0 ? 'BUYING' : 'SELLING';
+    const trendSignal = nifty && nifty.changePct > 0.3 ? 'UPTREND' : nifty && nifty.changePct < -0.3 ? 'DOWNTREND' : 'SIDEWAYS';
+
+    const prompt = `You are an expert NSE F&O options strategist with access to REAL-TIME option chain data. Recommend the BEST options trades based on ACTUAL market data.
+
+IMPORTANT: The user primarily SELLS options and hedges with futures or spreads. Prioritize credit strategies (sell premium) with built-in hedges. Do NOT recommend naked buys unless momentum is extremely strong.
 
 LIVE MARKET DATA:
 Nifty=${nifty?.price||'?'}(${nifty?.changePct>=0?'+':''}${nifty?.changePct||0}%) BankNifty=${bankNifty?.price||'?'}(${bankNifty?.changePct>=0?'+':''}${bankNifty?.changePct||0}%)
-VIX=${vixData.value}(${vixData.trend}) FII=₹${fiiDiiData.fii}Cr DII=₹${fiiDiiData.dii}Cr
-Market:${isMarketOpen()?'OPEN':'CLOSED'} Time:${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}
+VIX=${vixData.value}(${vixData.trend},${vixLevel}) FII=₹${fiiDiiData.fii}Cr(${fiiSignal}) DII=₹${fiiDiiData.dii}Cr
+Market:${isMarketOpen()?'OPEN':'CLOSED'} Trend:${trendSignal} PCR_Signal:${pcrSignal}
+Time:${new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}
+${ocStr}
 
-TOP GAINERS (momentum for CE):
+TOP GAINERS (momentum):
 ${gainStr}
 
-TOP LOSERS (momentum for PE):
+TOP LOSERS (momentum):
 ${loseStr}
 
-ANALYSIS RULES:
-1. Use TOP GAINERS for CE (Call) trades — ride the momentum
-2. Use TOP LOSERS for PE (Put) trades — ride the downtrend
-3. Also consider NIFTY and BANKNIFTY index options
-4. For each trade: specify exact strategy (Naked CE/PE, Bull Call Spread, Bear Put Spread, Iron Condor)
-5. HIGH VIX (>18) = prefer selling premium / spreads. LOW VIX (<13) = prefer buying options
-6. Give SPECIFIC strike prices relative to current price
-7. Include risk/reward ratio, max loss, and hedge suggestions
-8. Rate each: AGGRESSIVE, MODERATE, CONSERVATIVE
+STRATEGY SELECTION RULES (market-adaptive):
+1. HIGH VIX (>18): SELL premium — Iron Condors, Credit Spreads, Strangles with hedge
+2. LOW VIX (<13): BUY options only if strong directional signal, otherwise avoid
+3. NORMAL VIX (13-18): Spreads (Bull Put/Bear Call), Hedged positions
+4. PCR > 1.3: Market oversold → BULLISH bias (sell puts, buy calls on dips)
+5. PCR < 0.7: Market overbought → BEARISH bias (sell calls, buy puts on rallies)
+6. ALWAYS suggest hedge for each trade (futures hedge or protective option)
+7. Use REAL OI data: high OI strikes = strong support/resistance
+8. Use REAL IV: sell high IV strikes, buy low IV for directional
+9. Max Pain = likely expiry gravitational pull — factor this into strike selection
+10. Recommend 4-8 trades — ONLY strategies that make sense TODAY. Do NOT force variety.
+
+SIGNAL ALIGNMENT — rate each trade on 10 factors:
+[1]VIX_Level [2]PCR_Direction [3]FII_Flow [4]Market_Trend [5]OI_Buildup [6]IV_Percentile [7]MaxPain_Distance [8]Momentum [9]Volume_Confirmation [10]Risk_Reward
+Report alignment as "X/10 factors aligned" with breakdown.
 
 Reply ONLY valid JSON array, NO markdown fences:
-[{"symbol":"SYMBOL","direction":"CE/PE","strategy":"Naked CE / Bull Call Spread 23000-23200 / etc","strategyType":"NAKED/VERTICAL_SPREAD/IRON_CONDOR/STRADDLE/HEDGED","currentPrice":"₹xxx","strikePrice":"xxxx CE/PE","entry":"₹xx-₹xx premium range","target":"₹xx-₹xx target premium","stopLoss":"₹xx SL on premium","expiry":"weekly/monthly","targetTime":"1-3 days / 1 week / monthly","riskReward":"1:2","maxLoss":"₹xxx per lot","lotSize":"lot size","margin":"approx margin required","confidence":"HIGH/MEDIUM/LOW","riskType":"AGGRESSIVE/MODERATE/CONSERVATIVE","reasoning":"80-word analysis: why this trade, momentum/reversal logic, IV consideration, key levels","hedgeSuggestion":"optional: buy xxx as protection","sentiment":"BULLISH/BEARISH/NEUTRAL"}]`;
+[{"symbol":"SYMBOL","direction":"CE/PE","strategy":"Bear Call Spread 23200-23400 / Iron Condor 22800-23200 / etc","strategyType":"CREDIT_SPREAD/IRON_CONDOR/HEDGED_SELL/STRADDLE/DIRECTIONAL","currentPrice":"₹xxx","strikePrice":"Sell xxxx CE + Buy xxxx CE","entry":"₹xx-₹xx net credit/debit","target":"₹xx target","stopLoss":"₹xx SL","expiry":"weekly/monthly","targetTime":"1-3 days / 1 week","riskReward":"1:2","maxLoss":"₹xxx per lot","lotSize":"lot size","margin":"approx margin required","signalAlignment":{"score":7,"total":10,"factors":{"vix":"ALIGNED","pcr":"ALIGNED","fii":"NEUTRAL","trend":"ALIGNED","oi":"ALIGNED","iv":"ALIGNED","maxPain":"NEUTRAL","momentum":"ALIGNED","volume":"MISALIGNED","riskReward":"ALIGNED"},"summary":"7/10 factors aligned — strong setup"},"riskType":"AGGRESSIVE/MODERATE/CONSERVATIVE","reasoning":"80-word analysis: why this trade, OI/IV logic, PCR reading, max pain proximity, key levels, hedge rationale","hedgeSuggestion":"Buy NIFTY FUT as delta hedge / Buy xxxx PE as protection","sentiment":"BULLISH/BEARISH/NEUTRAL"}]`;
 
-    const g = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 6000, timeout: 50000 });
+    const g = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 8000, timeout: 60000 });
     const raw = g.text || '[]';
-    log('OK', `Options Lab generated (${g.model}), ${raw.length} chars`);
+    log('OK', `Options Lab generated (${g.model}), ${raw.length} chars, OC:${niftyOC?'live':'none'}`);
 
     let trades = [];
     const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
@@ -746,8 +952,20 @@ Reply ONLY valid JSON array, NO markdown fences:
       if (m) { for (const x of m) { try { trades.push(JSON.parse(x)); } catch(_) {} } }
     }
 
+    // Track all picks for next-day evaluation
+    for (const t of trades) {
+      const entryPrice = nifty?.price || 0;
+      if (t.symbol === 'NIFTY' || t.symbol === 'BANKNIFTY') {
+        trackPick({ type: 'options', symbol: t.symbol === 'NIFTY' ? 'Nifty 50' : 'Nifty Bank', direction: t.direction, strategy: t.strategy, entryPrice: t.symbol === 'NIFTY' ? (nifty?.price||0) : (bankNifty?.price||0), entryPremium: t.entry, target: t.target, stopLoss: t.stopLoss, signalAlignment: t.signalAlignment, expiry: t.expiry });
+      } else {
+        const live = liveStocks[t.symbol];
+        if (live) trackPick({ type: 'options', symbol: t.symbol, direction: t.direction, strategy: t.strategy, entryPrice: live.price, entryPremium: t.entry, target: t.target, stopLoss: t.stopLoss, signalAlignment: t.signalAlignment, expiry: t.expiry });
+      }
+    }
+
     optionsLabCache = { trades, lastFetch: Date.now() };
-    res.json({ trades, cached: false, generated: new Date().toISOString(), model: g.model });
+    const chainSummary = niftyOC ? { niftyPCR: niftyOC.pcr, niftyMaxPain: niftyOC.maxPain, niftyAvgIV: niftyOC.avgIV, bnfPCR: bnfOC?.pcr, bnfMaxPain: bnfOC?.maxPain } : null;
+    res.json({ trades, cached: false, generated: new Date().toISOString(), model: g.model, chainData: chainSummary });
   } catch(e) {
     log('ERR', 'Options Lab failed: ' + e.message);
     res.status(500).json({ error: 'AI analysis failed: ' + e.message });
@@ -1349,6 +1567,158 @@ app.post('/api/trades/capture', async (req, res) => {
   res.json({ ok: true, count: tradeHistory.length });
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// STRATEGY-GROUPED P&L — groups trades into hedged positions, spreads, etc.
+// ══════════════════════════════════════════════════════════════════════════════
+app.get('/api/trades/strategies', (req, res) => {
+  const strategies = groupTradeHistoryIntoStrategies(tradeHistory);
+  const totalPnl = strategies.reduce((s, st) => s + st.netPnl, 0);
+  const wins = strategies.filter(s => s.netPnl > 0).length;
+  const losses = strategies.filter(s => s.netPnl < 0).length;
+  res.json({
+    strategies,
+    summary: {
+      totalStrategies: strategies.length,
+      totalPnl: +totalPnl.toFixed(2),
+      wins, losses,
+      winRate: strategies.length > 0 ? +((wins / strategies.length) * 100).toFixed(0) : 0
+    }
+  });
+});
+
+// Improved strategy grouper: groups by underlying + date + detects hedges/spreads
+function groupTradeHistoryIntoStrategies(trades) {
+  // Group trades by date + underlying (strip expiry/strike to get underlying)
+  const groups = {};
+  for (const t of trades) {
+    const underlying = extractUnderlying(t.symbol);
+    const date = t.sellDate || t.buyDate;
+    const key = `${date}_${underlying}`;
+    if (!groups[key]) groups[key] = { underlying, date, legs: [] };
+    groups[key].legs.push(t);
+  }
+
+  const strategies = [];
+  for (const [key, group] of Object.entries(groups)) {
+    const legs = group.legs;
+    if (legs.length === 1) {
+      // Single trade — check if it's a standalone or part of bigger picture
+      const t = legs[0];
+      const pnl = (t.sellPrice - t.buyPrice) * t.qty;
+      strategies.push({
+        id: key, underlying: group.underlying, date: group.date,
+        type: classifySingleLeg(t),
+        legs: legs.map(formatLeg),
+        netPnl: +pnl.toFixed(2),
+        totalCharges: 0,
+        status: t.sellPrice > 0 ? 'CLOSED' : 'OPEN'
+      });
+    } else {
+      // Multiple legs — classify strategy
+      const type = classifyMultiLeg(legs);
+      const netPnl = legs.reduce((s, t) => {
+        const direction = isSellLeg(t) ? -1 : 1;
+        return s + (t.sellPrice - t.buyPrice) * t.qty * (direction === -1 && t.sellPrice === 0 ? 0 : 1);
+      }, 0);
+      strategies.push({
+        id: key, underlying: group.underlying, date: group.date,
+        type,
+        legs: legs.map(formatLeg),
+        netPnl: +netPnl.toFixed(2),
+        totalCharges: 0,
+        status: legs.every(t => t.sellPrice > 0) ? 'CLOSED' : 'OPEN'
+      });
+    }
+  }
+  return strategies.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function extractUnderlying(symbol) {
+  // NIFTY2630523000CE → NIFTY, BANKNIFTY26MAR49000PE → BANKNIFTY, RELIANCE → RELIANCE
+  const m = symbol.match(/^([A-Z]+?)(?:\d{2}(?:[A-Z]{3}|[0-9])|\s|$)/);
+  return m ? m[1] : symbol;
+}
+
+function isSellLeg(trade) {
+  // In the user's style: they SELL options and hedge with futures
+  // If buyPrice > sellPrice and it's options, it was likely a sell (collected premium)
+  return trade.symbol.match(/[CP]E$/) && trade.buyPrice > trade.sellPrice;
+}
+
+function classifySingleLeg(trade) {
+  const sym = trade.symbol;
+  if (sym.includes('FUT')) return 'FUTURES';
+  if (sym.match(/CE$/)) return 'LONG CE';
+  if (sym.match(/PE$/)) return 'LONG PE';
+  return 'EQUITY';
+}
+
+function classifyMultiLeg(legs) {
+  const hasFut = legs.some(l => l.symbol.includes('FUT'));
+  const hasCE = legs.some(l => l.symbol.match(/CE$/));
+  const hasPE = legs.some(l => l.symbol.match(/PE$/));
+  const allOptions = legs.every(l => l.symbol.match(/[CP]E$/));
+  const ceLegs = legs.filter(l => l.symbol.match(/CE$/));
+  const peLegs = legs.filter(l => l.symbol.match(/PE$/));
+
+  if (hasFut && (hasCE || hasPE)) return 'HEDGED WITH FUTURES';
+  if (hasCE && hasPE && !hasFut) {
+    if (ceLegs.length === 1 && peLegs.length === 1) return 'STRADDLE/STRANGLE';
+    if (ceLegs.length >= 1 && peLegs.length >= 1) return 'IRON CONDOR';
+  }
+  if (allOptions && ceLegs.length >= 2 && peLegs.length === 0) return 'CALL SPREAD';
+  if (allOptions && peLegs.length >= 2 && ceLegs.length === 0) return 'PUT SPREAD';
+  if (allOptions && legs.length >= 3) return 'COMPLEX STRATEGY';
+  if (hasFut && legs.length >= 2) return 'FUTURES SPREAD';
+  return 'MULTI-LEG';
+}
+
+function formatLeg(trade) {
+  const pnl = (trade.sellPrice - trade.buyPrice) * trade.qty;
+  return {
+    symbol: trade.symbol, qty: trade.qty,
+    buyPrice: trade.buyPrice, sellPrice: trade.sellPrice,
+    pnl: +pnl.toFixed(2), date: trade.sellDate || trade.buyDate,
+    type: trade.type
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PICK TRACKER — AI recommendation accuracy tracking
+// ══════════════════════════════════════════════════════════════════════════════
+app.get('/api/picks', (req, res) => {
+  const total = pickTracker.length;
+  const evaluated = pickTracker.filter(p => p.status !== 'ACTIVE');
+  const correct = evaluated.filter(p => p.outcome === 'DIRECTION_CORRECT' || p.outcome === 'WIN').length;
+  const incorrect = evaluated.filter(p => p.outcome === 'DIRECTION_WRONG' || p.outcome === 'LOSS').length;
+  const accuracy = evaluated.length > 0 ? +((correct / evaluated.length) * 100).toFixed(0) : 0;
+  const avgPnl = evaluated.length > 0 ? +(evaluated.reduce((s, p) => s + (p.pnlEstimate || 0), 0) / evaluated.length).toFixed(2) : 0;
+
+  res.json({
+    picks: pickTracker.slice(0, 100), // Last 100
+    stats: {
+      total, evaluated: evaluated.length, correct, incorrect, accuracy, avgPnl,
+      activePicks: pickTracker.filter(p => p.status === 'ACTIVE').length
+    }
+  });
+});
+
+app.delete('/api/picks', (req, res) => {
+  pickTracker = [];
+  savePicks();
+  res.json({ ok: true });
+});
+
+// Option chain data endpoint (for frontend display)
+app.get('/api/option-chain', async (req, res) => {
+  try {
+    const oc = await refreshOptionChain();
+    res.json(oc);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/pnl/csv', (req, res) => {
   const rows = [['Date','Symbol','Qty','Buy Price','Sell Price','P&L','P&L %','Holding Days','Tax Type']];
   for (const t of tradeHistory) {
@@ -1764,45 +2134,40 @@ async function pollUpstoxPrices() {
     'NSE_INDEX|Nifty 50', 'NSE_INDEX|SENSEX', 'NSE_INDEX|Nifty Bank',
     'NSE_INDEX|Nifty IT', 'NSE_INDEX|Nifty Pharma', 'NSE_INDEX|India VIX'
   ];
-  // Upstox allows max ~500 keys per request; batch in chunks of 25
-  const chunkSize = 25;
+  // Upstox allows up to 500 keys per request — send all ~210 in one call
   let updated = false;
-  for (let i = 0; i < allKeys.length; i += chunkSize) {
-    const chunk = allKeys.slice(i, i + chunkSize);
-    try {
-      const res = await axios.get('https://api.upstox.com/v2/market-quote/quotes', {
-        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
-        params: { instrument_key: chunk.join(',') }
-      });
-      const data = res.data?.data;
-      if (data) {
-        if (pollFirstLog) {
-          const keys = Object.keys(data).slice(0, 3);
-          log('OK', `Upstox REST first response — ${Object.keys(data).length} instruments, sample keys: ${keys.join(', ')}`);
-          // Log one sample quote to verify field names
-          const sampleVal = Object.values(data)[0];
-          if (sampleVal) {
-            log('INFO', `Sample quote ALL keys: ${Object.keys(sampleVal).join(', ')}`);
-            log('INFO', `Sample values: last_price=${sampleVal.last_price} close_price=${sampleVal.close_price} ohlc=${JSON.stringify(sampleVal.ohlc)} net_change=${sampleVal.net_change} prev_close=${sampleVal.prev_close} previous_close=${sampleVal.previous_close}`);
-          }
-          pollFirstLog = false;
+  try {
+    const res = await axios.get('https://api.upstox.com/v2/market-quote/quotes', {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      params: { instrument_key: allKeys.join(',') }
+    });
+    const data = res.data?.data;
+    if (data) {
+      if (pollFirstLog) {
+        const keys = Object.keys(data).slice(0, 3);
+        log('OK', `Upstox REST first response — ${Object.keys(data).length} instruments in 1 call, sample keys: ${keys.join(', ')}`);
+        const sampleVal = Object.values(data)[0];
+        if (sampleVal) {
+          log('INFO', `Sample quote ALL keys: ${Object.keys(sampleVal).join(', ')}`);
+          log('INFO', `Sample values: last_price=${sampleVal.last_price} close_price=${sampleVal.close_price} ohlc=${JSON.stringify(sampleVal.ohlc)} net_change=${sampleVal.net_change} prev_close=${sampleVal.prev_close} previous_close=${sampleVal.previous_close}`);
         }
-        for (const [key, val] of Object.entries(data)) {
-          if (processUpstoxQuote(key, val)) updated = true;
-        }
-        pollErrors = 0;
-      } else {
-        if (pollFirstLog) { log('WARN', `Upstox REST response has no data field: ${JSON.stringify(res.data).slice(0,200)}`); }
+        pollFirstLog = false;
       }
-    } catch (e) {
-      pollErrors++;
-      if (pollErrors <= 3) log('ERR', `Upstox REST poll error (batch ${Math.floor(i/chunkSize)+1}): ${e.response?.status || ''} ${e.message}`);
-      if (e.response?.status === 410 || e.response?.status === 401) {
-        log('ERR', 'Upstox REST API unavailable — stopping poller');
-        stopPricePoller();
-        connectionStatus = 'disconnected'; broadcastStatus();
-        return;
+      for (const [key, val] of Object.entries(data)) {
+        if (processUpstoxQuote(key, val)) updated = true;
       }
+      pollErrors = 0;
+    } else {
+      if (pollFirstLog) { log('WARN', `Upstox REST response has no data field: ${JSON.stringify(res.data).slice(0,200)}`); }
+    }
+  } catch (e) {
+    pollErrors++;
+    if (pollErrors <= 3) log('ERR', `Upstox REST poll error: ${e.response?.status || ''} ${e.message}`);
+    if (e.response?.status === 410 || e.response?.status === 401) {
+      log('ERR', 'Upstox REST API unavailable — stopping poller');
+      stopPricePoller();
+      connectionStatus = 'disconnected'; broadcastStatus();
+      return;
     }
   }
   if (updated) {
@@ -2208,6 +2573,7 @@ function errorPage(title, detail, host) {
 // SCHEDULED JOBS
 // ══════════════════════════════════════════════════════════════════════════════
 cron.schedule('15 9 * * 1-5', () => { initLiveData(); log('INFO', 'Market open — live data started'); });
+cron.schedule('20 9 * * 1-5', () => { evaluatePicksNextDay(); log('INFO', 'Evaluating yesterday\'s AI picks against today\'s open'); });
 cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); if (mockInterval) { clearInterval(mockInterval); mockInterval = null; } stopPricePoller(); startTwelveDataPolling(); captureZerodhaTrades(); });
 cron.schedule('0 0 * * *', () => { stopTwelveDataPolling(); log('INFO', 'Midnight — Twelve Data polling stopped'); });
 cron.schedule('0 10,14 * * 1-5', () => { if (zAccessToken) { fetchZerodhaData(); log('INFO', 'Zerodha data refresh'); } });
@@ -2224,7 +2590,8 @@ server.listen(PORT, async () => {
   loadConfig();
   loadAlerts();
   loadTrades();
-  log('INFO', `Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey} TwelveData:${!!appConfig.twelveDataKey} Trades:${tradeHistory.length}`);
+  loadPicks();
+  log('INFO', `Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey} TwelveData:${!!appConfig.twelveDataKey} Trades:${tradeHistory.length} Picks:${pickTracker.length}`);
   await initLiveData();
   if (isPostMarketWindow()) startTwelveDataPolling();
   runUnitTests();
