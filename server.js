@@ -520,6 +520,8 @@ async function callGemini(prompt, opts = {}) {
 const nodeCrypto = require('crypto');
 const GCP_SA_PATH = path.join(__dirname, '.gcp-service-account.json');
 let gcpServiceAccount = null;
+let geminiConnectionOk = false;
+let vertexConnectionOk = false;
 let vertexAccessToken = null;
 let vertexTokenExpiry = 0;
 
@@ -1389,8 +1391,8 @@ app.get('/api/system-health', (req, res) => {
   res.json({
     upstox:    { connected: connectionStatus === 'live', status: connectionStatus, tokenValid: !!accessToken && appConfig.tokenExpiry > now, expiresIn: appConfig.tokenExpiry ? Math.round((appConfig.tokenExpiry - now) / 60000) : 0 },
     zerodha:   { connected: !!zAccessToken, tokenValid: !!zAccessToken && appConfig.zTokenExpiry > now, holdingsCount: zerodhaHoldings.length, positionsCount: zerodhaPositions.length },
-    gemini:    { configured: !!appConfig.geminiKey, status: appConfig.geminiKey ? 'configured' : 'not_configured' },
-    vertexAI:  { configured: !!gcpServiceAccount, projectId: gcpServiceAccount?.project_id || null, clientEmail: gcpServiceAccount?.client_email || null },
+    gemini:    { configured: !!appConfig.geminiKey, connected: geminiConnectionOk && !!appConfig.geminiKey, status: geminiConnectionOk ? 'connected' : (appConfig.geminiKey ? 'configured_not_tested' : 'not_configured') },
+    vertexAI:  { configured: !!gcpServiceAccount, connected: vertexConnectionOk && !!gcpServiceAccount, projectId: gcpServiceAccount?.project_id || null, clientEmail: gcpServiceAccount?.client_email || null },
     server:    { uptime: Math.round(process.uptime()), memMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024), stocksLoaded: stockUniverse.length, signalsCalc: Object.keys(signalCache).length },
     marketOpen: isMarketOpen(),
     lastUpdate: Object.values(liveStocks)[0]?.lastUpdate || null,
@@ -1422,10 +1424,44 @@ app.post('/api/gemini-test', async (req, res) => {
     const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 10000 });
     appConfig.geminiKey = origKey; // restore
     log('OK', 'Gemini test passed — model: ' + g.model);
+    geminiConnectionOk = true;
     res.json({ ok: true, model: g.model });
   } catch(e) {
+    geminiConnectionOk = false;
     log('ERR', 'Gemini test failed: ' + (e.message || ''));
     res.json({ ok: false, reason: e.response?.data?.error?.message || e.message });
+  }
+});
+
+app.post('/api/vertex-test', async (req, res) => {
+  if (!gcpServiceAccount) return res.json({ ok: false, reason: 'No service account configured' });
+  try {
+    const result = await callVertexAI('Reply with just: OK', { maxOutputTokens: 10, timeout: 15000 });
+    vertexConnectionOk = true;
+    log('OK', 'Vertex AI test passed');
+    res.json({ ok: true, projectId: gcpServiceAccount.project_id });
+  } catch(e) {
+    vertexConnectionOk = false;
+    log('ERR', 'Vertex AI test failed: ' + (e.message || ''));
+    res.json({ ok: false, reason: e.message || 'Connection failed' });
+  }
+});
+
+app.post('/api/vertex-save', (req, res) => {
+  const { serviceAccountJson } = req.body;
+  if (!serviceAccountJson) return res.status(400).json({ error: 'No service account JSON provided' });
+  try {
+    const parsed = typeof serviceAccountJson === 'string' ? JSON.parse(serviceAccountJson) : serviceAccountJson;
+    if (!parsed.project_id || !parsed.client_email || !parsed.private_key) {
+      return res.status(400).json({ error: 'Invalid service account JSON — missing required fields (project_id, client_email, private_key)' });
+    }
+    fs.writeFileSync(GCP_SA_PATH, JSON.stringify(parsed, null, 2));
+    gcpServiceAccount = parsed;
+    vertexConnectionOk = false; // reset until tested
+    log('OK', 'Vertex AI service account saved: ' + parsed.client_email);
+    res.json({ success: true, clientEmail: parsed.client_email, projectId: parsed.project_id });
+  } catch(e) {
+    res.status(400).json({ error: 'Invalid JSON: ' + e.message });
   }
 });
 

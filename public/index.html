@@ -1289,13 +1289,16 @@ tailwind.config = {
                 </div>
                 <div class="flex items-center gap-2">
                   <span id="vertex-status-dot" class="w-2 h-2 rounded-full bg-[#636366]"></span>
+                  <button class="px-2.5 py-1 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-[10px] font-bold hover:bg-[#ffd60a]/10 transition-colors" onclick="testVertex()">Connect</button>
                   <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200 cursor-pointer" onclick="toggleApiCard(this.closest('.api-card').querySelector('.px-4'))">expand_more</span>
                 </div>
               </div>
               <div class="api-card-body" style="max-height:0;overflow:hidden;opacity:0;transition:max-height 0.25s ease,opacity 0.2s ease;">
-                <div class="px-4 pb-3">
-                  <p class="text-[11px] text-[#d0c6ab] mb-2">Configured via <span class="font-mono text-[#ffd60a]">.gcp-service-account.json</span> on the server.</p>
+                <div class="px-4 pb-3 space-y-2">
+                  <p class="text-[11px] text-[#d0c6ab]">Paste your GCP service account JSON below:</p>
+                  <textarea id="vertex-sa-json" class="w-full bg-[#242426] border-none rounded-lg text-[10px] py-2 px-3 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none font-mono h-24 resize-none" placeholder='{"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}'></textarea>
                   <div id="vertex-test-result" class="font-mono text-[10px] text-[#d0c6ab]"></div>
+                  <button class="w-full py-1.5 rounded-lg bg-[#353534] text-[#d0c6ab] text-[10px] font-bold mt-1" onclick="saveVertex()">Save</button>
                 </div>
               </div>
             </div>
@@ -1311,7 +1314,10 @@ tailwind.config = {
             <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5 api-card">
               <div class="px-4 py-3 flex items-center justify-between cursor-pointer" onclick="toggleApiCard(this);loadHealth()">
                 <div class="flex items-center gap-3"><span class="material-symbols-outlined text-[#47e266] text-base">health_and_safety</span><span class="font-bold text-sm text-[#e5e2e1]">System Health</span></div>
-                <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200">expand_more</span>
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[#d0c6ab] text-sm cursor-pointer hover:text-[#ffd60a] transition-colors" onclick="event.stopPropagation();loadHealth();toast('Health refreshed')">refresh</span>
+                  <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200">expand_more</span>
+                </div>
               </div>
               <div class="api-card-body" style="max-height:0;overflow:hidden;opacity:0;transition:max-height 0.25s ease,opacity 0.2s ease;">
                 <div id="sys-health" class="px-4 pb-3 space-y-2"></div>
@@ -1339,7 +1345,10 @@ tailwind.config = {
             <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5 api-card">
               <div class="px-4 py-3 flex items-center justify-between cursor-pointer" onclick="toggleApiCard(this)">
                 <div class="flex items-center gap-3"><span class="material-symbols-outlined text-[#d0c6ab] text-base">calendar_month</span><span class="font-bold text-sm text-[#e5e2e1]">Event Calendar</span></div>
-                <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200">expand_more</span>
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[#d0c6ab] text-sm cursor-pointer hover:text-[#ffd60a] transition-colors" onclick="event.stopPropagation();loadEvents();toast('Calendar refreshed')">refresh</span>
+                  <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200">expand_more</span>
+                </div>
               </div>
               <div class="api-card-body" style="max-height:0;overflow:hidden;opacity:0;transition:max-height 0.25s ease,opacity 0.2s ease;">
                 <div class="px-4 pb-3">
@@ -1372,6 +1381,7 @@ tailwind.config = {
                 </div>
                 <div class="flex items-center gap-2">
                   <span id="ai-meter-score" class="text-xs font-mono font-bold text-[#47e266]">0/0</span>
+                  <span class="material-symbols-outlined text-[#d0c6ab] text-sm cursor-pointer hover:text-[#ffd60a] transition-colors" onclick="event.stopPropagation();loadAiTrackingData();toast('AI data refreshed')">refresh</span>
                   <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200">expand_more</span>
                 </div>
               </div>
@@ -2193,9 +2203,30 @@ let laLegCount = 1;
 
 const INDEX_SYMBOLS_NORM = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'];
 
+const NSE_LOT_SIZES = {
+  'NIFTY': 75, 'BANKNIFTY': 30, 'FINNIFTY': 65, 'MIDCPNIFTY': 50, 'SENSEX': 20,
+  'RELIANCE': 250, 'TCS': 150, 'INFY': 300, 'HDFCBANK': 550, 'ICICIBANK': 700,
+  'SBIN': 750, 'TATAMOTORS': 575, 'TATASTEEL': 550, 'ITC': 1600, 'LT': 150,
+  'HINDUNILVR': 300, 'AXISBANK': 600, 'KOTAKBANK': 400, 'BAJFINANCE': 125,
+  'MARUTI': 100, 'ADANIENT': 250, 'WIPRO': 1500, 'HCLTECH': 350, 'SUNPHARMA': 350,
+  'ONGC': 3850, 'NTPC': 2800, 'POWERGRID': 2700, 'COALINDIA': 2100, 'BHARTIARTL': 475,
+  'ASIANPAINT': 300, 'ULTRACEMCO': 100, 'TITAN': 375, 'BAJAJFINSV': 500
+};
+
+function autoFillLotSize(symbolInput) {
+  const leg = symbolInput.closest('.la-leg');
+  if (!leg) return;
+  const sym = symbolInput.value.trim().toUpperCase().replace(/\s+/g, '');
+  const lotInput = leg.querySelector('.la-lot');
+  if (lotInput && NSE_LOT_SIZES[sym]) {
+    lotInput.value = NSE_LOT_SIZES[sym];
+  }
+}
+
 function suggestExpiries(symbolInput) {
   const leg = symbolInput.closest('.la-leg');
   if (!leg) return;
+  autoFillLotSize(symbolInput);
   const sugDiv = leg.querySelector('.la-expiry-suggestions');
   if (!sugDiv) return;
   const sym = symbolInput.value.trim().toUpperCase();
@@ -2734,13 +2765,13 @@ function updateApiStatusDots(health) {
       zDot.title = health.zerodha.connected ? 'Connected' : 'Disconnected';
     }
     if (gDot && health.gemini) {
-      gDot.className = 'w-2 h-2 rounded-full ' + (health.gemini.configured ? 'bg-[#47e266]' : 'bg-[#ffb4ab]');
-      gDot.title = health.gemini.configured ? 'Configured' : 'Not configured';
+      gDot.className = 'w-2 h-2 rounded-full ' + (health.gemini.connected ? 'bg-[#47e266]' : 'bg-[#ffb4ab]');
+      gDot.title = health.gemini.connected ? 'Connected' : (health.gemini.configured ? 'Key set but not verified' : 'Not configured');
     }
     if (vDot) {
-      const hasVertex = health.hasVertexAI || (health.vertexAI && health.vertexAI.configured);
-      vDot.className = 'w-2 h-2 rounded-full ' + (hasVertex ? 'bg-[#47e266]' : 'bg-[#ffb4ab]');
-      vDot.title = hasVertex ? 'Service account loaded' : 'Not configured';
+      const vertexConnected = health.vertexAI && health.vertexAI.connected;
+      vDot.className = 'w-2 h-2 rounded-full ' + (vertexConnected ? 'bg-[#47e266]' : 'bg-[#ffb4ab]');
+      vDot.title = vertexConnected ? 'Connected' : (health.vertexAI && health.vertexAI.configured ? 'Configured but not verified' : 'Not configured');
     }
   } catch(e) {}
 }
@@ -2850,6 +2881,43 @@ async function doZerodhaRefresh() {
   } catch { toast('Save API keys first, then Connect'); }
 }
 
+async function testVertex() {
+  toast('Testing Vertex AI...');
+  const el = document.getElementById('vertex-test-result');
+  try {
+    const r = await fetch('/api/vertex-test', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}).then(x=>x.json());
+    if (r.ok) {
+      if (el) el.innerHTML = '<span class="text-[#47e266]">Connected · Project: ' + (r.projectId||'OK') + '</span>';
+      toast('Vertex AI connected');
+    } else {
+      if (el) el.innerHTML = '<span class="text-[#ffb4ab]">' + (r.reason||'Failed') + '</span>';
+      toast('Vertex AI: ' + (r.reason||'Connection failed'));
+    }
+    fetchStatus();
+  } catch(e) {
+    if (el) el.innerHTML = '<span class="text-[#ffb4ab]">Network error</span>';
+    toast('Error testing Vertex AI');
+  }
+}
+
+async function saveVertex() {
+  const raw = document.getElementById('vertex-sa-json').value.trim();
+  if (!raw) { toast('Paste service account JSON first'); return; }
+  try {
+    const parsed = JSON.parse(raw);
+    const r = await fetch('/api/vertex-save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({serviceAccountJson: parsed})}).then(x=>x.json());
+    if (r.success) {
+      toast('Vertex AI service account saved');
+      document.getElementById('vertex-test-result').innerHTML = '<span class="text-[#47e266]">Saved · ' + r.clientEmail + '</span>';
+      fetchStatus();
+    } else {
+      toast('Error: ' + (r.error || 'Save failed'));
+    }
+  } catch(e) {
+    toast('Invalid JSON format — paste the full service account JSON');
+  }
+}
+
 async function fetchStatus() {
   try {
     const d = await fetch('/api/system-health').then(r=>r.json());
@@ -2879,8 +2947,8 @@ async function loadHealth() {
     const items = [];
     if (d.upstox) items.push({name:'Upstox WebSocket',detail:d.upstox.connected?'Connected':'Disconnected',status:d.upstox.connected?'ok':'err'});
     if (d.zerodha) items.push({name:'Zerodha Auth Flow',detail:d.zerodha.connected?`Holdings: ${d.zerodha.holdingsCount}`:'Not connected',status:d.zerodha.connected?'ok':'err'});
-    if (d.gemini) items.push({name:'Gemini Engine',detail:d.gemini.status,status:d.gemini.configured?'ok':'err'});
-    if (d.vertexAI) items.push({name:'Vertex AI',detail:d.vertexAI.configured?`SA: ${(d.vertexAI.clientEmail||'').split('@')[0]}`:'Not configured',status:d.vertexAI.configured?'ok':'err'});
+    if (d.gemini) items.push({name:'Gemini Engine',detail:d.gemini.connected?'Connected':d.gemini.status,status:d.gemini.connected?'ok':'err'});
+    if (d.vertexAI) items.push({name:'Vertex AI',detail:d.vertexAI.connected?`Connected · ${(d.vertexAI.clientEmail||'').split('@')[0]}`:d.vertexAI.configured?'Configured, not verified':'Not configured',status:d.vertexAI.connected?'ok':'err'});
     if (d.server) items.push({name:'Main Server (Railway)',detail:`Uptime: ${Math.round(d.server.uptime/60)}min · ${d.server.memMB}MB`,status:'ok'});
     items.push({name:'Market',detail:d.marketOpen?'Open':'Closed',status:d.marketOpen?'ok':'warn'});
     el.innerHTML = items.map(i => {
