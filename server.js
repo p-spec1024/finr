@@ -47,12 +47,12 @@ let priceAlerts      = []; // { id, symbol, targetPrice, type: 'above'|'below', 
 let tradeHistory     = []; // { id, symbol, qty, buyPrice, sellPrice, buyDate, sellDate, type: 'manual'|'zerodha' }
 let zerodhaPositions = [];
 let zerodhaOrders    = [];
-let vixData          = { value: 14.5, change: 0, trend: 'stable' };
-let fiiDiiData       = { fii: -3240, dii: 4180, usdInr: 86.4, crude: 72.8 };
+let vixData          = { value: 0, change: 0, trend: 'stable', isDefault: true };
+let fiiDiiData       = { fii: 0, dii: 0, usdInr: 0, crude: 0, isDefault: true };
 let connectionStatus = 'disconnected';
 let priceHistory     = {}; // symbol → last 30 prices for RSI/EMA
 let wsReconnectMs    = 1000;
-let mockInterval     = null;
+// mockInterval removed — no mock data simulation
 let testResults      = [];
 let globalMarkets    = {}; // Twelve Data global market prices
 let twelveDataInterval = null;
@@ -80,15 +80,19 @@ function getIST() {
 function getISTDay() { return getIST().getUTCDay(); }
 function getISTMins() { const ist = getIST(); return ist.getUTCHours() * 60 + ist.getUTCMinutes(); }
 
-function isPostMarketWindow() {
+function isGlobalMarketWindow() {
+  // Global markets (Gift Nifty, Gold, Crude, USD/INR, S&P 500 etc.) are relevant:
+  // Pre-market (6 AM - 9:15 AM), post-market (3:30 PM - midnight), and weekends for overnight data
   const mins = getISTMins();
-  return mins >= 930 && mins < 1440; // 3:30 PM to midnight IST
+  const day = getISTDay();
+  const isWeekend = day === 0 || day === 6;
+  return isWeekend || mins < 555 || mins >= 930; // Outside NSE market hours, or weekends
 }
 
 async function fetchTwelveData() {
   const apiKey = appConfig.twelveDataKey;
   if (!apiKey) { log('WARN', 'Twelve Data API key not set — skipping global fetch'); return; }
-  if (!isPostMarketWindow()) { log('INFO', 'Outside post-market window — skipping Twelve Data'); return; }
+  if (!isGlobalMarketWindow()) { log('INFO', 'NSE market open — skipping Twelve Data (Upstox provides live data)'); return; }
 
   let fetched = 0;
   for (const s of TWELVE_DATA_SYMBOLS) {
@@ -121,10 +125,10 @@ async function fetchTwelveData() {
 
 function startTwelveDataPolling() {
   if (twelveDataInterval) return;
-  if (!isPostMarketWindow()) return;
+  if (!isGlobalMarketWindow()) return;
   fetchTwelveData(); // immediate first fetch
   twelveDataInterval = setInterval(() => {
-    if (!isPostMarketWindow()) { stopTwelveDataPolling(); return; }
+    if (!isGlobalMarketWindow()) { stopTwelveDataPolling(); return; }
     fetchTwelveData();
   }, 6 * 60 * 1000); // every 6 minutes
   log('OK', 'Twelve Data polling started (every 6 min)');
@@ -253,10 +257,12 @@ async function fetchNseFiiDii() {
 
     if (fiiNet !== null) {
       fiiDiiData.fii = Math.round(fiiNet);  // in Crores
+      fiiDiiData.isDefault = false;
       lastFiiDiiDate = dataDate;
     }
     if (diiNet !== null) {
       fiiDiiData.dii = Math.round(diiNet);  // in Crores
+      fiiDiiData.isDefault = false;
     }
 
     log('OK', `NSE FII/DII updated: FII=₹${fiiDiiData.fii}Cr DII=₹${fiiDiiData.dii}Cr (${dataDate})`);
@@ -309,6 +315,7 @@ async function fetchNseIndices() {
           vixData.value = +val.toFixed(2);
           vixData.change = +chg.toFixed(2);
           vixData.trend = chg > 0.5 ? 'rising' : chg < -0.5 ? 'falling' : 'stable';
+          vixData.isDefault = false;
           updated++;
         }
         continue;
@@ -355,16 +362,23 @@ function startNsePolling() {
   // Fetch immediately on startup
   fetchNseIndices();  // Indices + VIX — always fetch (real closing prices)
   fetchNseFiiDii();   // FII/DII flows
-  const pollMs = isMarketOpen() ? 10 * 60 * 1000 : 30 * 60 * 1000; // 10min market, 30min post
-  fiiDiiInterval = setInterval(async () => {
-    await fetchNseIndices();
-    await fetchNseFiiDii();
-  }, pollMs);
-  log('OK', `NSE polling started: indices + FII/DII (every ${pollMs/60000} min)`);
+
+  // Adaptive polling: re-checks market hours on each tick instead of locking interval at startup
+  function scheduleNextPoll() {
+    const pollMs = isMarketOpen() ? 10 * 60 * 1000 : 30 * 60 * 1000;
+    fiiDiiInterval = setTimeout(async () => {
+      await fetchNseIndices();
+      await fetchNseFiiDii();
+      scheduleNextPoll(); // re-evaluate market hours for next interval
+    }, pollMs);
+    log('INFO', `NSE next poll in ${pollMs / 60000} min (market ${isMarketOpen() ? 'open' : 'closed'})`);
+  }
+  scheduleNextPoll();
+  log('OK', 'NSE adaptive polling started: indices + FII/DII');
 }
 
 function stopFiiDiiPolling() {
-  if (fiiDiiInterval) { clearInterval(fiiDiiInterval); fiiDiiInterval = null; }
+  if (fiiDiiInterval) { clearTimeout(fiiDiiInterval); fiiDiiInterval = null; }
 }
 
 // ── Option Chain Fetcher (Upstox v2) ─────────────────────────────────────────
@@ -932,10 +946,29 @@ async function callAI(prompt, opts = {}) {
     throw new Error('All AI sources unavailable — no Gemini keys configured or all AI services disconnected');
   }
 
+  // When grounding is preferred, try Vertex AI FIRST (only source with Google Search grounding)
+  if (preferGrounded && hasVertex) {
+    for (let m = 0; m < GEMINI_MODELS.length; m++) {
+      const model = GEMINI_MODELS[m];
+      try {
+        const result = await callVertexAI(prompt, { temperature, maxOutputTokens, timeout: Math.max(timeout, 45000), model, grounding: true });
+        log('OK', `Vertex AI (grounded-first) succeeded on ${model} (grounded: ${result.grounded})`);
+        return { ...result, source: 'vertex' };
+      } catch (e) {
+        lastError = e;
+        const status = e.response?.status;
+        if (status === 429) log('WARN', `Vertex AI rate limited on ${model} — trying next model`);
+        else if (status === 404) log('WARN', `Vertex AI ${model} not found (404) — trying next model`);
+        else log('WARN', `Vertex AI grounded failed on ${model}: ${e.message} — trying next model`);
+      }
+    }
+    log('WARN', 'All Vertex AI grounded attempts failed — falling back to Gemini keys (ungrounded)');
+  }
+
   for (let m = 0; m < GEMINI_MODELS.length; m++) {
     const model = GEMINI_MODELS[m];
 
-    // Phase 1: Try all Gemini API keys for this model
+    // Try all Gemini API keys for this model
     if (hasGeminiKeys) {
       let skipModel = false;
       for (let k = 0; k < keys.length; k++) {
@@ -955,12 +988,12 @@ async function callAI(prompt, opts = {}) {
           const status = e.response?.status;
           if (status === 429) {
             log('WARN', `Gemini key #${keyIdx+1} rate limited on ${model} — ${k < keys.length-1 ? 'trying next key' : 'all keys exhausted, trying Vertex AI'}`);
-            continue; // try next key
+            continue;
           }
           if (status === 404) {
             log('WARN', `Gemini ${model} not found (404) on key #${keyIdx+1} — skipping model for all Gemini keys`);
             skipModel = true;
-            break; // skip to Vertex AI for this model
+            break;
           }
           log('WARN', `Gemini key #${keyIdx+1} error on ${model}: ${e.message}`);
           continue;
@@ -968,22 +1001,18 @@ async function callAI(prompt, opts = {}) {
       }
     }
 
-    // Phase 2: Try Vertex AI with this same model
-    if (hasVertex) {
+    // Fallback: Try Vertex AI without grounding for this model (if not already tried above)
+    if (hasVertex && !preferGrounded) {
       try {
-        const result = await callVertexAI(prompt, { temperature, maxOutputTokens, timeout: Math.max(timeout, 45000), model, grounding: preferGrounded || false });
+        const result = await callVertexAI(prompt, { temperature, maxOutputTokens, timeout: Math.max(timeout, 45000), model, grounding: false });
         log('OK', `Vertex AI succeeded on ${model} (grounded: ${result.grounded})`);
         return { ...result, source: 'vertex' };
       } catch (e) {
         lastError = e;
         const status = e.response?.status;
-        if (status === 429) {
-          log('WARN', `Vertex AI rate limited on ${model} — falling back to next model tier`);
-        } else if (status === 404) {
-          log('WARN', `Vertex AI ${model} not found (404) — falling back to next model tier`);
-        } else {
-          log('WARN', `Vertex AI failed on ${model}: ${e.message} — falling back to next model tier`);
-        }
+        if (status === 429) log('WARN', `Vertex AI rate limited on ${model} — falling back to next model tier`);
+        else if (status === 404) log('WARN', `Vertex AI ${model} not found (404) — falling back to next model tier`);
+        else log('WARN', `Vertex AI failed on ${model}: ${e.message} — falling back to next model tier`);
       }
     }
   }
@@ -1023,8 +1052,8 @@ app.get('/api/market-prediction', async (req, res) => {
 2. NEXT SESSION OUTLOOK — predict the most likely market direction for the next trading session
 
 CURRENT MARKET DATA:
-- Nifty 50: ${nifty.price || '?'} (${nifty.chgPct >= 0 ? '+' : ''}${nifty.chgPct || 0}%)
-- Bank Nifty: ${bank.price || '?'} (${bank.chgPct >= 0 ? '+' : ''}${bank.chgPct || 0}%)
+- Nifty 50: ${nifty.price || '?'} (${nifty.changePct >= 0 ? '+' : ''}${nifty.changePct || 0}%)
+- Bank Nifty: ${bank.price || '?'} (${bank.changePct >= 0 ? '+' : ''}${bank.changePct || 0}%)
 - India VIX: ${vix.value} (trend: ${vix.trend})
 - FII Flow: ₹${fii.fii} Cr | DII Flow: ₹${fii.dii} Cr
 - USD/INR: ${fii.usdInr} | Crude: $${fii.crude}
@@ -1115,8 +1144,8 @@ POSITION DETAILS:
 - Current P&L: ₹${pnlTotal.toFixed(2)} (${pnlPct}%)
 
 MARKET CONTEXT:
-- Nifty: ${nifty.price || '?'} (${nifty.chgPct >= 0 ? '+' : ''}${nifty.chgPct || 0}%)
-- Bank Nifty: ${bank.price || '?'} (${bank.chgPct >= 0 ? '+' : ''}${bank.chgPct || 0}%)
+- Nifty: ${nifty.price || '?'} (${nifty.changePct >= 0 ? '+' : ''}${nifty.changePct || 0}%)
+- Bank Nifty: ${bank.price || '?'} (${bank.changePct >= 0 ? '+' : ''}${bank.changePct || 0}%)
 - VIX: ${vix.value} (${vix.trend}) | FII: ₹${fii.fii}Cr | USD/INR: ${fii.usdInr}
 - Signal Score: ${signals.score || 'N/A'}/100
 - Global: ${globalStr || 'N/A'}
@@ -1243,7 +1272,7 @@ app.get('/api/options-recommend', async (req, res) => {
     const nifty = liveIndices['Nifty 50'];
     const bankNifty = liveIndices['Nifty Bank'];
     // Build top movers and signals summary
-    const stocks = Object.values(liveStocks).filter(s => !s.isMock && s.price);
+    const stocks = Object.values(liveStocks).filter(s => s.price);
     const topGainers = [...stocks].sort((a,b) => b.changePct - a.changePct).slice(0,10);
     const topLosers  = [...stocks].sort((a,b) => a.changePct - b.changePct).slice(0,10);
     const strongSignals = Object.values(signalCache).filter(s => s.score >= 65).sort((a,b) => b.score - a.score).slice(0,8);
@@ -1533,7 +1562,7 @@ app.get('/api/options-lab', async (req, res) => {
   try {
     const nifty = liveIndices['Nifty 50'];
     const bankNifty = liveIndices['Nifty Bank'];
-    const stocks = Object.values(liveStocks).filter(s => s.price && !s.isMock);
+    const stocks = Object.values(liveStocks).filter(s => s.price);
     const topGainers = [...stocks].sort((a,b) => b.changePct - a.changePct).slice(0,15);
     const topLosers = [...stocks].sort((a,b) => a.changePct - b.changePct).slice(0,15);
 
@@ -1875,7 +1904,7 @@ app.post('/api/disconnect', (req, res) => {
       accessToken = null;
       appConfig.tokenExpiry = 0;
       connectionStatus = 'disconnected';
-      if (mockInterval) { clearInterval(mockInterval); mockInterval = null; }
+      stopPricePoller();
       broadcastStatus();
       log('WARN', 'Upstox disconnected by user');
       return res.json({ ok: true, service: 'upstox' });
@@ -1911,7 +1940,7 @@ app.post('/api/clear', (req, res) => {
   stockUniverse = []; liveStocks = {}; signalCache = {}; fundamentals = {};
   zerodhaHoldings = []; zerodhaPositions = []; zerodhaOrders = [];
   [CONFIG_FILE, PORTFOLIO_FILE, NOTES_FILE, OPTIONS_FILE].forEach(f => { try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch {} });
-  if (mockInterval) { clearInterval(mockInterval); mockInterval = null; }
+  stopPricePoller();
   connectionStatus = 'disconnected';
   broadcastStatus();
   log('WARN', 'All data cleared');
@@ -2038,20 +2067,14 @@ app.get('/api/symbol-search', (req, res) => {
 });
 
 app.get('/api/global', (req, res) => {
-  res.json({ globalMarkets, isPostMarket: isPostMarketWindow(), symbolCount: TWELVE_DATA_SYMBOLS.length });
+  res.json({ globalMarkets, isPostMarket: isGlobalMarketWindow(), symbolCount: TWELVE_DATA_SYMBOLS.length });
 });
 
 app.get('/api/technical/:symbol', (req, res) => {
   const sym = req.params.symbol.toUpperCase();
   const prices = priceHistory[sym];
   if (!prices || prices.length < 5) {
-    // Generate synthetic price history from mock base for demo
-    const base = liveStocks[sym]?.price || 1000;
-    const synth = Array.from({length: 20}, (_, i) => +(base * (1 + (Math.random()-0.5)*0.02)).toFixed(2));
-    synth.push(base);
-    const rsi = calcRSI(synth, 14);
-    const ema20 = calcEMA(synth, Math.min(20, synth.length));
-    return res.json({ symbol: sym, rsi, ema20, note: 'synthetic', dataPoints: synth.length });
+    return res.json({ symbol: sym, error: 'Insufficient price history — connect Upstox for live data', dataPoints: prices?.length || 0 });
   }
   const rsi   = calcRSI(prices, Math.min(14, prices.length-1));
   const ema20 = calcEMA(prices, Math.min(20, prices.length));
@@ -2112,8 +2135,72 @@ app.get('/api/indices/refresh', async (req, res) => {
   }
 });
 
-app.get('/api/market-context', (req, res) => {
-  res.json({ events: getMarketContext(), generated: new Date().toISOString() });
+// ── Economic Calendar — structural events + Gemini-grounded live events ─────
+let econCalCache = { events: [], lastFetch: 0 };
+const ECON_CAL_CACHE_MS = 30 * 60 * 1000; // Cache 30 minutes
+
+app.get('/api/market-context', async (req, res) => {
+  // Always include structural events from marketContext.js
+  const structural = getMarketContext().map(e => ({
+    ...e,
+    searchUrl: `https://www.google.com/search?q=${encodeURIComponent(e.title + ' India stock market ' + new Date().getFullYear())}&tbm=nws`
+  }));
+
+  // Try Gemini-grounded live events (cached)
+  if (econCalCache.events.length && (Date.now() - econCalCache.lastFetch) < ECON_CAL_CACHE_MS) {
+    return res.json({ events: [...structural, ...econCalCache.events], generated: new Date().toISOString(), hasLive: true });
+  }
+
+  if (!appConfig.geminiKey && !gcpServiceAccount) {
+    return res.json({ events: structural, generated: new Date().toISOString(), hasLive: false });
+  }
+
+  try {
+    const ist = getIST();
+    const dateStr = `${ist.getUTCDate()}/${ist.getUTCMonth()+1}/${ist.getFullYear()}`;
+    const prompt = `You are a financial calendar assistant for Indian stock markets. Today is ${dateStr} IST.
+
+Return a JSON array of 3-6 REAL upcoming economic events happening THIS WEEK and NEXT WEEK that impact Indian markets (NSE/BSE). Include ONLY verified, scheduled events — no speculation.
+
+Focus on: RBI announcements, SEBI deadlines, major IPO dates, quarterly results dates for Nifty50 stocks, US Fed/CPI/jobs data releases, crude OPEC meetings, India CPI/IIP/GDP releases.
+
+Each object must have:
+- "title": event name (max 60 chars)
+- "date": actual date in "DD Mon" format (e.g. "28 Mar")
+- "priority": "HIGH" / "MEDIUM" / "LOW"
+- "impact": 1-line impact on Indian markets (max 100 chars)
+- "trend": "THIS WEEK" or "NEXT WEEK"
+- "icon": relevant emoji
+- "sectors": { "watch": ["sector1"], "buy": ["sector2"], "avoid": ["sector3"] } (use only relevant keys)
+
+Return ONLY the JSON array, no markdown or explanation.`;
+
+    const result = await callAI(prompt, { preferGrounded: true, maxTokens: 1200 });
+    if (result && result.text) {
+      let parsed = [];
+      try {
+        const cleaned = result.text.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
+        parsed = JSON.parse(cleaned);
+        if (Array.isArray(parsed)) {
+          parsed = parsed.map(e => ({
+            ...e,
+            id: `live-${(e.title||'').replace(/\s+/g,'-').toLowerCase().slice(0,30)}`,
+            isLive: true,
+            affectsOptions: false,
+            vixImpact: '',
+            searchUrl: `https://www.google.com/search?q=${encodeURIComponent(e.title + ' India stock market')}&tbm=nws`
+          }));
+          econCalCache = { events: parsed, lastFetch: Date.now() };
+        }
+      } catch (parseErr) {
+        log('WARN', `Economic calendar parse error: ${parseErr.message}`);
+      }
+    }
+    res.json({ events: [...structural, ...econCalCache.events], generated: new Date().toISOString(), hasLive: econCalCache.events.length > 0 });
+  } catch (err) {
+    log('ERR', `Economic calendar AI error: ${err.message}`);
+    res.json({ events: structural, generated: new Date().toISOString(), hasLive: false });
+  }
 });
 
 // ── Live Market News via Gemini ─────────────────────────────────────────────
@@ -2156,9 +2243,9 @@ Reply ONLY valid JSON array, NO markdown fences:
 
 Be specific, factual, and relevant to current Indian market conditions. Include both Indian domestic events AND global events that impact India.`;
 
-    const g = await callAI(prompt, { temperature: 0.5, maxOutputTokens: 4000, timeout: 45000 });
+    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.5, maxOutputTokens: 4000, timeout: 45000 });
     const raw = g.text || '[]';
-    log('OK', `AI news generated (${g.source}/${g.model}), ${raw.length} chars`);
+    log('OK', `AI news generated (${g.source}/${g.model}, grounded:${g.grounded || false}), ${raw.length} chars`);
 
     let items = [];
     const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
@@ -3073,8 +3160,6 @@ async function pollUpstoxPrices() {
     }
   }
   if (updated) {
-    // Kill mock ticks once real data is flowing
-    if (mockInterval) { clearInterval(mockInterval); mockInterval = null; log('OK', 'Mock ticks stopped — real data active'); }
     connectionStatus = 'live'; broadcastStatus();
     broadcastLiveData();
   }
@@ -3100,199 +3185,53 @@ function connectUpstoxWs() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MOCK DATA (market closed / no token)
+// REFERENCE PRICES — Used ONLY by unit tests, never for display
 // ══════════════════════════════════════════════════════════════════════════════
-const MOCK_BASE = {
-  // Original 30 stocks
-  RELIANCE:2920, HDFCBANK:1840, INFY:1720, TCS:3980, ICICIBANK:1520, HINDUNILVR:2420,
-  BHARTIARTL:1950, AXISBANK:1180, BAJFINANCE:6980, HCLTECH:1580, SUNPHARMA:2180, KOTAKBANK:2050,
-  MARUTI:11200, TMCV:425, TATASTEEL:145, NTPC:385, POWERGRID:360, WIPRO:520, LTIM:5200,
-  ONGC:265, CIPLA:1680, COALINDIA:420, INDUSINDBK:780, BPCL:295, GRASIM:2580, ADANIENT:2280,
-  HINDALCO:640, HAL:4650, DRREDDY:1380, BAJAJFINSV:1920,
-  // Penny stocks (prices used for mock, also covers some STOCK_UNIVERSE overlaps)
-  SUZLON:62, IRFC:158, YESBANK:22, IDEA:9, JPPOWER:14,
-  RPOWER:28, JSWENERGY:58, NLCINDIA:230, SJVN:110,
-  CENTRALBK:48, UNIONBANK:105, UCOBANK:42, BANDHANBNK:165, MANAPPURAM:180,
-  SAIL:115, NATIONALUM:195, HINDCOPPER:280, NMDC:225, MOIL:350,
-  IRCON:220, NBCC:95, RVNL:420, HUDCO:235, COCHINSHIP:1800,
-  HFCL:120, ROUTE:1250, BDL:1300, GRSE:1600, MAZDOCK:4800,
-  DLF:720, GODREJPROP:2600, OBEROIRLTY:1950, PRESTIGE:1500,
-  DEEPAKNTR:2400, CLEAN:1350, AUROPHARMA:1150, BIOCON:340,
-  TVSMOTOR:2500, ASHOKLEY:225, MOTHERSON:175,
-  COLPAL:2800, EMAMILTD:720, SUNTV:650, PVRINOX:1400,
-  INDHOTEL:680, LEMONTRE:135,
-  // Nifty 50 additions
-  SBIN:820, LT:3440, ITC:420, TITAN:3100, TECHM:1340, 'M&M':3050, ASIANPAINT:2350,
-  ULTRACEMCO:11500, JSWSTEEL:960, ADANIPORTS:1250, TRENT:5800, 'BAJAJ-AUTO':9200,
-  // Nifty Next 50
-  DIVISLAB:5800, APOLLOHOSP:7200, EICHERMOT:5100, HEROMOTOCO:4600, BRITANNIA:5400,
-  TATACONSUM:960, SHRIRAMFIN:680, NESTLEIND:2250, HDFCLIFE:680, SBILIFE:1550,
-  VEDL:420, INDIGO:4300, DABUR:530, PIDILITIND:2900, JIOFIN:250, GODREJCP:1200,
-  HAVELLS:1650, CHOLAFIN:1350, LICI:850,
-  // Banking & Finance
-  PNB:105, BANKBARODA:245, CANBK:95, PFC:520, RECLTD:480,
-  // Energy & Oil
-  IOC:135, HINDPETRO:400,
-  // Power
-  TATAPOWER:420, ADANIGREEN:1650,
-  // Defence & Engineering
-  BEL:310, BHEL:240,
-  // Healthcare & Pharma
-  MAXHEALTH:1050, MANKIND:2400,
-  // Consumer & Retail
-  ZOMATO:240, IRCTC:870,
-  // Chemicals
-  PCBL:310,
-  // Additional STOCK_UNIVERSE stocks (midcap IT, pharma, etc)
-  TATAELXSI:4200, PERSISTENT:6200, COFORGE:1150, MPHASIS:2100,
-  TORNTPHARM:3500, LUPIN:2200, MARICO:780, PAGEIND:36000,
-  SIEMENS:7200, ABB:7800, POLYCAB:7500, JINDALSTEL:1100,
-  AMBUJACEM:580, ICICIPRULI:560, MUTHOOTFIN:2100, SBICARD:780,
-  IGL:480, OIL:520, TORNTPOWER:1950, BSE:5200, DELHIVERY:380,
-  BANKINDIA:115, MAHABANK:60, INDIANB:550, IOB:55, BOSCHLTD:27000,
-  NHPC:95, GAIL:200, NAUKRI:7000, PIIND:3800, ICICIGI:1850,
-  LTTS:5200, FEDERALBNK:170, AUBANK:700, TATACHEM:1100,
-  INDUSTOWER:380, CUMMINSIND:3500, 'M&MFIN':270,
-  UPL:550, IDFCFIRSTB:75, CONCOR:950, LICHSGFIN:650,
-  // Moved from Penny to STOCK_UNIVERSE
-  COCHINSHIP:1800, ROUTE:1250, BDL:1300, GRSE:1600, MAZDOCK:4800,
-  GODREJPROP:2600, OBEROIRLTY:1950, PRESTIGE:1500, DEEPAKNTR:2400, CLEAN:1350,
-  TVSMOTOR:2500, EMAMILTD:720, PVRINOX:1400, INDHOTEL:680, MOIL:350,
-  // New 15 stocks
-  ADANIPOWER:550, DIXON:15000, BHARATFORG:1450, VOLTAS:1700, NAVINFLUOR:3800,
-  SRF:2500, IREDA:200, EXIDEIND:480, ALKEM:5800, IPCALAB:1650,
-  SYNGENE:820, OFSS:11000, CROMPTON:400, ATUL:7000, AMARAJABAT:1100,
-  // New penny/smallcap stocks
-  JPASSOCIAT:5, RELINFRA:15, TRIDENT:30, TV18BRDCST:40, IFCI:42,
-  TTML:50, NFL:55, NETWORK18:60, MMTC:65, WELSPUNLIV:75,
-  PNBHOUSING:75, HBLPOWER:80, IBREALEST:80, DCBBANK:90, JKBANK:95,
-  SOUTHBANK:22, CESC:130, RCF:130, DELTACORP:130, ENGINERSIN:140,
-  RAIN:140, ZEEL:125, KTKBANK:180, ORIENTELEC:200, GRAPHITE:250,
-  TANLA:250, ABFRL:250, NATCOPHARM:270, CANFINHOME:280, KPITTECH:280,
-  SUNTECK:280, HINDZINC:290
+const REFERENCE_PRICES = {
+  RELIANCE:2920, HDFCBANK:1840, INFY:1720, TCS:3980, ICICIBANK:1520,
+  COALINDIA:420, SBIN:820, LT:3440, ITC:420, TATASTEEL:145
 };
-const IDX_BASE  = { 'Nifty 50':22950, 'SENSEX':75600, 'Nifty Bank':49800, 'Nifty IT':36400, 'Nifty Pharma':23800 };
 
-function initMockData() {
+// ══════════════════════════════════════════════════════════════════════════════
+// STOCK UNIVERSE INIT — Metadata only, NO fake prices
+// ══════════════════════════════════════════════════════════════════════════════
+function initStockUniverse() {
+  // Register all stocks with metadata — prices come from Upstox or NSE only
   for (const s of STOCK_UNIVERSE) {
-    const base = MOCK_BASE[s.symbol] || 1000;
-    const drift = (Math.random() - 0.45) * base * 0.02;
-    liveStocks[s.symbol] = { symbol:s.symbol, name:s.name, sector:s.sector, price:+(base+drift).toFixed(2), change:+drift.toFixed(2), changePct:+((drift/base)*100).toFixed(2), volume:Math.round(5e5+Math.random()*4e6), lastUpdate:Date.now(), isMock:true };
-    fundamentals[s.symbol] = { high52: +(base*1.38).toFixed(2), low52: +(base*0.68).toFixed(2) };
-    // Include 52W in liveStocks for frontend modal display
-    liveStocks[s.symbol].high52 = fundamentals[s.symbol].high52;
-    liveStocks[s.symbol].low52  = fundamentals[s.symbol].low52;
+    liveStocks[s.symbol] = {
+      symbol: s.symbol, name: s.name, sector: s.sector,
+      price: 0, change: 0, changePct: 0, volume: 0,
+      lastUpdate: 0, isLive: false
+    };
   }
-  for (const [name, base] of Object.entries(IDX_BASE)) {
-    const d = (Math.random()-0.5)*base*0.008;
-    liveIndices[name] = { price:+(base+d).toFixed(2), change:+d.toFixed(2), changePct:+((d/base)*100).toFixed(2), name };
-  }
-  // Also init penny stocks so they appear in liveStocks for frontend
   for (const p of PENNY_STOCKS) {
-    const base = MOCK_BASE[p.symbol] || p.price || 20;
-    const drift = (Math.random() - 0.48) * base * 0.03;
-    liveStocks[p.symbol] = { symbol:p.symbol, name:p.name, sector:p.sector,
-      price:+(base+drift).toFixed(2), change:+drift.toFixed(2), changePct:+((drift/base)*100).toFixed(2),
-      volume:Math.round(2e6+Math.random()*8e6), lastUpdate:Date.now(), isMock:true,
-      high52:+(base*1.45).toFixed(2), low52:+(base*0.55).toFixed(2) };
+    liveStocks[p.symbol] = {
+      symbol: p.symbol, name: p.name, sector: p.sector,
+      price: 0, change: 0, changePct: 0, volume: 0,
+      lastUpdate: 0, isLive: false
+    };
   }
-  recalcSignals();
-}
-
-function startMockTicks() {
-  if (mockInterval) return;
-  log('INFO', 'Mock tick simulator started (market closed / no token)');
-  let tickCount = 0;
-
-  mockInterval = setInterval(() => {
-    tickCount++;
-    const marketOpen = isMarketOpen();
-
-    if (!marketOpen) {
-      // Market closed — freeze all data, no random movement
-      clearInterval(mockInterval); mockInterval = null;
-      log('INFO', 'Mock ticks stopped — market closed, data frozen');
-      return;
-    } else {
-      // Market open — realistic intraday simulation
-      // Momentum factor: slight trending bias changes every ~60 ticks
-      const mktMomentum = Math.sin(tickCount / 80) * 0.0002;
-
-      for (const [sym, d] of Object.entries(liveStocks)) {
-        const base = MOCK_BASE[sym] || d.price;
-        // Stock-specific volatility based on sector
-        const stock = STOCK_UNIVERSE.find(s => s.symbol === sym);
-        const volMult = ['Metals','Energy','Defence'].includes(stock?.sector) ? 1.4 :
-                        ['IT','Banking'].includes(stock?.sector) ? 1.1 : 1.0;
-        const delta = (Math.random() - 0.499 + mktMomentum) * d.price * 0.0007 * volMult;
-        d.price = Math.max(+(base * 0.5).toFixed(2), +(d.price + delta).toFixed(2));
-        d.change = +(d.price - base).toFixed(2);
-        d.changePct = +((d.change / base) * 100).toFixed(2);
-        d.lastUpdate = Date.now();
-        if (!d.volume) d.volume = Math.round(500000 + Math.random() * 4000000);
-        d.volume += Math.round(Math.random() * 2000); // volume builds through day
-      }
-
-      for (const d of Object.values(liveIndices)) {
-        if (d.isNSE) continue; // Skip — real NSE data, don't overwrite with mock
-        const base = IDX_BASE[d.name] || d.price;
-        const delta = (Math.random() - 0.499 + mktMomentum) * d.price * 0.0004;
-        d.price = +(d.price + delta).toFixed(2);
-        d.change = +(d.price - base).toFixed(2);
-        d.changePct = +((d.change / base) * 100).toFixed(2);
-      }
-
-      // VIX micro-moves ONLY if Upstox not connected (real VIX comes from Upstox/NSE)
-      if (connectionStatus !== 'connected') {
-        const vixDelta = (Math.random() - 0.5) * 0.05;
-        vixData.value = +Math.max(10, Math.min(40, vixData.value + vixDelta)).toFixed(2);
-        vixData.change = +vixDelta.toFixed(2);
-        vixData.trend = vixDelta > 0.02 ? 'rising' : vixDelta < -0.02 ? 'falling' : 'stable';
-      }
-
-      // FII/DII: NO more random simulation — real data comes from NSE API polling
-      // Only update crude/USD-INR if Twelve Data is not providing them
-      if (!globalMarkets.USDINR && tickCount % 30 === 0) {
-        fiiDiiData.crude = +Math.max(55, Math.min(95, fiiDiiData.crude + (Math.random()-0.5)*0.3)).toFixed(1);
-        fiiDiiData.usdInr = +Math.max(82, Math.min(90, fiiDiiData.usdInr + (Math.random()-0.5)*0.04)).toFixed(2);
-      }
-
-      recalcSignals();
-      // Update price history every 5 ticks for technical indicators
-      if (tickCount % 5 === 0) {
-        for (const [sym, d] of Object.entries(liveStocks)) {
-          if (!priceHistory[sym]) priceHistory[sym] = [];
-          priceHistory[sym].push(d.price);
-          if (priceHistory[sym].length > 30) priceHistory[sym].shift();
-        }
-      }
-      // Check price alerts every 5 ticks
-      if (tickCount % 5 === 0 && priceAlerts.some(a => !a.triggered)) checkPriceAlerts();
-    }
-    broadcastLiveData();
-  }, isMarketOpen() ? 1000 : 5000);
+  log('OK', `Stock universe initialized — ${Object.keys(liveStocks).length} symbols (awaiting live data)`);
 }
 
 async function initLiveData() {
   stockUniverse = STOCK_UNIVERSE;
-  initMockData();
+  initStockUniverse();
+
   if (accessToken) {
     connectUpstoxWs();
-    // Only fall back to mock ticks if REST poller fails to deliver data after 10s
-    setTimeout(() => {
-      if (Object.keys(liveStocks).length < 5 && !pricePoller && isMarketOpen()) {
-        log('WARN', 'REST poller not delivering data — starting mock ticks as fallback');
-        startMockTicks();
-      }
-    }, 10000);
-  } else if (isMarketOpen()) {
-    startMockTicks();
+    log('OK', 'Upstox connection initiated — live data will flow shortly');
   } else {
-    log('INFO', 'Market closed — serving frozen base prices (no mock ticks)');
+    connectionStatus = 'disconnected';
+    log('WARN', 'No Upstox token — stock prices unavailable until connected');
+    broadcastStatus();
   }
-  // Always start NSE FII/DII real data polling (works independently of Upstox)
+
+  // Always start NSE real data polling (indices, VIX, FII/DII — works independently of Upstox)
   startNsePolling();
-  log('OK', `Live data initialized — ${stockUniverse.length} stocks`);
+  // Start Twelve Data polling for global markets
+  startTwelveDataPolling();
+  log('OK', `Live data initialized — ${stockUniverse.length} stocks, awaiting real prices`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -3354,7 +3293,7 @@ function runUnitTests() {
 
   // ── Signal Engine ─────────────────────────────────────────────────────────
   test('Signal: STRONG BUY for excellent fundamentals', () => {
-    const sig = calcSignal('COALINDIA', MOCK_BASE['COALINDIA'] * 0.7);
+    const sig = calcSignal('COALINDIA', REFERENCE_PRICES['COALINDIA'] * 0.7);
     assert(sig !== null, 'Signal should not be null');
     assertRange(sig.score, 0, 100, 'Score out of range');
     assert(['STRONG BUY','BUY','WATCH','HOLD','SELL','STRONG SELL'].includes(sig.signal), 'Invalid signal label');
@@ -3362,7 +3301,7 @@ function runUnitTests() {
 
   test('Signal: score 0-100 for all universe stocks', () => {
     for (const s of STOCK_UNIVERSE) {
-      const price = MOCK_BASE[s.symbol] || 1000;
+      const price = REFERENCE_PRICES[s.symbol] || 1000;
       const sig = calcSignal(s.symbol, price);
       if (sig) assertRange(sig.score, 0, 100, `${s.symbol} score out of range`);
     }
@@ -3478,7 +3417,7 @@ function errorPage(title, detail, host) {
 // ══════════════════════════════════════════════════════════════════════════════
 cron.schedule('15 9 * * 1-5', () => { initLiveData(); log('INFO', 'Market open — live data started'); });
 cron.schedule('20 9 * * 1-5', () => { evaluatePicksNextDay(); log('INFO', 'Evaluating yesterday\'s AI picks against today\'s open'); });
-cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); if (mockInterval) { clearInterval(mockInterval); mockInterval = null; } stopPricePoller(); startTwelveDataPolling(); captureZerodhaTrades(); });
+cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); stopPricePoller(); startTwelveDataPolling(); captureZerodhaTrades(); });
 cron.schedule('0 0 * * *', () => { stopTwelveDataPolling(); log('INFO', 'Midnight — Twelve Data polling stopped'); });
 cron.schedule('0 10,14 * * 1-5', () => { if (zAccessToken) { fetchZerodhaData(); log('INFO', 'Zerodha data refresh'); } });
 
@@ -3498,7 +3437,7 @@ server.listen(PORT, async () => {
   loadGcpServiceAccount();
   log('INFO', `Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey} VertexAI:${!!gcpServiceAccount} TwelveData:${!!appConfig.twelveDataKey} Trades:${tradeHistory.length} Picks:${pickTracker.length}`);
   await initLiveData();
-  if (isPostMarketWindow()) startTwelveDataPolling();
+  if (isGlobalMarketWindow()) startTwelveDataPolling();
   runUnitTests();
   log('INFO', `Server ready — ${testResults.filter(t=>t.pass).length}/${testResults.length} tests passed`);
 

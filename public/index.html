@@ -474,6 +474,7 @@ tailwind.config = {
           <button class="idx-chip flex-shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider transition-all" data-index="CRUDE" onclick="switchHeroIndex(this)">Crude Oil</button>
           <button class="idx-chip flex-shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider transition-all" data-index="SP500" onclick="switchHeroIndex(this)">S&P 500</button>
           <button class="idx-chip flex-shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider transition-all" data-index="NASDAQ" onclick="switchHeroIndex(this)">NASDAQ</button>
+          <button class="idx-chip flex-shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider transition-all" data-index="SENSEX" onclick="switchHeroIndex(this)">SENSEX</button>
           <button class="idx-chip flex-shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider transition-all" data-index="USDINR" onclick="switchHeroIndex(this)">USD/INR</button>
         </div>
 
@@ -487,7 +488,7 @@ tailwind.config = {
             <span class="text-[#d0c6ab] font-mono text-[10px] uppercase tracking-[0.2em] mb-2 font-bold" id="h-index-label">Nifty 50</span>
             <h2 class="font-headline font-extrabold text-[3.2rem] tracking-tighter tnum leading-none" id="h-nifty">--<span class="text-[1.6rem] font-semibold text-[#d0c6ab]">.--</span></h2>
             <div class="flex items-center gap-2 mt-3">
-              <span id="demo-badge" style="display:none" class="text-[9px] font-mono font-bold text-[#ffd60a] bg-[#ffd60a]/10 border border-[#ffd60a]/25 px-2 py-0.5 rounded-full tracking-wider">DEMO DATA</span>
+              <span id="data-source-badge" style="display:none" class="text-[9px] font-mono font-bold text-[#ffb4ab] bg-[#ffb4ab]/10 border border-[#ffb4ab]/25 px-2 py-0.5 rounded-full tracking-wider">NO LIVE DATA</span>
               <div class="bg-[#47e266]/10 text-[#47e266] px-3 py-1 rounded-md flex items-center gap-1" id="h-chg">
                 <span class="material-symbols-outlined text-sm" style="font-variation-settings:'FILL' 1">arrow_drop_up</span>
                 <span class="font-bold text-xs tnum">--</span>
@@ -1561,7 +1562,7 @@ tailwind.config = {
 // STATE
 // ══════════════════════════════════════════════════════════
 let WS, PI;
-let S={}, SIG={}, IDX={}, VIX={value:16.2,trend:'stable'}, FIIDII={fii:-3240,dii:4180,usdInr:86.4,crude:72.8}, GM={};
+let S={}, SIG={}, IDX={}, VIX={value:0,trend:'stable'}, FIIDII={fii:0,dii:0,usdInr:0,crude:0,isDefault:true}, GM={};
 let PF=[], NT=[], OPTS=[], TRADES=[];
 let srt='score', sasc=false, flt='all';
 let pp={}, ei=-1, pb='';
@@ -1570,10 +1571,38 @@ let NEWS_ITEMS = [];
 let eventFilter = 'all';
 
 // ══════════════════════════════════════════════════════════
+// RELIABLE IST — UTC offset math (works everywhere: Vercel, Railway, any browser)
+// ══════════════════════════════════════════════════════════
+function getIST() {
+  const utc = new Date();
+  return new Date(utc.getTime() + 5.5 * 60 * 60 * 1000);
+}
+function getISTDay() { return getIST().getUTCDay(); }
+function getISTMins() { const ist = getIST(); return ist.getUTCHours() * 60 + ist.getUTCMinutes(); }
+function isMarketOpen() {
+  const day = getISTDay(), mins = getISTMins();
+  return day >= 1 && day <= 5 && mins >= 555 && mins <= 930;
+}
+function formatIST(fmt) {
+  const ist = getIST();
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const h24 = ist.getUTCHours(), m = ist.getUTCMinutes(), s = ist.getUTCSeconds();
+  const h12 = h24 % 12 || 12;
+  const ampm = h24 >= 12 ? 'PM' : 'AM';
+  const pad = n => String(n).padStart(2, '0');
+  if (fmt === 'time') return `${pad(h12)}:${pad(m)}:${pad(s)} ${ampm}`;
+  if (fmt === 'short') return `${ist.getUTCDate()} ${months[ist.getUTCMonth()]} ${pad(h12)}:${pad(m)} ${ampm}`;
+  if (fmt === 'day') return days[ist.getUTCDay()];
+  if (fmt === 'date') return `${ist.getUTCDate()} ${months[ist.getUTCMonth()]}`;
+  if (fmt === 'title') return `${days[ist.getUTCDay()]} ${ist.getUTCDate()} ${months[ist.getUTCMonth()]}`;
+  return `${pad(h12)}:${pad(m)} ${ampm}`;
+}
+
+// ══════════════════════════════════════════════════════════
 // THEME (dark only for this design, but keep toggle for compat)
 // ══════════════════════════════════════════════════════════
-function applyTheme(t) { /* Stitch design is dark-only */ }
-function toggleTheme() { /* noop for dark-only design */ }
+// Theme functions defined later in the file (near line 3935)
 
 function refreshAll() {
   const btn = document.getElementById('refresh-btn');
@@ -1589,8 +1618,7 @@ function refreshAll() {
   fetchGlobalMarkets();
   loadMarketPrediction();
   setTimeout(()=>{
-    const ts = new Date().toLocaleString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true, day:'numeric', month:'short'});
-    toast('Data refreshed at ' + ts);
+    toast('Data refreshed at ' + formatIST('short'));
   },800);
 }
 
@@ -1756,7 +1784,7 @@ function connectWS() {
         if (d.vix) VIX = d.vix;
         if (d.fiiDii) FIIDII = d.fiiDii;
         if (d.globalMarkets) globalMarkets = d.globalMarkets;
-        renderHeroIdx(); renderGauge(); renderBreadth(); renderHomeFiiDii();
+        renderHeroIdx(); renderGauge(); renderBreadth(); renderHomeFiiDii(); renderTicker();
         updateFiiPeek();
         renderPulseChart(document.getElementById('pulse-select')?.value || 'fii-dii');
       }
@@ -1767,6 +1795,7 @@ function connectWS() {
         if (d.vix) VIX = d.vix;
         if (d.fiiDii) FIIDII = d.fiiDii;
         if (d.globalMarkets) globalMarkets = d.globalMarkets;
+        renderTicker(); // Ticker always updates regardless of active tab
         if (curTab==='home') {
           renderHeroIdx(); renderGauge(); renderBreadth(); renderHomeFiiDii();
           updateFiiPeek();
@@ -1815,7 +1844,7 @@ function setSt(st) {
   const el = document.getElementById('sd');
   const txt = document.getElementById('stxt');
   if (!el) return;
-  const colorMap = {live:'#47e266',connecting:'#ffd60a',demo:'#ffd60a',closed:'#d0c6ab',offline:'#ffb4ab',rc:'#ff9f0a'};
+  const colorMap = {live:'#47e266',connecting:'#ffd60a',disconnected:'#ffb4ab',closed:'#d0c6ab',offline:'#ffb4ab',rc:'#ff9f0a'};
   el.style.background = colorMap[st] || '#636366';
   txt.style.color = colorMap[st] || '#636366';
   txt.textContent = st.toUpperCase();
@@ -1872,6 +1901,78 @@ function renderHeroIdx() {
   document.getElementById('h-idx').innerHTML = html;
 }
 
+// ══════════════════════════════════════════════════════════
+// LIVE TICKER STRIP — Scrolling marquee of indices + top movers
+// ══════════════════════════════════════════════════════════
+function renderTicker() {
+  const wrap = document.getElementById('ti-wrap');
+  if (!wrap) return;
+  const items = [];
+
+  // 1) Key indices from IDX
+  const idxKeys = [
+    { key: 'Nifty 50', label: 'NIFTY' },
+    { key: 'Nifty Bank', label: 'BANKNIFTY' },
+    { key: 'SENSEX', label: 'SENSEX' },
+    { key: 'Nifty 100', label: 'NIFTY100' }
+  ];
+  idxKeys.forEach(({ key, label }) => {
+    const d = IDX[key];
+    if (d && d.price) {
+      const pct = d.changePct ?? d.chgPct ?? 0;
+      const col = pct >= 0 ? '#47e266' : '#ffb4ab';
+      const sign = pct >= 0 ? '+' : '';
+      items.push(`<span class="ticker-item"><span class="text-[#636366]">${label}</span> <span class="text-[#e5e2e1]">${fmt(d.price)}</span> <span style="color:${col}">${sign}${pct.toFixed(2)}%</span></span>`);
+    }
+  });
+
+  // 2) VIX
+  if (VIX && VIX.value && !VIX.isDefault) {
+    const vCol = VIX.value > 18 ? '#ffb4ab' : '#47e266';
+    items.push(`<span class="ticker-item"><span class="text-[#636366]">VIX</span> <span style="color:${vCol}">${VIX.value.toFixed(2)}</span></span>`);
+  }
+
+  // 3) Global markets
+  const gmKeys = [
+    { key: 'GIFT_NIFTY', label: 'GIFT NIFTY' },
+    { key: 'GOLD', label: 'GOLD' },
+    { key: 'CRUDE', label: 'CRUDE' },
+    { key: 'SP500', label: 'S&P500' },
+    { key: 'USDINR', label: 'USD/INR' }
+  ];
+  gmKeys.forEach(({ key, label }) => {
+    const d = globalMarkets[key];
+    if (d && d.price) {
+      const pct = d.changePct ?? 0;
+      const col = pct >= 0 ? '#47e266' : '#ffb4ab';
+      const sign = pct >= 0 ? '+' : '';
+      items.push(`<span class="ticker-item"><span class="text-[#636366]">${label}</span> <span class="text-[#e5e2e1]">${d.price.toFixed(2)}</span> <span style="color:${col}">${sign}${pct.toFixed(2)}%</span></span>`);
+    }
+  });
+
+  // 4) Top 5 movers from stocks (by absolute changePct)
+  const liveStocks = Object.values(S).filter(s => s.price > 0);
+  if (liveStocks.length) {
+    const sorted = [...liveStocks].sort((a, b) => Math.abs(b.changePct ?? b.chgPct ?? 0) - Math.abs(a.changePct ?? a.chgPct ?? 0));
+    sorted.slice(0, 5).forEach(s => {
+      const pct = s.changePct ?? s.chgPct ?? 0;
+      const col = pct >= 0 ? '#47e266' : '#ffb4ab';
+      const sign = pct >= 0 ? '+' : '';
+      const sym = (s.symbol || '').replace('NSE_EQ|','').replace('NSE:','');
+      items.push(`<span class="ticker-item"><span class="text-[#636366]">${sym}</span> <span class="text-[#e5e2e1]">₹${fmt(s.price)}</span> <span style="color:${col}">${sign}${pct.toFixed(2)}%</span></span>`);
+    });
+  }
+
+  if (!items.length) {
+    wrap.innerHTML = '<span class="ticker-item"><span class="text-[#636366]">FINR</span> <span class="text-[#d0c6ab]">Awaiting live data...</span></span>';
+    return;
+  }
+
+  // Duplicate items for seamless scroll loop
+  const allItems = items.join('') + items.join('');
+  wrap.innerHTML = allItems;
+}
+
 function renderGauge() {
   const sc = Object.values(SIG).map(s=>s.score);
   if(!sc.length) return;
@@ -1900,10 +2001,10 @@ function renderGauge() {
 
 function renderBreadth() {
   const el=document.getElementById('breadth-bar');if(!el)return;
-  const stocks=Object.values(S);
-  if(!stocks.length){el.innerHTML='<div class="text-center py-3 text-[#636366] text-xs font-mono">Loading...</div>';return;}
-  const up = stocks.filter(s=>s.chgPct>=0).length;
-  const dn = stocks.filter(s=>s.chgPct<0).length;
+  const stocks=Object.values(S).filter(s => s.price > 0);
+  if(!stocks.length){el.innerHTML='<div class="text-center py-3 text-[#636366] text-xs font-mono">Awaiting live stock data...</div>';return;}
+  const up = stocks.filter(s=>(s.changePct ?? s.chgPct ?? 0)>=0).length;
+  const dn = stocks.filter(s=>(s.changePct ?? s.chgPct ?? 0)<0).length;
   const total = stocks.length;
   const upPct = total ? (up/total*100).toFixed(0) : 0;
   const dnPct = total ? (dn/total*100).toFixed(0) : 0;
@@ -1952,8 +2053,9 @@ function renderNews() {
     const priClass = (n.priority||'low').toLowerCase() === 'high' ? 'bg-[#ffb4ab]/20 text-[#ffb4ab]' :
                      (n.priority||'low').toLowerCase() === 'medium' ? 'bg-[#ffd60a]/20 text-[#ffd60a]' :
                      'bg-[#47e266]/12 text-[#47e266]';
-    const sentColor = (n.sentiment||'').toLowerCase().includes('positive') ? 'text-[#47e266]' :
-                      (n.sentiment||'').toLowerCase().includes('negative') ? 'text-[#ffb4ab]' : 'text-[#d0c6ab]';
+    const sentLower = (n.sentiment||'').toLowerCase();
+    const sentColor = (sentLower.includes('bullish') || sentLower.includes('positive')) ? 'text-[#47e266]' :
+                      (sentLower.includes('bearish') || sentLower.includes('negative')) ? 'text-[#ffb4ab]' : 'text-[#d0c6ab]';
     const timeStr = n.date || (n.fetchedAt ? new Date(n.fetchedAt).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}) : (n.time||'Just now'));
     return `<div class="news-item flex gap-3 cursor-pointer hover:bg-[#353534]/30 rounded-lg p-2 -mx-2 transition-colors" data-scope="${(n.scope||'national').toLowerCase()}" onclick="openNewsModal(${i})">
       <div class="flex-shrink-0 w-10 h-10 bg-[#353534] rounded flex items-center justify-center text-lg">${n.icon||'📰'}</div>
@@ -1974,7 +2076,9 @@ function openNewsModal(i) {
   const n = NEWS_ITEMS[i];
   if (!n) return;
   const priClass = (n.priority||'low').toLowerCase() === 'high' ? 'bg-[#93000a]/20 text-[#ffb4ab] border-[#ffb4ab]/20' : 'bg-[#ffd60a]/20 text-[#ffd60a] border-[#ffd60a]/20';
-  const sentColor = (n.sentiment||'').toLowerCase().includes('positive') ? 'text-[#47e266]' : 'text-[#d0c6ab]';
+  const sentModalLower = (n.sentiment||'').toLowerCase();
+  const sentColor = (sentModalLower.includes('bullish') || sentModalLower.includes('positive')) ? 'text-[#47e266]' :
+                    (sentModalLower.includes('bearish') || sentModalLower.includes('negative')) ? 'text-[#ffb4ab]' : 'text-[#d0c6ab]';
   document.getElementById('news-modal-content').innerHTML = `
     <div class="mt-2">
       <h2 class="text-base font-bold text-white leading-snug font-headline">${n.title}</h2>
@@ -2031,11 +2135,15 @@ async function refreshFiiDii() {
 function renderHomeFiiDii() {
   const el = document.getElementById('home-fii-dii');
   if (!el) return;
+  if (FIIDII.isDefault) {
+    el.innerHTML = '<div class="text-center py-3 text-[#636366] text-xs font-mono">Fetching FII/DII data from NSE...</div>';
+    return;
+  }
   const rows = [
     {nm:'FII Cash', val:`₹${fmt(Math.abs(FIIDII.fii))} Cr`, isUp:FIIDII.fii>=0},
     {nm:'DII Cash', val:`₹${fmt(Math.abs(FIIDII.dii))} Cr`, isUp:FIIDII.dii>=0},
-    {nm:'USD / INR', val:FIIDII.usdInr, neutral:true},
-    {nm:'Crude Oil', val:`$${FIIDII.crude}`, neutral:true},
+    {nm:'USD / INR', val:FIIDII.usdInr || '--', neutral:true},
+    {nm:'Crude Oil', val:FIIDII.crude ? `$${FIIDII.crude}` : '--', neutral:true},
   ];
   el.innerHTML = rows.map(r => `
     <div class="flex justify-between items-center bg-[#0e0e0e] p-2.5 rounded-lg">
@@ -2057,11 +2165,13 @@ function renderEconCal() {
   if (!events.length) { el.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">No upcoming events</div>'; setCardTs('events-ts'); return; }
   el.innerHTML = events.slice(0, 10).map(e => {
     const priCol = e.priority.toLowerCase()==='high' ? '#ffb4ab' : e.priority.toLowerCase()==='medium' ? '#ffd60a' : '#47e266';
-    return `<div class="flex gap-3">
+    const url = e.searchUrl || `https://www.google.com/search?q=${encodeURIComponent(e.title + ' India stock market')}&tbm=nws`;
+    const liveBadge = e.isLive ? '<span class="text-[8px] font-bold text-[#47e266] bg-[#47e266]/10 px-1 rounded ml-1">LIVE</span>' : '';
+    return `<div class="flex gap-3 cursor-pointer hover:bg-[#353534]/20 rounded-lg p-1 -m-1 transition-colors" onclick="window.open('${url}','_blank')">
       <div class="flex flex-col items-center"><div class="w-2 h-2 rounded-full mt-1" style="background:${priCol}"></div><div class="w-[1px] h-full bg-[#353534] mt-1"></div></div>
       <div class="pb-2 flex-1">
         <div class="flex items-start gap-2 mb-0.5">
-          <span class="text-[11px] font-bold flex-1">${e.title}</span>
+          <span class="text-[11px] font-bold flex-1">${e.title}${liveBadge}</span>
           <span class="text-[9px] font-bold text-[#ffd60a] tnum font-mono whitespace-nowrap flex-shrink-0">${e.date}</span>
         </div>
         ${e.desc ? `<p class="text-[10px] text-[#d0c6ab] leading-tight">${e.desc}</p>` : ''}
@@ -2098,10 +2208,12 @@ function renderFullEventCalendar() {
   });
   ecal.innerHTML = filtered.map(e => {
     const priCol = e.priority.toLowerCase()==='high' ? 'border-[#ffb4ab]' : e.priority.toLowerCase()==='medium' ? 'border-[#ffd60a]' : 'border-[#47e266]';
-    return `<div class="bg-[#1c1b1b] p-4 rounded-xl space-y-2 border-l-4 ${priCol}">
+    const url = e.searchUrl || `https://www.google.com/search?q=${encodeURIComponent(e.title + ' India stock market')}&tbm=nws`;
+    const liveBadge = e.isLive ? '<span class="ml-2 text-[8px] font-bold text-[#47e266] bg-[#47e266]/10 px-1.5 py-0.5 rounded">LIVE</span>' : '';
+    return `<div class="bg-[#1c1b1b] p-4 rounded-xl space-y-2 border-l-4 ${priCol} cursor-pointer hover:bg-[#252525] transition-colors" onclick="window.open('${url}','_blank')">
       <div class="flex-1">
-        <div class="flex justify-between items-start"><h3 class="text-sm font-bold text-[#e5e2e1] font-headline leading-tight">${e.icon||''} ${e.title}</h3></div>
-        <p class="text-[9px] font-bold text-[#ffd60a] tnum font-mono mt-1">${e.trend}</p>
+        <div class="flex justify-between items-start"><h3 class="text-sm font-bold text-[#e5e2e1] font-headline leading-tight">${e.icon||''} ${e.title}${liveBadge}</h3><span class="material-symbols-outlined text-[#636366] text-sm flex-shrink-0 ml-2">open_in_new</span></div>
+        <p class="text-[9px] font-bold text-[#ffd60a] tnum font-mono mt-1">${e.trend}${e.date ? ` · ${e.date}` : ''}</p>
         <p class="text-xs text-[#d0c6ab] leading-relaxed mt-1">${e.impact}</p>
         ${e.sectors ? `<div class="flex flex-wrap gap-1.5 mt-2">
           ${(e.sectors.buy||[]).map(s=>`<span class="px-2 py-0.5 bg-[#47e266]/10 text-[#47e266] text-[10px] font-bold rounded-md border border-[#47e266]/20">Buy: ${s}</span>`).join('')}
@@ -2129,10 +2241,12 @@ function filterEvents(filter) {
 function generateEventCalendar() {
   if (MARKET_EVENTS.length) {
     return MARKET_EVENTS.map(e => ({
-      date: e.trend,
+      date: e.date || e.trend,
       title: `${e.icon||''} ${e.title}`,
       desc: e.impact,
-      priority: e.priority
+      priority: e.priority,
+      searchUrl: e.searchUrl,
+      isLive: e.isLive || false
     }));
   }
   return [{date:'Loading...',title:'Fetching events',desc:'',priority:'MEDIUM'}];
@@ -2144,12 +2258,7 @@ function generateEventCalendar() {
 async function loadAiPicks() {
   const el = document.getElementById('picks-list');
   // Market hours gate: only works 9:15-15:30 IST on weekdays
-  const now = new Date();
-  const ist = new Date(now.toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
-  const day = ist.getDay();
-  const mins = ist.getHours()*60 + ist.getMinutes();
-  const marketOpen = day>=1 && day<=5 && mins>=555 && mins<=930; // 9:15=555, 15:30=930
-  if (!marketOpen) {
+  if (!isMarketOpen()) {
     el.innerHTML = `<div class="text-center py-12">
       <span class="material-symbols-outlined text-[#ffd60a] mb-3" style="font-size:48px">schedule</span>
       <h3 class="text-lg font-bold text-[#e5e2e1] mb-2">Market Closed</h3>
@@ -2196,12 +2305,7 @@ async function loadOptionsLab() {
   const target = el || elHidden;
   if (!target) return;
   // Market hours gate: only works 9:15-15:30 IST on weekdays
-  const now = new Date();
-  const ist = new Date(now.toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
-  const day = ist.getDay();
-  const mins = ist.getHours()*60 + ist.getMinutes();
-  const marketOpen = day>=1 && day<=5 && mins>=555 && mins<=930; // 9:15=555, 15:30=930
-  if (!marketOpen) {
+  if (!isMarketOpen()) {
     target.innerHTML = `<div class="text-center py-12">
       <span class="material-symbols-outlined text-[#ffd60a] mb-3" style="font-size:48px">schedule</span>
       <h3 class="text-lg font-bold text-[#e5e2e1] mb-2">Market Closed</h3>
@@ -3380,9 +3484,16 @@ async function fetchStatus() {
   try {
     const d = await fetch('/api/system-health').then(r=>r.json());
     updateApiStatusDots(d);
-    if (d.upstox && d.upstox.connected) setSt('live');
-    else if (d.marketOpen === false) setSt('closed');
-    else setSt('demo');
+    if (d.upstox && d.upstox.connected) {
+      setSt('live');
+      document.getElementById('data-source-badge').style.display = 'none';
+    } else if (d.marketOpen === false) {
+      setSt('closed');
+      document.getElementById('data-source-badge').style.display = 'none';
+    } else {
+      setSt('disconnected');
+      document.getElementById('data-source-badge').style.display = '';
+    }
   } catch { setSt('offline'); }
 }
 
@@ -3723,7 +3834,8 @@ function renderSectorFlow(el) {
     if (stock && stock.sector) {
       if (!sectorMap[stock.sector]) sectorMap[stock.sector] = {scores:[], chg:[]};
       sectorMap[stock.sector].scores.push(sig.score);
-      if (stock.chgPct !== undefined) sectorMap[stock.sector].chg.push(stock.chgPct);
+      const pct = stock.changePct ?? stock.chgPct;
+      if (pct !== undefined) sectorMap[stock.sector].chg.push(pct);
     }
   });
 
@@ -3761,14 +3873,14 @@ function renderSectorFlow(el) {
 let activeHeroIndex = 'NIFTY50';
 const INDEX_LABEL_MAP = {
   'NIFTY50': 'Nifty 50', 'NIFTYBANK': 'Nifty Bank', 'NIFTY100': 'Nifty 100',
-  'NIFTYFIFTY': 'Nifty Next 50', 'INDIA_VIX': 'India VIX', 'GIFT_NIFTY': 'Gift Nifty',
+  'NIFTYFIFTY': 'Nifty Next 50', 'SENSEX': 'SENSEX', 'INDIA_VIX': 'India VIX', 'GIFT_NIFTY': 'Gift Nifty',
   'GOLD': 'Gold $/oz', 'CRUDE': 'Crude WTI', 'SP500': 'S&P 500',
   'NASDAQ': 'NASDAQ', 'USDINR': 'USD/INR', 'DOW': 'Dow Jones', 'NIKKEI': 'Nikkei 225'
 };
 // Display labels for UI (different from data keys)
 const INDEX_DISPLAY_MAP = {
   'NIFTY50': 'Nifty 50', 'NIFTYBANK': 'Bank Nifty', 'NIFTY100': 'Nifty 100',
-  'NIFTYFIFTY': 'Nifty Next 50', 'INDIA_VIX': 'India VIX', 'GIFT_NIFTY': 'Gift Nifty',
+  'NIFTYFIFTY': 'Nifty Next 50', 'SENSEX': 'SENSEX', 'INDIA_VIX': 'India VIX', 'GIFT_NIFTY': 'Gift Nifty',
   'GOLD': 'Gold', 'CRUDE': 'Crude Oil', 'SP500': 'S&P 500',
   'NASDAQ': 'NASDAQ', 'USDINR': 'USD/INR', 'DOW': 'Dow Jones', 'NIKKEI': 'Nikkei 225'
 };
@@ -3905,29 +4017,9 @@ async function loadMarketPrediction() {
 // ══════════════════════════════════════════════════════════
 // THEME TOGGLE (placeholder — light mode UI to be designed later)
 // ══════════════════════════════════════════════════════════
-let darkMode = true;
+// Theme: dark-only design
 function toggleTheme() {
-  darkMode = !darkMode;
-  const icon = document.getElementById('theme-icon');
-  if (darkMode) {
-    document.documentElement.classList.remove('light');
-    document.documentElement.classList.add('dark');
-    icon.textContent = 'light_mode';
-    toast('Dark mode — Precision Vault theme');
-  } else {
-    // Light mode placeholder — full design coming later
-    document.documentElement.classList.remove('dark');
-    document.documentElement.classList.add('light');
-    icon.textContent = 'dark_mode';
-    toast('Light mode coming soon — remind me to design it!');
-    // Revert after toast since light mode UI isn't designed yet
-    setTimeout(() => {
-      darkMode = true;
-      document.documentElement.classList.remove('light');
-      document.documentElement.classList.add('dark');
-      icon.textContent = 'light_mode';
-    }, 2000);
-  }
+  toast('Dark mode only — FINR is designed for dark theme');
 }
 
 // Auto-update peeks when underlying data re-renders (non-invasive wrapping)
@@ -4320,10 +4412,10 @@ function toggleNextSession() {
   }
 }
 function autoShowNextSession() {
-  const ist = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
-  const mins = ist.getHours()*60+ist.getMinutes();
+  const mins = getISTMins();
+  const day = getISTDay();
   // Auto-show after 2:30 PM IST (870 mins) on weekdays
-  if (mins >= 870 && ist.getDay()>=1 && ist.getDay()<=5 && !nextSessionVisible) {
+  if (mins >= 870 && day >= 1 && day <= 5 && !nextSessionVisible) {
     toggleNextSession();
   }
 }
@@ -4358,16 +4450,10 @@ async function initApp() {
   }, 500);
 
   // Market hours
-  const ist = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
-  const mins = ist.getHours()*60+ist.getMinutes();
-  const open = mins>=555&&mins<=930&&ist.getDay()>=1&&ist.getDay()<=5;
-  const mkt = open ? 'Market Open' : 'Market Closed';
-  document.getElementById('h-mkt').textContent = mkt;
+  document.getElementById('h-mkt').textContent = isMarketOpen() ? 'Market Open' : 'Market Closed';
 
   // Title
-  const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  document.title = `FINR — ${days[ist.getDay()]} ${ist.getDate()} ${months[ist.getMonth()]}`;
+  document.title = `FINR — ${formatIST('title')}`;
 
   // Auto-refresh
   setInterval(fetchStatus, 60000);
