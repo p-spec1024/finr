@@ -602,7 +602,16 @@ async function callVertexAI(prompt, opts = {}) {
   const { temperature = 0.3, maxOutputTokens = 2000, timeout = 60000, grounding = true, model = 'gemini-3-flash-preview' } = opts;
   const token = await getVertexAccessToken();
   const projectId = gcpServiceAccount.project_id;
-  const url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${projectId}/locations/us-central1/publishers/google/models/${model}:generateContent`;
+
+  // Build endpoint configurations to try (Gemini 2.5+ / 3.x need global location)
+  // Try multiple API versions because Google keeps changing requirements
+  const endpointConfigs = [
+    { host: 'aiplatform.googleapis.com', version: 'v1', location: 'global' },
+    { host: 'aiplatform.googleapis.com', version: 'v1beta1', location: 'global' },
+    { host: 'us-central1-aiplatform.googleapis.com', version: 'v1', location: 'us-central1' },
+    { host: 'us-central1-aiplatform.googleapis.com', version: 'v1beta1', location: 'us-central1' },
+  ];
+
   const body = {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: { temperature, maxOutputTokens }
@@ -610,23 +619,131 @@ async function callVertexAI(prompt, opts = {}) {
   if (grounding) {
     body.tools = [{ google_search_retrieval: { dynamic_retrieval_config: { mode: 'MODE_DYNAMIC', dynamic_threshold: 0.3 } } }];
   }
-  const r = await axios.post(url, body, {
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    timeout
-  });
-  const text = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  const groundingMeta = r.data.candidates?.[0]?.groundingMetadata || null;
-  return { text, model, grounded: !!groundingMeta, groundingMeta };
+
+  let lastError = null;
+  for (const cfg of endpointConfigs) {
+    const url = `https://${cfg.host}/${cfg.version}/projects/${projectId}/locations/${cfg.location}/publishers/google/models/${model}:generateContent`;
+    try {
+      const r = await axios.post(url, body, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        timeout
+      });
+      const text = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const groundingMeta = r.data.candidates?.[0]?.groundingMetadata || null;
+      log('OK', `Vertex AI endpoint: ${cfg.version}/${cfg.location}/${model}`);
+      return { text, model, grounded: !!groundingMeta, groundingMeta };
+    } catch (e) {
+      lastError = e;
+      const status = e.response?.status;
+      if (status === 404) {
+        log('WARN', `Vertex AI 404 on ${cfg.version}/${cfg.location}/${model} — trying next endpoint`);
+        continue; // try next endpoint config
+      }
+      // For non-404 errors (auth, rate limit, etc.), throw immediately
+      throw e;
+    }
+  }
+
+  // If all endpoints returned 404 and grounding was on, retry the first endpoint without grounding
+  // (grounding tools can cause 404 on some model versions)
+  if (grounding && lastError?.response?.status === 404) {
+    log('WARN', `All Vertex AI endpoints returned 404 with grounding — retrying without grounding`);
+    const bodyNoGround = { contents: body.contents, generationConfig: body.generationConfig };
+    for (const cfg of endpointConfigs) {
+      const url = `https://${cfg.host}/${cfg.version}/projects/${projectId}/locations/${cfg.location}/publishers/google/models/${model}:generateContent`;
+      try {
+        const r = await axios.post(url, bodyNoGround, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          timeout
+        });
+        const text = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        log('OK', `Vertex AI connected (no grounding): ${cfg.version}/${cfg.location}/${model}`);
+        return { text, model, grounded: false, groundingMeta: null };
+      } catch (e) {
+        lastError = e;
+        if (e.response?.status === 404) continue;
+        throw e;
+      }
+    }
+  }
+
+  throw lastError;
 }
 
-// Prefer Vertex AI (grounded) over plain Gemini for accuracy-critical calls
+// ══════════════════════════════════════════════════════════════════════════════
+// UNIFIED AI CALL — Model-first rotation across ALL sources (Gemini keys + Vertex AI)
+// Chain: Key1(3.0)→Key2(3.0)→Key3(3.0)→Vertex(3.0) → Key1(2.5)→Key2(2.5)→Key3(2.5)→Vertex(2.5) → Key1(2.0)→Key2(2.0)→Key3(2.0)→Vertex(2.0)
+// ══════════════════════════════════════════════════════════════════════════════
 async function callAI(prompt, opts = {}) {
   const { preferGrounded = false, ...rest } = opts;
-  if (preferGrounded && gcpServiceAccount) {
-    try { return await callVertexAI(prompt, { ...rest, grounding: true }); }
-    catch (e) { log('WARN', 'Vertex AI failed, falling back to Gemini: ' + e.message); }
+  const { temperature = 0.3, maxOutputTokens = 1000, timeout = 30000 } = rest;
+  const keys = getGeminiKeys();
+  const startKeyIdx = keys.length ? geminiKeyIndex % keys.length : 0;
+  let lastError = null;
+  const hasGeminiKeys = !geminiDisabled && keys.length > 0;
+  const hasVertex = !vertexDisabled && !!gcpServiceAccount;
+
+  if (!hasGeminiKeys && !hasVertex) {
+    throw new Error('All AI sources unavailable — no Gemini keys configured or all AI services disconnected');
   }
-  return await callGemini(prompt, rest);
+
+  for (let m = 0; m < GEMINI_MODELS.length; m++) {
+    const model = GEMINI_MODELS[m];
+
+    // Phase 1: Try all Gemini API keys for this model
+    if (hasGeminiKeys) {
+      let skipModel = false;
+      for (let k = 0; k < keys.length; k++) {
+        const keyIdx = (startKeyIdx + k) % keys.length;
+        const key = keys[keyIdx];
+        try {
+          const r = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+            { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature, maxOutputTokens } },
+            { headers: { 'Content-Type': 'application/json' }, timeout }
+          );
+          const text = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          geminiKeyIndex = keyIdx; // remember successful key
+          return { text, model, keySlot: keyIdx + 1, source: 'gemini', grounded: false };
+        } catch (e) {
+          lastError = e;
+          const status = e.response?.status;
+          if (status === 429) {
+            log('WARN', `Gemini key #${keyIdx+1} rate limited on ${model} — ${k < keys.length-1 ? 'trying next key' : 'all keys exhausted, trying Vertex AI'}`);
+            continue; // try next key
+          }
+          if (status === 404) {
+            log('WARN', `Gemini ${model} not found (404) on key #${keyIdx+1} — skipping model for all Gemini keys`);
+            skipModel = true;
+            break; // skip to Vertex AI for this model
+          }
+          log('WARN', `Gemini key #${keyIdx+1} error on ${model}: ${e.message}`);
+          continue;
+        }
+      }
+    }
+
+    // Phase 2: Try Vertex AI with this same model
+    if (hasVertex) {
+      try {
+        const result = await callVertexAI(prompt, { temperature, maxOutputTokens, timeout: Math.max(timeout, 45000), model, grounding: preferGrounded || false });
+        log('OK', `Vertex AI succeeded on ${model} (grounded: ${result.grounded})`);
+        return { ...result, source: 'vertex' };
+      } catch (e) {
+        lastError = e;
+        const status = e.response?.status;
+        if (status === 429) {
+          log('WARN', `Vertex AI rate limited on ${model} — falling back to next model tier`);
+        } else if (status === 404) {
+          log('WARN', `Vertex AI ${model} not found (404) — falling back to next model tier`);
+        } else {
+          log('WARN', `Vertex AI failed on ${model}: ${e.message} — falling back to next model tier`);
+        }
+      }
+    }
+  }
+
+  throw lastError || new Error('All AI sources exhausted (all Gemini keys + Vertex AI failed on all models)');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -694,7 +811,7 @@ Reply ONLY valid JSON (no markdown fences):
 
     const g = await callAI(prompt, { preferGrounded: true, temperature: 0.3, maxOutputTokens: 2000, timeout: 60000 });
     const raw = g.text || '{}';
-    log('OK', `Market prediction generated (${g.model}, grounded:${g.grounded || false}), ${raw.length} chars`);
+    log('OK', `Market prediction generated (${g.source}/${g.model}, grounded:${g.grounded || false}), ${raw.length} chars`);
 
     let prediction = {};
     const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
@@ -864,13 +981,13 @@ Respond ONLY with this exact JSON (no markdown fences):
 recommendation must be exactly TAKE, AVOID, or WAIT.
 confidence must be exactly HIGH, MEDIUM, or LOW.`;
 
-    const g = await callGemini(prompt);
-    const analysis = g.text || 'No response from Gemini';
-    log('OK', `Gemini options analysis completed (${g.model}) for: ${trade.substring(0, 50)}`);
+    const g = await callAI(prompt);
+    const analysis = g.text || 'No response from AI';
+    log('OK', `Options analysis completed (${g.source}/${g.model}) for: ${trade.substring(0, 50)}`);
     res.json({ analysis, marketData, configured: true });
   } catch(e) {
-    log('ERR', 'Gemini call failed: ' + e.message);
-    res.status(500).json({ error: 'Gemini analysis failed: ' + e.message });
+    log('ERR', 'AI call failed: ' + e.message);
+    res.status(500).json({ error: 'AI analysis failed: ' + e.message });
   }
 });
 
@@ -929,9 +1046,9 @@ Reply ONLY valid JSON array, NO markdown fences, NO text before/after:
 [{"symbol":"NAME","direction":"CE or PE","confidence":"HIGH/MED/LOW","sentiment":"HIGHLY_CONFIDENT/CONFIDENT/MODERATE/SPECULATIVE","strategy":"Naked CE / Bull Call Spread 23000-23200 / Bear Put Spread etc","strategyType":"NAKED/VERTICAL_SPREAD/IRON_CONDOR/STRADDLE/HEDGED","reasoning":"detailed 50-word analysis: why this stock, technical levels, fundamental backing, sector trend","fundamentals":"PE:x ROE:y% D/E:z — brief fundamental view","technicals":"RSI zone, support/resistance levels, trend direction, 52W position","entry":"₹xxx-₹xxx or specific strike price","target":"₹xxx-₹xxx target range","targetTime":"1-3 days / 1 week / 2 weeks / monthly expiry","stopLoss":"₹xxx SL level","riskLevel":"LOW/MED/HIGH","riskReward":"1:2 / 1:3 etc","maxLoss":"₹xxx per lot if wrong","hedgeSuggestion":"optional hedge: buy xxx as protection"}]
 Include NIFTY or BANKNIFTY if favorable. Be thorough and accurate.`;
 
-    const g = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 4000, timeout: 45000 });
+    const g = await callAI(prompt, { temperature: 0.4, maxOutputTokens: 4000, timeout: 45000 });
     const raw = g.text || '[]';
-    log('OK', `Gemini options recommendations generated (${g.model}), ${raw.length} chars`);
+    log('OK', `Options recommendations generated (${g.source}/${g.model}), ${raw.length} chars`);
     // Robust JSON parsing with multiple fallback strategies
     let recs = [];
     const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
@@ -1058,9 +1175,9 @@ Reply ONLY valid JSON array, NO markdown fences:
 
 Be specific with numbers. Do NOT give generic advice. Give ACTIONABLE picks.`;
 
-    const g = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 8000, timeout: 60000 });
+    const g = await callAI(prompt, { temperature: 0.4, maxOutputTokens: 8000, timeout: 60000 });
     const raw = g.text || '[]';
-    log('OK', `AI Long-Term Picks generated (${g.model}), ${raw.length} chars`);
+    log('OK', `AI Long-Term Picks generated (${g.source}/${g.model}), ${raw.length} chars`);
 
     let picks = [];
     const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
@@ -1138,9 +1255,9 @@ REQUIREMENTS — Be BRUTALLY HONEST:
 Reply ONLY valid JSON, NO markdown fences:
 {"symbol":"${sym}","name":"Full Name","sector":"sector","verdict":"BUY/HOLD/AVOID","confidence":"VERY_HIGH/HIGH/MODERATE/LOW","riskLevel":"LOW/MEDIUM/HIGH/VERY_HIGH","currentPrice":"₹xxx","targetPrice":"₹xxx","timeframe":"x months","stopLoss":"₹xxx","upside":"xx%","downside":"xx%","pe":"xx","sectorPe":"xx","roe":"xx%","debtToEquity":"x.x","dividendYield":"x%","promoterHolding":"xx%","revenueGrowth":"xx%","profitGrowth":"xx%","week52High":"₹xxx","week52Low":"₹xxx","rsiZone":"Oversold/Neutral/Overbought","trend":"Uptrend/Downtrend/Sideways","support":"₹xxx","resistance":"₹xxx","bullCase":"50-word best case scenario","bearCase":"50-word worst case scenario","reasoning":"100-word detailed honest analysis","redFlags":["flag1","flag2"],"positives":["pos1","pos2"],"alternatives":[{"symbol":"ALT1","reason":"why better"},{"symbol":"ALT2","reason":"why better"}]}`;
 
-    const g = await callGemini(prompt, { temperature: 0.3, maxOutputTokens: 4000, timeout: 45000 });
+    const g = await callAI(prompt, { temperature: 0.3, maxOutputTokens: 4000, timeout: 45000 });
     const raw = g.text || '{}';
-    log('OK', `Verify Stock analysis for ${sym} (${g.model}), ${raw.length} chars`);
+    log('OK', `Verify Stock analysis for ${sym} (${g.source}/${g.model}), ${raw.length} chars`);
 
     let analysis = {};
     const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
@@ -1258,9 +1375,9 @@ Report alignment as "X/10 factors aligned" with breakdown.
 Reply ONLY valid JSON array, NO markdown fences:
 [{"symbol":"SYMBOL","direction":"CE/PE","strategy":"Long 23000 PE + Hedge with APR FUT / Naked Long 23200 CE / etc","strategyType":"NAKED_LONG/HEDGED_LONG/ROLLING_STRATEGY","currentPrice":"₹xxx","strikePrice":"Buy xxxx PE/CE","entry":"₹xx-₹xx premium range to buy","target":"₹xx target premium (book profit here)","stopLoss":"₹xx SL on premium","rollLevel":"If profitable, book at ₹xx and roll to xxxx strike","expiry":"weekly/monthly","targetTime":"1-3 days / 1 week","riskReward":"1:2","maxLoss":"₹xxx per lot (premium paid)","lotSize":"lot size","margin":"premium cost per lot","signalAlignment":{"score":7,"total":10,"factors":{"vix":"ALIGNED","pcr":"ALIGNED","fii":"NEUTRAL","trend":"ALIGNED","oi":"ALIGNED","iv":"ALIGNED","maxPain":"NEUTRAL","momentum":"ALIGNED","volume":"MISALIGNED","riskReward":"ALIGNED"},"summary":"7/10 factors aligned — strong setup"},"riskType":"AGGRESSIVE/MODERATE/CONSERVATIVE","reasoning":"80-word analysis: why BUY this option, OI/IV logic, PCR reading, max pain proximity, key levels, rolling plan","hedgeSuggestion":"Buy NIFTY APR FUT at ₹xxxxx as delta hedge (covers xx% of premium risk)","sentiment":"BULLISH/BEARISH/NEUTRAL"}]`;
 
-    const g = await callGemini(prompt, { temperature: 0.4, maxOutputTokens: 8000, timeout: 60000 });
+    const g = await callAI(prompt, { temperature: 0.4, maxOutputTokens: 8000, timeout: 60000 });
     const raw = g.text || '[]';
-    log('OK', `Options Lab generated (${g.model}), ${raw.length} chars, OC:${niftyOC?'live':'none'}`);
+    log('OK', `Options Lab generated (${g.source}/${g.model}), ${raw.length} chars, OC:${niftyOC?'live':'none'}`);
 
     let trades = [];
     const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
@@ -1413,7 +1530,7 @@ app.get('/api/config-status', (req, res) => {
 app.get('/api/gemini-status', async (req, res) => {
   if (!appConfig.geminiKey) return res.json({ ok: false, reason: 'No API key configured' });
   try {
-    const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 10000 });
+    const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 25000 });
     res.json({ ok: true, response: g.text.trim(), model: g.model });
   } catch(e) {
     res.json({ ok: false, reason: e.response?.data?.error?.message || e.message });
@@ -1426,7 +1543,7 @@ app.get('/api/system-health', (req, res) => {
     upstox:    { connected: connectionStatus === 'live', status: connectionStatus, tokenValid: !!accessToken && appConfig.tokenExpiry > now, expiresIn: appConfig.tokenExpiry ? Math.round((appConfig.tokenExpiry - now) / 60000) : 0 },
     zerodha:   { connected: !!zAccessToken, tokenValid: !!zAccessToken && appConfig.zTokenExpiry > now, holdingsCount: zerodhaHoldings.length, positionsCount: zerodhaPositions.length },
     gemini:    { configured: !!appConfig.geminiKey, connected: geminiConnectionOk && !!appConfig.geminiKey && !geminiDisabled, disabled: geminiDisabled, status: geminiDisabled ? 'disconnected' : (geminiConnectionOk ? 'connected' : (appConfig.geminiKey ? 'configured_not_tested' : 'not_configured')), keysCount: getGeminiKeys().length, activeKey: geminiKeyIndex + 1 },
-    vertexAI:  { configured: !!gcpServiceAccount, connected: vertexConnectionOk && !!gcpServiceAccount && !vertexDisabled, disabled: vertexDisabled, projectId: gcpServiceAccount?.project_id || null, clientEmail: gcpServiceAccount?.client_email || null },
+    vertexAI:  { configured: !!gcpServiceAccount, connected: vertexConnectionOk && !!gcpServiceAccount && !vertexDisabled, disabled: vertexDisabled, projectId: gcpServiceAccount?.project_id || null, clientEmail: gcpServiceAccount?.client_email || null, models: GEMINI_MODELS },
     server:    { uptime: Math.round(process.uptime()), memMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024), stocksLoaded: stockUniverse.length, signalsCalc: Object.keys(signalCache).length },
     marketOpen: isMarketOpen(),
     lastUpdate: Object.values(liveStocks)[0]?.lastUpdate || null,
@@ -1457,7 +1574,7 @@ app.post('/api/gemini-test', async (req, res) => {
     const wasDisabled = geminiDisabled;
     appConfig.geminiKey = key;
     geminiDisabled = false; // allow test call even if previously disconnected
-    const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 10000 });
+    const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 25000 });
     appConfig.geminiKey = origKey; // restore
     log('OK', 'Gemini test passed — model: ' + g.model);
     geminiConnectionOk = true;
@@ -1474,11 +1591,11 @@ app.post('/api/vertex-test', async (req, res) => {
   if (!gcpServiceAccount) return res.json({ ok: false, reason: 'No service account configured' });
   try {
     vertexDisabled = false; // allow test call even if previously disconnected
-    const result = await callVertexAI('Reply with just: OK', { maxOutputTokens: 10, timeout: 15000 });
+    const result = await callVertexAI('Reply with just: OK', { maxOutputTokens: 10, timeout: 45000, grounding: false });
     vertexConnectionOk = true;
     vertexDisabled = false; // re-enable on successful connect
-    log('OK', 'Vertex AI test passed');
-    res.json({ ok: true, projectId: gcpServiceAccount.project_id });
+    log('OK', `Vertex AI test passed (${result.model})`);
+    res.json({ ok: true, projectId: gcpServiceAccount.project_id, model: result.model });
   } catch(e) {
     vertexConnectionOk = false;
     log('ERR', 'Vertex AI test failed: ' + (e.message || ''));
@@ -1756,9 +1873,9 @@ Reply ONLY valid JSON array, NO markdown fences:
 
 Be specific, factual, and relevant to current Indian market conditions. Include global events (US Fed, crude oil, China) that impact India.`;
 
-    const g = await callGemini(prompt, { temperature: 0.5, maxOutputTokens: 4000, timeout: 45000 });
+    const g = await callAI(prompt, { temperature: 0.5, maxOutputTokens: 4000, timeout: 45000 });
     const raw = g.text || '[]';
-    log('OK', `Gemini news generated (${g.model}), ${raw.length} chars`);
+    log('OK', `AI news generated (${g.source}/${g.model}), ${raw.length} chars`);
 
     let items = [];
     const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();

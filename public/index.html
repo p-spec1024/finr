@@ -1201,7 +1201,7 @@ tailwind.config = {
               <button class="px-3 py-1.5 rounded-lg bg-[#353534] text-[#d0c6ab] font-bold text-[10px] flex items-center gap-1 active:scale-95 duration-150" onclick="saveSettings()">
                 <span class="material-symbols-outlined text-xs">save</span> Save All
               </button>
-              <button class="px-3 py-1.5 rounded-lg bg-[#ffd60a] text-[#131313] font-bold text-[10px] flex items-center gap-1 active:scale-95 duration-200" onclick="saveSettings()">
+              <button id="connect-all-btn" class="px-3 py-1.5 rounded-lg bg-[#ffd60a] text-[#131313] font-bold text-[10px] flex items-center gap-1 active:scale-95 duration-200" onclick="toggleConnectAll()">
                 <span class="material-symbols-outlined text-xs">link</span> Connect All
               </button>
             </div>
@@ -2867,6 +2867,8 @@ function updateApiStatusDots(health) {
     updateConnectBtn('zerodha-connect-btn', health.zerodha?.connected);
     updateConnectBtn('gemini-connect-btn', health.gemini?.connected);
     updateConnectBtn('vertex-connect-btn', health.vertexAI?.connected);
+    // Update the Connect All / Disconnect All toggle button
+    updateConnectAllBtn(health);
   } catch(e) {}
 }
 
@@ -2910,6 +2912,99 @@ function toggleVertexConnection() {
   const btn = document.getElementById('vertex-connect-btn');
   if (btn && btn.textContent === 'Disconnect') disconnectService('vertex');
   else testVertex();
+}
+
+// Toggle Connect All / Disconnect All based on current button state
+function toggleConnectAll() {
+  const btn = document.getElementById('connect-all-btn');
+  if (btn && btn.dataset.state === 'connected') disconnectAll();
+  else connectAll();
+}
+
+// Update the Connect All button appearance based on how many services are connected
+function updateConnectAllBtn(health) {
+  const btn = document.getElementById('connect-all-btn');
+  if (!btn) return;
+  const connected = [
+    health?.upstox?.connected,
+    health?.zerodha?.connected,
+    health?.gemini?.connected,
+    health?.vertexAI?.connected
+  ].filter(Boolean).length;
+  const icon = btn.querySelector('.material-symbols-outlined');
+  if (connected >= 2) {
+    // At least 2 services connected — show Disconnect All
+    btn.dataset.state = 'connected';
+    btn.className = 'px-3 py-1.5 rounded-lg border border-[#ffb4ab]/30 text-[#ffb4ab] font-bold text-[10px] flex items-center gap-1 active:scale-95 duration-200';
+    if (icon) icon.textContent = 'link_off';
+    btn.lastChild.textContent = ' Disconnect All';
+  } else {
+    // Show Connect All
+    btn.dataset.state = 'disconnected';
+    btn.className = 'px-3 py-1.5 rounded-lg bg-[#ffd60a] text-[#131313] font-bold text-[10px] flex items-center gap-1 active:scale-95 duration-200';
+    if (icon) icon.textContent = 'link';
+    btn.lastChild.textContent = ' Connect All';
+  }
+}
+
+async function connectAll() {
+  const btn = document.getElementById('connect-all-btn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+  toast('Saving settings & connecting all services...');
+  // Save settings first
+  await saveSettings();
+  await new Promise(r => setTimeout(r, 300));
+  // Connect all 4 services in parallel
+  const results = [];
+  const tasks = [];
+  // Upstox
+  if (document.getElementById('ak')?.value || document.getElementById('as')?.value) {
+    tasks.push(fetch('/api/upstox-test').then(x=>x.json()).then(r => results.push({service:'Upstox', ok:r.ok, msg:r.ok?'Connected':'Not authenticated'})).catch(()=>results.push({service:'Upstox',ok:false,msg:'Error'})));
+  }
+  // Zerodha
+  if (document.getElementById('zk')?.value || document.getElementById('zs')?.value) {
+    tasks.push(fetch('/api/zerodha-refresh').then(x=>x.json()).then(r => results.push({service:'Zerodha', ok:r.ok, msg:r.ok?'Connected':'Not authenticated'})).catch(()=>results.push({service:'Zerodha',ok:false,msg:'Error'})));
+  }
+  // Gemini
+  const gk = document.getElementById('gk')?.value;
+  if (gk) {
+    tasks.push(fetch('/api/gemini-test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:gk})}).then(x=>x.json()).then(r => {
+      const el = document.getElementById('gemini-test-result');
+      if (r.ok) { if(el) el.innerHTML='<span class="text-[#47e266]">Connected — '+r.model+'</span>'; results.push({service:'Gemini',ok:true,msg:r.model}); }
+      else { if(el) el.innerHTML='<span class="text-[#ffb4ab]">'+r.reason+'</span>'; results.push({service:'Gemini',ok:false,msg:r.reason}); }
+    }).catch(()=>results.push({service:'Gemini',ok:false,msg:'Error'})));
+  }
+  // Vertex AI
+  const vtx = document.getElementById('vertex-sa-json')?.value?.trim();
+  tasks.push((async()=>{
+    if (vtx) { const saved = await saveVertex(true); if(!saved) { results.push({service:'Vertex AI',ok:false,msg:'Save failed'}); return; } }
+    const r = await fetch('/api/vertex-test',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(x=>x.json());
+    const el = document.getElementById('vertex-test-result');
+    if (r.ok) { if(el) el.innerHTML='<span class="text-[#47e266]">Connected · Project: '+r.projectId+'</span>'; results.push({service:'Vertex AI',ok:true,msg:r.projectId}); }
+    else { if(el) el.innerHTML='<span class="text-[#ffb4ab]">'+r.reason+'</span>'; results.push({service:'Vertex AI',ok:false,msg:r.reason}); }
+  })());
+  await Promise.allSettled(tasks);
+  await fetchStatus();
+  if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  const ok = results.filter(r=>r.ok).length;
+  const fail = results.filter(r=>!r.ok).length;
+  if (ok && !fail) toast('All ' + ok + ' services connected!');
+  else if (ok && fail) toast(ok + ' connected, ' + fail + ' failed');
+  else if (fail) toast('Connection failed for ' + fail + ' service(s)');
+  else toast('No services configured to connect');
+}
+
+async function disconnectAll() {
+  const btn = document.getElementById('connect-all-btn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+  toast('Disconnecting all services...');
+  const services = ['upstox', 'zerodha', 'gemini', 'vertex'];
+  await Promise.allSettled(services.map(s =>
+    fetch('/api/disconnect', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({service:s})}).then(x=>x.json()).catch(()=>({ok:false}))
+  ));
+  await fetchStatus();
+  if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  toast('All services disconnected');
 }
 
 async function loadAiTrackingData() {
