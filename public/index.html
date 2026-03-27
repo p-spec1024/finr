@@ -650,7 +650,7 @@ tailwind.config = {
                 </div>
                 <div class="flex items-center gap-2">
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="fii-ts"></span>
-                  <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="event.stopPropagation();renderHomeFiiDii();updateFiiPeek();toast('Flows refreshed')" title="Refresh Flows">
+                  <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="event.stopPropagation();refreshFiiDii()" title="Refresh Flows">
                     <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
                   </button>
                   <span class="material-symbols-outlined dash-card-chevron text-[#d0c6ab]" style="font-size:18px">expand_more</span>
@@ -1986,6 +1986,27 @@ function toggleNewsDetail(i) { openNewsModal(i); }
 // ══════════════════════════════════════════════════════════
 // FII/DII
 // ══════════════════════════════════════════════════════════
+async function refreshFiiDii() {
+  toast('Fetching latest FII/DII from NSE...');
+  try {
+    const r = await fetch('/api/fii-dii/refresh').then(x=>x.json());
+    if (r.ok && r.data) {
+      FIIDII.fii = r.data.fii;
+      FIIDII.dii = r.data.dii;
+      if (r.data.usdInr) FIIDII.usdInr = r.data.usdInr;
+      if (r.data.crude) FIIDII.crude = r.data.crude;
+      renderHomeFiiDii(); updateFiiPeek();
+      toast(r.data.source === 'NSE India (fiidiiTradeReact)' ? `FII/DII updated (${r.data.dataDate})` : 'Flows refreshed');
+    } else {
+      renderHomeFiiDii(); updateFiiPeek();
+      toast(r.message || 'Flows refreshed (cached)');
+    }
+  } catch(e) {
+    renderHomeFiiDii(); updateFiiPeek();
+    toast('Flows refreshed');
+  }
+}
+
 function renderHomeFiiDii() {
   const el = document.getElementById('home-fii-dii');
   if (!el) return;

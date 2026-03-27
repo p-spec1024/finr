@@ -135,6 +135,181 @@ function stopTwelveDataPolling() {
   log('INFO', 'Twelve Data polling stopped');
 }
 
+// ── NSE FII/DII Real Data Fetcher ────────────────────────────────────────────
+const https = require('https');
+let nseCookies = '';
+let nseCookieExpiry = 0;
+let fiiDiiInterval = null;
+let lastFiiDiiDate = '';
+
+const NSE_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Referer': 'https://www.nseindia.com/report-detail/eq_security',
+  'Connection': 'keep-alive'
+};
+
+function nseRequest(urlPath) {
+  return new Promise((resolve, reject) => {
+    const opts = {
+      hostname: 'www.nseindia.com',
+      path: urlPath,
+      method: 'GET',
+      headers: { ...NSE_HEADERS, ...(nseCookies ? { Cookie: nseCookies } : {}) },
+      timeout: 15000
+    };
+    const req = https.request(opts, (res) => {
+      // Capture cookies
+      if (res.headers['set-cookie']) {
+        nseCookies = res.headers['set-cookie'].map(c => c.split(';')[0]).join('; ');
+        nseCookieExpiry = Date.now() + 4 * 60 * 1000; // 4 min expiry
+      }
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        resolve({ redirect: res.headers.location });
+        res.resume();
+        return;
+      }
+      // Handle gzip
+      let stream = res;
+      if (res.headers['content-encoding'] === 'gzip') {
+        const zlib = require('zlib');
+        stream = res.pipe(zlib.createGunzip());
+      } else if (res.headers['content-encoding'] === 'br') {
+        const zlib = require('zlib');
+        stream = res.pipe(zlib.createBrotliDecompress());
+      }
+      let body = '';
+      stream.on('data', d => body += d);
+      stream.on('end', () => {
+        if (res.statusCode !== 200) { reject(new Error(`NSE HTTP ${res.statusCode}`)); return; }
+        try { resolve(JSON.parse(body)); } catch(e) { reject(new Error('NSE JSON parse failed')); }
+      });
+      stream.on('error', reject);
+    });
+    req.on('timeout', () => { req.destroy(); reject(new Error('NSE request timeout')); });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+async function getNseCookies() {
+  if (nseCookies && Date.now() < nseCookieExpiry) return true;
+  try {
+    await new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: 'www.nseindia.com',
+        path: '/reports/fii-dii',
+        method: 'GET',
+        headers: { ...NSE_HEADERS, Accept: 'text/html' },
+        timeout: 15000
+      }, (res) => {
+        if (res.headers['set-cookie']) {
+          nseCookies = res.headers['set-cookie'].map(c => c.split(';')[0]).join('; ');
+          nseCookieExpiry = Date.now() + 4 * 60 * 1000;
+        }
+        res.resume();
+        res.on('end', resolve);
+      });
+      req.on('timeout', () => { req.destroy(); reject(new Error('NSE cookie timeout')); });
+      req.on('error', reject);
+      req.end();
+    });
+    return !!nseCookies;
+  } catch(e) {
+    log('WARN', `NSE cookie fetch failed: ${e.message}`);
+    return false;
+  }
+}
+
+async function fetchNseFiiDii() {
+  try {
+    // Step 1: Ensure we have valid NSE session cookies
+    const hasCookies = await getNseCookies();
+    if (!hasCookies) { log('WARN', 'NSE FII/DII: No cookies, skipping'); return false; }
+
+    // Step 2: Fetch FII/DII data
+    const data = await nseRequest('/api/fiidiiTradeReact');
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      log('WARN', 'NSE FII/DII: Empty or invalid response');
+      return false;
+    }
+
+    // Step 3: Parse FII and DII net values
+    // NSE response format: [{ category: "FII/FPI *", date: "27-Mar-2026", buyValue: "12345.67", sellValue: "14567.89", netValue: "-2222.22" }, ...]
+    let fiiNet = null, diiNet = null, dataDate = '';
+
+    for (const row of data) {
+      const cat = (row.category || '').toUpperCase();
+      if (cat.includes('FII') || cat.includes('FPI')) {
+        fiiNet = parseFloat(String(row.netValue || '0').replace(/,/g, ''));
+        dataDate = row.date || '';
+      } else if (cat.includes('DII')) {
+        diiNet = parseFloat(String(row.netValue || '0').replace(/,/g, ''));
+        if (!dataDate) dataDate = row.date || '';
+      }
+    }
+
+    if (fiiNet !== null) {
+      fiiDiiData.fii = Math.round(fiiNet);  // in Crores
+      lastFiiDiiDate = dataDate;
+    }
+    if (diiNet !== null) {
+      fiiDiiData.dii = Math.round(diiNet);  // in Crores
+    }
+
+    log('OK', `NSE FII/DII updated: FII=₹${fiiDiiData.fii}Cr DII=₹${fiiDiiData.dii}Cr (${dataDate})`);
+    broadcastLiveData();
+    return true;
+  } catch(e) {
+    log('WARN', `NSE FII/DII fetch failed: ${e.message}`);
+    return false;
+  }
+}
+
+// Also fetch VIX from NSE when Upstox is not connected
+async function fetchNseVix() {
+  try {
+    const hasCookies = await getNseCookies();
+    if (!hasCookies) return false;
+    const data = await nseRequest('/api/allIndices');
+    if (!data || !data.data) return false;
+    const vixEntry = data.data.find(d => (d.index||'').toUpperCase().includes('VIX'));
+    if (vixEntry) {
+      const val = parseFloat(vixEntry.last || vixEntry.indexValue || 0);
+      const chg = parseFloat(vixEntry.percentChange || 0);
+      if (val > 0) {
+        vixData.value = +val.toFixed(2);
+        vixData.change = +chg.toFixed(2);
+        vixData.trend = chg > 0.5 ? 'rising' : chg < -0.5 ? 'falling' : 'stable';
+        log('OK', `NSE VIX updated: ${vixData.value} (${vixData.trend})`);
+        return true;
+      }
+    }
+    return false;
+  } catch(e) {
+    log('WARN', `NSE VIX fetch failed: ${e.message}`);
+    return false;
+  }
+}
+
+function startFiiDiiPolling() {
+  if (fiiDiiInterval) return;
+  // Fetch immediately, then every 15 min during market hours, 30 min post-market
+  fetchNseFiiDii();
+  if (connectionStatus !== 'connected') fetchNseVix(); // VIX from NSE only if Upstox not connected
+  fiiDiiInterval = setInterval(async () => {
+    await fetchNseFiiDii();
+    if (connectionStatus !== 'connected') await fetchNseVix();
+  }, isMarketOpen() ? 15 * 60 * 1000 : 30 * 60 * 1000);
+  log('OK', `NSE FII/DII polling started (every ${isMarketOpen() ? 15 : 30} min)`);
+}
+
+function stopFiiDiiPolling() {
+  if (fiiDiiInterval) { clearInterval(fiiDiiInterval); fiiDiiInterval = null; }
+}
+
 // ── Option Chain Fetcher (Upstox v2) ─────────────────────────────────────────
 const OC_CACHE_MS = 5 * 60 * 1000; // 5 min cache for option chain
 
@@ -1843,8 +2018,27 @@ app.get('/api/fii-dii', (req, res) => {
     vix:    vixData.value,
     vixTrend: vixData.trend,
     marketOpen: isMarketOpen(),
-    note: 'Intraday simulated values — replace with NSE/BSE data API for live'
+    dataDate: lastFiiDiiDate || null,
+    source: lastFiiDiiDate ? 'NSE India (fiidiiTradeReact)' : 'default'
   });
+});
+
+app.get('/api/fii-dii/refresh', async (req, res) => {
+  try {
+    const ok = await fetchNseFiiDii();
+    res.json({
+      ok,
+      data: {
+        fii: fiiDiiData.fii, dii: fiiDiiData.dii,
+        usdInr: fiiDiiData.usdInr, crude: fiiDiiData.crude,
+        dataDate: lastFiiDiiDate || null,
+        source: lastFiiDiiDate ? 'NSE India (fiidiiTradeReact)' : 'default'
+      },
+      message: ok ? 'FII/DII refreshed from NSE' : 'NSE fetch failed, using cached data'
+    });
+  } catch(e) {
+    res.json({ ok: false, data: { fii: fiiDiiData.fii, dii: fiiDiiData.dii, usdInr: fiiDiiData.usdInr, crude: fiiDiiData.crude }, message: e.message });
+  }
 });
 
 app.get('/api/market-context', (req, res) => {
@@ -2976,19 +3170,17 @@ function startMockTicks() {
         d.changePct = +((d.change / base) * 100).toFixed(2);
       }
 
-      // Simulate VIX micro-moves
-      const vixDelta = (Math.random() - 0.5) * 0.05;
-      vixData.value = +Math.max(10, Math.min(40, vixData.value + vixDelta)).toFixed(2);
-      vixData.change = +vixDelta.toFixed(2);
-      vixData.trend = vixDelta > 0.02 ? 'rising' : vixDelta < -0.02 ? 'falling' : 'stable';
+      // VIX micro-moves ONLY if Upstox not connected (real VIX comes from Upstox/NSE)
+      if (connectionStatus !== 'connected') {
+        const vixDelta = (Math.random() - 0.5) * 0.05;
+        vixData.value = +Math.max(10, Math.min(40, vixData.value + vixDelta)).toFixed(2);
+        vixData.change = +vixDelta.toFixed(2);
+        vixData.trend = vixDelta > 0.02 ? 'rising' : vixDelta < -0.02 ? 'falling' : 'stable';
+      }
 
-      // Simulate FII/DII flow — trickles in through trading day
-      if (tickCount % 30 === 0) {
-        const fiiTick = Math.round((Math.random() - 0.55) * 200); // slight selling bias
-        const diiTick = Math.round((Math.random() - 0.45) * 250); // slight buying bias
-        fiiDiiData.fii = +(fiiDiiData.fii + fiiTick).toFixed(0);
-        fiiDiiData.dii = +(fiiDiiData.dii + Math.abs(diiTick)).toFixed(0);
-        // Crude and INR micro-moves
+      // FII/DII: NO more random simulation — real data comes from NSE API polling
+      // Only update crude/USD-INR if Twelve Data is not providing them
+      if (!globalMarkets.USDINR && tickCount % 30 === 0) {
         fiiDiiData.crude = +Math.max(55, Math.min(95, fiiDiiData.crude + (Math.random()-0.5)*0.3)).toFixed(1);
         fiiDiiData.usdInr = +Math.max(82, Math.min(90, fiiDiiData.usdInr + (Math.random()-0.5)*0.04)).toFixed(2);
       }
@@ -3026,6 +3218,8 @@ async function initLiveData() {
   } else {
     log('INFO', 'Market closed — serving frozen base prices (no mock ticks)');
   }
+  // Always start NSE FII/DII real data polling (works independently of Upstox)
+  startFiiDiiPolling();
   log('OK', `Live data initialized — ${stockUniverse.length} stocks`);
 }
 
