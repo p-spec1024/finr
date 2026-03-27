@@ -1276,7 +1276,10 @@ tailwind.config = {
               </div>
               <div class="api-card-body" style="max-height:0;overflow:hidden;opacity:0;transition:max-height 0.25s ease,opacity 0.2s ease;">
                 <div class="px-4 pb-3 space-y-2">
-                  <div class="space-y-1"><label class="text-[10px] font-bold text-[#d0c6ab] ml-1 uppercase tracking-tight">API Key</label><input id="gk" type="password" class="w-full bg-[#242426] border-none rounded-lg text-xs py-2.5 px-3 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none" placeholder="AIzaSy..."></div>
+                  <div class="space-y-1"><label class="text-[10px] font-bold text-[#d0c6ab] ml-1 uppercase tracking-tight">API Key (Primary)</label><input id="gk" type="password" class="w-full bg-[#242426] border-none rounded-lg text-xs py-2.5 px-3 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none" placeholder="AIzaSy... (Project 1)"></div>
+                  <div class="space-y-1"><label class="text-[10px] font-bold text-[#d0c6ab] ml-1 uppercase tracking-tight">API Key 2 (Backup)</label><input id="gk2" type="password" class="w-full bg-[#242426] border-none rounded-lg text-xs py-2.5 px-3 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none" placeholder="AIzaSy... (Project 2 — optional)"></div>
+                  <div class="space-y-1"><label class="text-[10px] font-bold text-[#d0c6ab] ml-1 uppercase tracking-tight">API Key 3 (Backup)</label><input id="gk3" type="password" class="w-full bg-[#242426] border-none rounded-lg text-xs py-2.5 px-3 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none" placeholder="AIzaSy... (Project 3 — optional)"></div>
+                  <p class="text-[9px] text-[#636366]">Auto-rotates to next key when quota is exhausted</p>
                   <div id="gemini-test-result" class="font-mono text-[10px] text-[#d0c6ab]"></div>
                   <button class="w-full py-1.5 rounded-lg bg-[#353534] text-[#d0c6ab] text-[10px] font-bold mt-1" onclick="saveSettings()">Save</button>
                 </div>
@@ -2951,6 +2954,8 @@ async function saveSettings() {
   const zs = document.getElementById('zs').value.trim();
   const zc = document.getElementById('zc').value.trim();
   const gk = document.getElementById('gk').value.trim();
+  const gk2 = document.getElementById('gk2').value.trim();
+  const gk3 = document.getElementById('gk3').value.trim();
   if (uk) settings.apiKey = uk;
   if (us) settings.apiSecret = us;
   if (uc) settings.redirectUri = uc;
@@ -2958,6 +2963,8 @@ async function saveSettings() {
   if (zs) settings.zApiSecret = zs;
   if (zc) settings.zRedirectUri = zc;
   if (gk) settings.geminiKey = gk;
+  if (gk2) settings.geminiKey2 = gk2;
+  if (gk3) settings.geminiKey3 = gk3;
   if (!Object.keys(settings).length) { toast('No settings to save'); return; }
   try {
     const r = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(settings)});
@@ -3103,7 +3110,7 @@ async function loadHealth() {
     const items = [];
     if (d.upstox) items.push({name:'Upstox WebSocket',detail:d.upstox.connected?'Connected':'Disconnected',status:d.upstox.connected?'ok':'err'});
     if (d.zerodha) items.push({name:'Zerodha Auth Flow',detail:d.zerodha.connected?`Holdings: ${d.zerodha.holdingsCount}`:'Not connected',status:d.zerodha.connected?'ok':'err'});
-    if (d.gemini) items.push({name:'Gemini Engine',detail:d.gemini.connected?'Connected':d.gemini.status,status:d.gemini.connected?'ok':'err'});
+    if (d.gemini) items.push({name:'Gemini Engine',detail:d.gemini.connected?`Connected · ${d.gemini.keysCount||1} key${(d.gemini.keysCount||1)>1?'s':''} (using #${d.gemini.activeKey||1})`:d.gemini.status,status:d.gemini.connected?'ok':'err'});
     if (d.vertexAI) items.push({name:'Vertex AI',detail:d.vertexAI.connected?`Connected · ${(d.vertexAI.clientEmail||'').split('@')[0]}`:d.vertexAI.configured?'Configured, not verified':'Not configured',status:d.vertexAI.connected?'ok':'err'});
     if (d.server) items.push({name:'Main Server (Railway)',detail:`Uptime: ${Math.round(d.server.uptime/60)}min · ${d.server.memMB}MB`,status:'ok'});
     items.push({name:'Market',detail:d.marketOpen?'Open':'Closed',status:d.marketOpen?'ok':'warn'});

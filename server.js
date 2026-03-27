@@ -323,6 +323,8 @@ function loadConfig() {
   if (process.env.UPSTOX_REDIRECT)   appConfig.redirectUri   = process.env.UPSTOX_REDIRECT.trim();
   if (process.env.FINR_PIN)          appConfig.pin           = hash(process.env.FINR_PIN.trim());
   if (process.env.GEMINI_API_KEY)    appConfig.geminiKey     = process.env.GEMINI_API_KEY.trim();
+  if (process.env.GEMINI_API_KEY_2)  appConfig.geminiKey2    = process.env.GEMINI_API_KEY_2.trim();
+  if (process.env.GEMINI_API_KEY_3)  appConfig.geminiKey3    = process.env.GEMINI_API_KEY_3.trim();
   if (process.env.ZERODHA_API_KEY)   appConfig.zApiKey       = process.env.ZERODHA_API_KEY.trim();
   if (process.env.ZERODHA_API_SECRET) appConfig.zApiSecret   = process.env.ZERODHA_API_SECRET.trim();
   if (process.env.TWELVE_DATA_API_KEY) appConfig.twelveDataKey = process.env.TWELVE_DATA_API_KEY.trim();
@@ -491,27 +493,52 @@ function groupTradesToStrategies(orders) {
 // GEMINI AI — HELPER WITH MODEL FALLBACK
 // ══════════════════════════════════════════════════════════════════════════════
 const GEMINI_MODELS = ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+
+// Multi-key rotation: primary key + up to 2 backup keys from different GCP projects
+function getGeminiKeys() {
+  const keys = [];
+  if (appConfig.geminiKey) keys.push(appConfig.geminiKey);
+  if (appConfig.geminiKey2) keys.push(appConfig.geminiKey2);
+  if (appConfig.geminiKey3) keys.push(appConfig.geminiKey3);
+  return keys;
+}
+let geminiKeyIndex = 0; // tracks which key to try first (rotates on 429)
+
 async function callGemini(prompt, opts = {}) {
   const { temperature = 0.3, maxOutputTokens = 1000, timeout = 30000 } = opts;
-  for (let i = 0; i < GEMINI_MODELS.length; i++) {
-    const model = GEMINI_MODELS[i];
-    try {
-      const r = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${appConfig.geminiKey}`,
-        { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature, maxOutputTokens } },
-        { headers: { 'Content-Type': 'application/json' }, timeout }
-      );
-      const text = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      return { text, model };
-    } catch (e) {
-      const status = e.response?.status;
-      if ((status === 429 || status === 404) && i < GEMINI_MODELS.length - 1) {
-        log('WARN', `Gemini ${model} ${status === 429 ? 'rate limited' : 'not found'} (${status}) — falling back to ${GEMINI_MODELS[i+1]}`);
-        continue;
+  const keys = getGeminiKeys();
+  if (!keys.length) throw new Error('No Gemini API keys configured');
+  // Try each key, and for each key try each model
+  const startKeyIdx = geminiKeyIndex % keys.length;
+  for (let k = 0; k < keys.length; k++) {
+    const keyIdx = (startKeyIdx + k) % keys.length;
+    const key = keys[keyIdx];
+    for (let i = 0; i < GEMINI_MODELS.length; i++) {
+      const model = GEMINI_MODELS[i];
+      try {
+        const r = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+          { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature, maxOutputTokens } },
+          { headers: { 'Content-Type': 'application/json' }, timeout }
+        );
+        const text = r.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        geminiKeyIndex = keyIdx; // stick with this key for next call
+        return { text, model, keySlot: keyIdx + 1 };
+      } catch (e) {
+        const status = e.response?.status;
+        if (status === 404 && i < GEMINI_MODELS.length - 1) {
+          log('WARN', `Gemini ${model} not found (404) — trying next model`);
+          continue;
+        }
+        if (status === 429) {
+          log('WARN', `Gemini key #${keyIdx+1} rate limited on ${model} — ${k < keys.length-1 ? 'rotating to next key' : 'all keys exhausted, trying next model'}`);
+          break; // try next key
+        }
+        throw e;
       }
-      throw e;
     }
   }
+  throw new Error('All Gemini API keys exhausted (429 on all keys/models)');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1336,7 +1363,7 @@ app.post('/api/trades/import-csv', (req, res) => {
 // SETTINGS & CONFIG APIs
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/api/settings', (req, res) => {
-  const { apiKey, apiSecret, pin, redirectUri, geminiKey, zApiKey, zApiSecret, zRedirectUri } = req.body;
+  const { apiKey, apiSecret, pin, redirectUri, geminiKey, geminiKey2, geminiKey3, zApiKey, zApiSecret, zRedirectUri } = req.body;
   // Allow partial saves — only update fields that are provided
   if (pin) {
     if (!/^\d{4}$/.test(pin)) return res.status(400).json({ error: 'PIN must be 4 digits' });
@@ -1346,6 +1373,8 @@ app.post('/api/settings', (req, res) => {
   if (apiSecret)    appConfig.apiSecret   = apiSecret.trim();
   if (redirectUri)  appConfig.redirectUri  = redirectUri.trim();
   if (geminiKey)    appConfig.geminiKey    = geminiKey.trim();
+  if (geminiKey2)   appConfig.geminiKey2   = geminiKey2.trim();
+  if (geminiKey3)   appConfig.geminiKey3   = geminiKey3.trim();
   if (zApiKey)      appConfig.zApiKey      = zApiKey.trim();
   if (zApiSecret)   appConfig.zApiSecret   = zApiSecret.trim();
   if (zRedirectUri) appConfig.zRedirectUri = zRedirectUri.trim();
@@ -1391,7 +1420,7 @@ app.get('/api/system-health', (req, res) => {
   res.json({
     upstox:    { connected: connectionStatus === 'live', status: connectionStatus, tokenValid: !!accessToken && appConfig.tokenExpiry > now, expiresIn: appConfig.tokenExpiry ? Math.round((appConfig.tokenExpiry - now) / 60000) : 0 },
     zerodha:   { connected: !!zAccessToken, tokenValid: !!zAccessToken && appConfig.zTokenExpiry > now, holdingsCount: zerodhaHoldings.length, positionsCount: zerodhaPositions.length },
-    gemini:    { configured: !!appConfig.geminiKey, connected: geminiConnectionOk && !!appConfig.geminiKey, status: geminiConnectionOk ? 'connected' : (appConfig.geminiKey ? 'configured_not_tested' : 'not_configured') },
+    gemini:    { configured: !!appConfig.geminiKey, connected: geminiConnectionOk && !!appConfig.geminiKey, status: geminiConnectionOk ? 'connected' : (appConfig.geminiKey ? 'configured_not_tested' : 'not_configured'), keysCount: getGeminiKeys().length, activeKey: geminiKeyIndex + 1 },
     vertexAI:  { configured: !!gcpServiceAccount, connected: vertexConnectionOk && !!gcpServiceAccount, projectId: gcpServiceAccount?.project_id || null, clientEmail: gcpServiceAccount?.client_email || null },
     server:    { uptime: Math.round(process.uptime()), memMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024), stocksLoaded: stockUniverse.length, signalsCalc: Object.keys(signalCache).length },
     marketOpen: isMarketOpen(),
