@@ -505,16 +505,18 @@ function getGeminiKeys() {
 let geminiKeyIndex = 0; // tracks which key to try first (rotates on 429)
 
 async function callGemini(prompt, opts = {}) {
+  if (geminiDisabled) throw new Error('Gemini AI is disconnected by user');
   const { temperature = 0.3, maxOutputTokens = 1000, timeout = 30000 } = opts;
   const keys = getGeminiKeys();
   if (!keys.length) throw new Error('No Gemini API keys configured');
-  // Try each key, and for each key try each model
+  // Priority: try best model across ALL keys first, then fall back to next model
+  // Key1(3.0) → Key2(3.0) → Key3(3.0) → Key1(2.5) → Key2(2.5) → Key3(2.5) → Key1(2.0) → ...
   const startKeyIdx = geminiKeyIndex % keys.length;
-  for (let k = 0; k < keys.length; k++) {
-    const keyIdx = (startKeyIdx + k) % keys.length;
-    const key = keys[keyIdx];
-    for (let i = 0; i < GEMINI_MODELS.length; i++) {
-      const model = GEMINI_MODELS[i];
+  for (let m = 0; m < GEMINI_MODELS.length; m++) {
+    const model = GEMINI_MODELS[m];
+    for (let k = 0; k < keys.length; k++) {
+      const keyIdx = (startKeyIdx + k) % keys.length;
+      const key = keys[keyIdx];
       try {
         const r = await axios.post(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
@@ -526,13 +528,13 @@ async function callGemini(prompt, opts = {}) {
         return { text, model, keySlot: keyIdx + 1 };
       } catch (e) {
         const status = e.response?.status;
-        if (status === 404 && i < GEMINI_MODELS.length - 1) {
-          log('WARN', `Gemini ${model} not found (404) — trying next model`);
-          continue;
-        }
         if (status === 429) {
-          log('WARN', `Gemini key #${keyIdx+1} rate limited on ${model} — ${k < keys.length-1 ? 'rotating to next key' : 'all keys exhausted, trying next model'}`);
-          break; // try next key
+          log('WARN', `Gemini key #${keyIdx+1} rate limited on ${model} — ${k < keys.length-1 ? 'trying next key' : 'all keys exhausted on ' + model + ', falling back to next model'}`);
+          continue; // try next key for same model
+        }
+        if (status === 404) {
+          log('WARN', `Gemini ${model} not found (404) on key #${keyIdx+1} — skipping model`);
+          break; // skip to next model (404 means model doesn't exist, same for all keys)
         }
         throw e;
       }
@@ -548,7 +550,9 @@ const nodeCrypto = require('crypto');
 const GCP_SA_PATH = path.join(__dirname, '.gcp-service-account.json');
 let gcpServiceAccount = null;
 let geminiConnectionOk = false;
+let geminiDisabled = false; // user manually disconnected
 let vertexConnectionOk = false;
+let vertexDisabled = false; // user manually disconnected
 let vertexAccessToken = null;
 let vertexTokenExpiry = 0;
 
@@ -594,7 +598,8 @@ async function getVertexAccessToken() {
 }
 
 async function callVertexAI(prompt, opts = {}) {
-  const { temperature = 0.3, maxOutputTokens = 2000, timeout = 60000, grounding = true, model = 'gemini-2.0-flash' } = opts;
+  if (vertexDisabled) throw new Error('Vertex AI is disconnected by user');
+  const { temperature = 0.3, maxOutputTokens = 2000, timeout = 60000, grounding = true, model = 'gemini-3-flash-preview' } = opts;
   const token = await getVertexAccessToken();
   const projectId = gcpServiceAccount.project_id;
   const url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${projectId}/locations/us-central1/publishers/google/models/${model}:generateContent`;
@@ -1420,8 +1425,8 @@ app.get('/api/system-health', (req, res) => {
   res.json({
     upstox:    { connected: connectionStatus === 'live', status: connectionStatus, tokenValid: !!accessToken && appConfig.tokenExpiry > now, expiresIn: appConfig.tokenExpiry ? Math.round((appConfig.tokenExpiry - now) / 60000) : 0 },
     zerodha:   { connected: !!zAccessToken, tokenValid: !!zAccessToken && appConfig.zTokenExpiry > now, holdingsCount: zerodhaHoldings.length, positionsCount: zerodhaPositions.length },
-    gemini:    { configured: !!appConfig.geminiKey, connected: geminiConnectionOk && !!appConfig.geminiKey, status: geminiConnectionOk ? 'connected' : (appConfig.geminiKey ? 'configured_not_tested' : 'not_configured'), keysCount: getGeminiKeys().length, activeKey: geminiKeyIndex + 1 },
-    vertexAI:  { configured: !!gcpServiceAccount, connected: vertexConnectionOk && !!gcpServiceAccount, projectId: gcpServiceAccount?.project_id || null, clientEmail: gcpServiceAccount?.client_email || null },
+    gemini:    { configured: !!appConfig.geminiKey, connected: geminiConnectionOk && !!appConfig.geminiKey && !geminiDisabled, disabled: geminiDisabled, status: geminiDisabled ? 'disconnected' : (geminiConnectionOk ? 'connected' : (appConfig.geminiKey ? 'configured_not_tested' : 'not_configured')), keysCount: getGeminiKeys().length, activeKey: geminiKeyIndex + 1 },
+    vertexAI:  { configured: !!gcpServiceAccount, connected: vertexConnectionOk && !!gcpServiceAccount && !vertexDisabled, disabled: vertexDisabled, projectId: gcpServiceAccount?.project_id || null, clientEmail: gcpServiceAccount?.client_email || null },
     server:    { uptime: Math.round(process.uptime()), memMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024), stocksLoaded: stockUniverse.length, signalsCalc: Object.keys(signalCache).length },
     marketOpen: isMarketOpen(),
     lastUpdate: Object.values(liveStocks)[0]?.lastUpdate || null,
@@ -1447,13 +1452,16 @@ app.post('/api/gemini-test', async (req, res) => {
   const key = req.body.key || appConfig.geminiKey;
   if (!key) return res.json({ ok: false, reason: 'No API key' });
   try {
-    // Temporarily use the provided key
+    // Temporarily use the provided key and clear disabled flag for test
     const origKey = appConfig.geminiKey;
+    const wasDisabled = geminiDisabled;
     appConfig.geminiKey = key;
+    geminiDisabled = false; // allow test call even if previously disconnected
     const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 10000 });
     appConfig.geminiKey = origKey; // restore
     log('OK', 'Gemini test passed — model: ' + g.model);
     geminiConnectionOk = true;
+    geminiDisabled = false; // re-enable on successful connect
     res.json({ ok: true, model: g.model });
   } catch(e) {
     geminiConnectionOk = false;
@@ -1465,8 +1473,10 @@ app.post('/api/gemini-test', async (req, res) => {
 app.post('/api/vertex-test', async (req, res) => {
   if (!gcpServiceAccount) return res.json({ ok: false, reason: 'No service account configured' });
   try {
+    vertexDisabled = false; // allow test call even if previously disconnected
     const result = await callVertexAI('Reply with just: OK', { maxOutputTokens: 10, timeout: 15000 });
     vertexConnectionOk = true;
+    vertexDisabled = false; // re-enable on successful connect
     log('OK', 'Vertex AI test passed');
     res.json({ ok: true, projectId: gcpServiceAccount.project_id });
   } catch(e) {
@@ -1515,10 +1525,12 @@ app.post('/api/disconnect', (req, res) => {
       return res.json({ ok: true, service: 'zerodha' });
     case 'gemini':
       geminiConnectionOk = false;
+      geminiDisabled = true;
       log('WARN', 'Gemini AI disconnected by user');
       return res.json({ ok: true, service: 'gemini' });
     case 'vertex':
       vertexConnectionOk = false;
+      vertexDisabled = true;
       vertexAccessToken = null;
       vertexTokenExpiry = 0;
       log('WARN', 'Vertex AI disconnected by user');

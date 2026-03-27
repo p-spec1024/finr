@@ -2855,12 +2855,12 @@ function updateApiStatusDots(health) {
     }
     if (gDot && health.gemini) {
       gDot.className = 'w-2 h-2 rounded-full ' + (health.gemini.connected ? 'bg-[#47e266]' : 'bg-[#ffb4ab]');
-      gDot.title = health.gemini.connected ? 'Connected' : (health.gemini.configured ? 'Key set but not verified' : 'Not configured');
+      gDot.title = health.gemini.connected ? 'Connected' : (health.gemini.disabled ? 'Disconnected by user' : (health.gemini.configured ? 'Key set but not verified' : 'Not configured'));
     }
     if (vDot) {
       const vertexConnected = health.vertexAI && health.vertexAI.connected;
       vDot.className = 'w-2 h-2 rounded-full ' + (vertexConnected ? 'bg-[#47e266]' : 'bg-[#ffb4ab]');
-      vDot.title = vertexConnected ? 'Connected' : (health.vertexAI && health.vertexAI.configured ? 'Configured but not verified' : 'Not configured');
+      vDot.title = vertexConnected ? 'Connected' : (health.vertexAI?.disabled ? 'Disconnected by user' : (health.vertexAI?.configured ? 'Configured but not verified' : 'Not configured'));
     }
     // Update Connect/Disconnect button labels
     updateConnectBtn('upstox-connect-btn', health.upstox?.connected);
