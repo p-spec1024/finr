@@ -72,9 +72,16 @@ const TWELVE_DATA_SYMBOLS = [
   { key: 'NIKKEI',      symbol: 'NI225',      name: 'Nikkei 225',  type: 'Index' },
 ];
 
+// Reliable IST time — works on UTC servers (Vercel/Railway) without toLocaleString parsing bugs
+function getIST() {
+  const utc = new Date();
+  return new Date(utc.getTime() + 5.5 * 60 * 60 * 1000);
+}
+function getISTDay() { return getIST().getUTCDay(); }
+function getISTMins() { const ist = getIST(); return ist.getUTCHours() * 60 + ist.getUTCMinutes(); }
+
 function isPostMarketWindow() {
-  const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const mins = ist.getHours() * 60 + ist.getMinutes();
+  const mins = getISTMins();
   return mins >= 930 && mins < 1440; // 3:30 PM to midnight IST
 }
 
@@ -198,11 +205,11 @@ async function fetchOptionChain(underlying = 'NSE_INDEX|Nifty 50') {
 
 function getNextExpiry() {
   // Get next Thursday (weekly expiry for Nifty/BankNifty)
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const day = now.getDay();
+  const now = getIST();
+  const day = now.getUTCDay();
   const daysToThurs = day <= 4 ? (4 - day) : (4 + 7 - day);
   const expiry = new Date(now);
-  expiry.setDate(now.getDate() + (daysToThurs === 0 && now.getHours() >= 15 ? 7 : daysToThurs));
+  expiry.setUTCDate(now.getUTCDate() + (daysToThurs === 0 && now.getUTCHours() >= 15 ? 7 : daysToThurs));
   return expiry.toISOString().slice(0, 10);
 }
 
@@ -344,9 +351,8 @@ app.use('/api/', rateLimit({ windowMs: 60000, max: 300 }));
 
 // ── Market hours helper ───────────────────────────────────────────────────────
 function isMarketOpen() {
-  const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const day = ist.getDay();
-  const mins = ist.getHours() * 60 + ist.getMinutes();
+  const day = getISTDay();
+  const mins = getISTMins();
   return day >= 1 && day <= 5 && mins >= 555 && mins <= 930;
 }
 
@@ -1861,7 +1867,9 @@ app.get('/api/news', async (req, res) => {
     const topG = Object.values(liveStocks).filter(s=>s.price).sort((a,b)=>b.changePct-a.changePct).slice(0,5).map(s=>`${s.symbol}(${s.changePct>=0?'+':''}${s.changePct.toFixed(1)}%)`).join(',');
     const topL = Object.values(liveStocks).filter(s=>s.price).sort((a,b)=>a.changePct-b.changePct).slice(0,5).map(s=>`${s.symbol}(${s.changePct.toFixed(1)}%)`).join(',');
 
-    const prompt = `You are a senior Indian stock market analyst. Generate exactly 8 of the most important NEWS events happening RIGHT NOW (today/this week) that can impact the Indian stock market (NSE/BSE). These should be REAL current events, not generic advice.
+    const todayIST = getIST();
+    const todayStr = todayIST.toISOString().slice(0, 10);
+    const prompt = `You are a senior Indian stock market analyst. TODAY'S DATE IS ${todayStr}. Generate exactly 8 of the most important NEWS events happening RIGHT NOW (today/this week) that can impact the Indian stock market (NSE/BSE). These should be REAL current events, not generic advice. All dates in your response MUST be from ${todayStr.slice(0,7)} (current month) or very recent.
 
 CURRENT MARKET: Nifty=${nifty?.price||'?'}(${nifty?.changePct>=0?'+':''}${nifty?.changePct||0}%) VIX=${vix} FII=₹${fiiDiiData.fii}Cr DII=₹${fiiDiiData.dii}Cr
 TOP GAINERS: ${topG}
