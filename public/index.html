@@ -495,8 +495,13 @@ tailwind.config = {
               </div>
               <span class="text-[#d0c6ab] font-mono text-[10px] font-medium uppercase tracking-wider" id="h-mkt"></span>
             </div>
-            <!-- Sub-index chips -->
-            <div class="overflow-x-auto no-scrollbar flex gap-3 mt-4 w-full md:justify-start justify-center" id="h-idx"></div>
+            <!-- Intraday Trend Sparkline -->
+            <div class="w-full mt-4 relative" id="h-sparkline-wrap" style="height:80px">
+              <svg id="h-sparkline" width="100%" height="80" preserveAspectRatio="none" viewBox="0 0 400 80" class="rounded-lg overflow-hidden"></svg>
+              <div class="absolute bottom-1 left-2 flex items-center gap-2" id="h-spark-meta">
+                <span class="text-[8px] font-mono text-[#636366]" id="h-spark-range"></span>
+              </div>
+            </div>
           </section>
 
           <!-- Right: Market Prediction Card -->
@@ -540,22 +545,19 @@ tailwind.config = {
               <div class="text-[9px] font-bold text-[#ffd60a] uppercase font-mono tracking-wider mb-1">AI Reasoning</div>
               <p class="text-[10px] text-[#d0c6ab] leading-relaxed" id="pred-detail-reasoning">Analysis loading...</p>
             </div>
-            <!-- Divider + Next Session toggle -->
+            <!-- Divider + Next Session Outlook (clickable to expand like Today's Behavior) -->
             <div class="h-px bg-[#353534] mb-3"></div>
             <div id="pred-next-wrapper">
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider">Next Session Outlook</span>
-                <button class="text-[8px] font-mono px-2 py-0.5 rounded border border-[#4d4632] hover:text-[#ffd60a] hover:border-[#ffd60a] transition-colors active:scale-95" id="pred-next-toggle" onclick="toggleNextSession()" style="color:#d0c6ab">
-                  <span class="material-symbols-outlined text-[10px] align-middle" id="pred-next-toggle-icon">visibility_off</span>
-                  <span id="pred-next-toggle-text">Show</span>
-                </button>
-              </div>
-              <div id="pred-next-body" class="hidden">
-                <div class="flex items-center gap-3 mb-4" id="pred-next">
+              <div class="cursor-pointer rounded-lg hover:bg-[#353534]/20 transition-colors -mx-1 px-1" onclick="toggleNextDetail()">
+                <div class="flex items-center gap-3 mb-1" id="pred-next">
                   <div class="w-12 h-12 rounded-xl flex items-center justify-center" id="pred-next-icon" style="background:rgba(71,226,102,0.1)">
                     <span class="material-symbols-outlined text-[#47e266]" style="font-size:24px">schedule</span>
                   </div>
                   <div class="flex-1">
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider">Next Session Outlook</span>
+                      <span class="material-symbols-outlined text-[#636366] transition-transform" style="font-size:12px" id="pred-next-chevron">expand_more</span>
+                    </div>
                     <div class="text-sm font-bold text-[#e5e2e1] font-headline" id="pred-next-label">Waiting...</div>
                     <div class="text-[10px] text-[#d0c6ab] line-clamp-2 leading-tight mt-0.5" id="pred-next-detail">Available after market analysis</div>
                   </div>
@@ -565,7 +567,16 @@ tailwind.config = {
                   </div>
                 </div>
               </div>
-              <div id="pred-next-hint" class="text-[8px] text-[#636366] italic">Best viewed near market close (after 2:30 PM)</div>
+              <!-- Expandable detail card for next session -->
+              <div id="pred-next-detail-card" class="hidden mb-3 bg-[#0e0e0e] rounded-lg p-3 mt-2 space-y-2" style="animation:fu .2s ease">
+                <div class="text-[9px] font-bold text-[#ffd60a] uppercase font-mono tracking-wider mb-1">Key Catalysts</div>
+                <div id="pred-next-catalysts" class="flex flex-wrap gap-1.5">
+                  <span class="text-[9px] text-[#636366] font-mono">Loading factors...</span>
+                </div>
+                <div class="h-px bg-[#353534] my-2"></div>
+                <div class="text-[9px] font-bold text-[#ffd60a] uppercase font-mono tracking-wider mb-1">AI Reasoning</div>
+                <p class="text-[10px] text-[#d0c6ab] leading-relaxed" id="pred-next-reasoning">Analysis loading...</p>
+              </div>
             </div>
             <!-- Key factors -->
             <div class="flex flex-wrap gap-1.5" id="pred-factors"></div>
@@ -1876,29 +1887,98 @@ async function refreshIndices() {
   }
 }
 
+// ── Sparkline data collector — stores price snapshots per index ──
+const sparkHistory = {}; // { 'NIFTY50': [{t:timestamp, p:price}, ...], ... }
+const SPARK_MAX_POINTS = 60; // Max data points to keep
+
+function collectSparkData(idx) {
+  const data = IDX[INDEX_LABEL_MAP[idx]] || IDX[idx];
+  let price = data?.price;
+  if (!price && idx === 'INDIA_VIX' && VIX && VIX.value) price = VIX.value;
+  if (!price) {
+    const gm = globalMarkets[idx];
+    if (gm) price = gm.price;
+  }
+  if (!price) return;
+  if (!sparkHistory[idx]) sparkHistory[idx] = [];
+  const arr = sparkHistory[idx];
+  const now = Date.now();
+  // Only add if at least 30s since last point (avoid flooding)
+  if (arr.length && (now - arr[arr.length - 1].t) < 30000) return;
+  arr.push({ t: now, p: price });
+  if (arr.length > SPARK_MAX_POINTS) arr.shift();
+}
+
+function renderSparkline(idx) {
+  const svg = document.getElementById('h-sparkline');
+  const metaEl = document.getElementById('h-spark-range');
+  if (!svg) return;
+
+  const pts = sparkHistory[idx] || [];
+  if (pts.length < 2) {
+    // Not enough data — show a gradient placeholder with current price indicator
+    const data = IDX[INDEX_LABEL_MAP[idx]] || IDX[idx];
+    let price = data?.price;
+    if (!price && idx === 'INDIA_VIX' && VIX && VIX.value) price = VIX.value;
+    if (!price) { const gm = globalMarkets[idx]; if (gm) price = gm.price; }
+    const pct = data?.changePct ?? data?.chgPct ?? (globalMarkets[idx]?.changePct) ?? 0;
+    const isUp = pct >= 0;
+    const col = isUp ? '#47e266' : '#ffb4ab';
+    const colFade = isUp ? 'rgba(71,226,102,0.08)' : 'rgba(255,180,171,0.08)';
+    // Simulated gentle curve based on change direction
+    const mid = isUp ? 55 : 25;
+    svg.innerHTML = `
+      <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${col}" stop-opacity="0.15"/><stop offset="100%" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+      <path d="M0,40 Q100,${mid} 200,${isUp?30:50} Q300,${isUp?20:60} 400,${isUp?25:55}" stroke="${col}" stroke-width="1.5" fill="none" opacity="0.5" stroke-dasharray="4 3"/>
+      <path d="M0,40 Q100,${mid} 200,${isUp?30:50} Q300,${isUp?20:60} 400,${isUp?25:55} L400,80 L0,80 Z" fill="url(#sg)"/>
+      <text x="200" y="45" text-anchor="middle" fill="#636366" font-size="9" font-family="DM Mono,monospace">Collecting live data...</text>
+    `;
+    if (metaEl) metaEl.textContent = '';
+    return;
+  }
+
+  // Build sparkline from collected data
+  const prices = pts.map(p => p.p);
+  const minP = Math.min(...prices);
+  const maxP = Math.max(...prices);
+  const range = maxP - minP || 1;
+  const W = 400, H = 80, padY = 8;
+  const scaleY = (H - padY * 2) / range;
+
+  const points = pts.map((p, i) => {
+    const x = (i / (pts.length - 1)) * W;
+    const y = padY + (maxP - p.p) * scaleY;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+
+  const firstP = prices[0];
+  const lastP = prices[prices.length - 1];
+  const isUp = lastP >= firstP;
+  const col = isUp ? '#47e266' : '#ffb4ab';
+
+  const polyline = points.join(' ');
+  const areaPath = `M${points[0]} ${points.map(p => `L${p}`).join(' ')} L${W},${H} L0,${H} Z`;
+
+  svg.innerHTML = `
+    <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${col}" stop-opacity="0.2"/><stop offset="100%" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${areaPath}" fill="url(#sg)"/>
+    <polyline points="${polyline}" stroke="${col}" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${points[points.length-1].split(',')[0]}" cy="${points[points.length-1].split(',')[1]}" r="3" fill="${col}" opacity="0.8"><animate attributeName="r" values="3;5;3" dur="2s" repeatCount="indefinite"/></circle>
+  `;
+
+  if (metaEl) {
+    const hi = maxP >= 1000 ? fmt(Math.round(maxP)) : maxP.toFixed(2);
+    const lo = minP >= 1000 ? fmt(Math.round(minP)) : minP.toFixed(2);
+    metaEl.textContent = `H: ${hi}  L: ${lo}  (${pts.length} pts)`;
+  }
+}
+
 function renderHeroIdx() {
   // Render active hero index
   renderHeroForIndex(activeHeroIndex);
-
-  // Render sub-index chips (show other key indices below hero)
-  const subIndices = ['NIFTY50','NIFTYBANK','NIFTY100','INDIA_VIX'].filter(i => i !== activeHeroIndex);
-  let html = '';
-  subIndices.forEach(idx => {
-    const d = IDX[idx] || IDX[INDEX_LABEL_MAP[idx]];
-    if (d) {
-      const label = (INDEX_DISPLAY_MAP[idx] || INDEX_LABEL_MAP[idx] || idx).replace('Nifty ','N');
-      const cpct = d.chgPct !== undefined ? d.chgPct : (d.changePct !== undefined ? d.changePct : 0);
-      const isUp = cpct >= 0;
-      const borderCol = isUp ? 'border-[#47e266]' : 'border-[#ffb4ab]';
-      const textCol = isUp ? 'text-[#47e266]' : 'text-[#ffb4ab]';
-      html += `<div class="min-w-[120px] bg-[#0e0e0e] p-2.5 rounded-xl border-l-4 ${borderCol} cursor-pointer hover:bg-[#353534]/30 transition-colors" onclick="document.querySelector('.idx-chip[data-index=\\'${idx}\\']')?.click()">
-        <div class="text-[9px] font-bold text-[#d0c6ab] uppercase mb-1 font-mono">${label}</div>
-        <div class="text-sm font-bold tnum">${fmt(d.price)}</div>
-        <div class="text-[9px] ${textCol} font-bold tnum">${isUp?'+':''}${cpct.toFixed(2)}%</div>
-      </div>`;
-    }
-  });
-  document.getElementById('h-idx').innerHTML = html;
+  // Collect sparkline data and render
+  collectSparkData(activeHeroIndex);
+  renderSparkline(activeHeroIndex);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -3912,6 +3992,9 @@ function renderHeroForIndex(idx) {
   }
   if (!data) {
     document.getElementById('h-nifty').innerHTML = '--<span class="text-[1.6rem] font-semibold text-[#d0c6ab]">.--</span>';
+    const chgEl = document.getElementById('h-chg');
+    chgEl.className = 'px-3 py-1 rounded-md flex items-center gap-1 bg-[#353534]/30 text-[#636366]';
+    chgEl.innerHTML = '<span class="text-[10px] font-mono">Awaiting data...</span>';
     return;
   }
   // Normalize field names — server sends changePct, Upstox client uses chgPct
@@ -4376,8 +4459,8 @@ function togglePredDetail() {
       {l:'India VIX', v:`${VIX.value} (${VIX.trend})`, c:VIX.value>20?'#ffb4ab':'#47e266'},
       {l:'FII Flow', v:`₹${fmt(Math.abs(FIIDII.fii))} Cr`, c:FIIDII.fii>=0?'#47e266':'#ffb4ab'},
       {l:'DII Flow', v:`₹${fmt(Math.abs(FIIDII.dii))} Cr`, c:FIIDII.dii>=0?'#47e266':'#ffb4ab'},
-      {l:'USD/INR', v:`${FIIDII.usdInr}`, c:'#e5e2e1'},
-      {l:'Crude Oil', v:`$${FIIDII.crude}`, c:'#e5e2e1'},
+      {l:'USD/INR', v: FIIDII.usdInr ? `${FIIDII.usdInr}` : '--', c:'#e5e2e1'},
+      {l:'Crude Oil', v: FIIDII.crude ? `$${FIIDII.crude}` : '--', c:'#e5e2e1'},
       {l:'Breadth', v:`${adv} Adv / ${dec} Dec`, c:adv>dec?'#47e266':'#ffb4ab'},
     ].map(r => `<div class="flex justify-between"><span class="text-[9px] text-[#636366] font-mono">${r.l}</span><span class="text-[9px] font-mono font-bold" style="color:${r.c}">${r.v}</span></div>`).join('');
     // Reasoning from the stored prediction detail
@@ -4390,33 +4473,40 @@ function togglePredDetail() {
 }
 
 // ══════════════════════════════════════════════════════════
-// NEXT SESSION TOGGLE
+// NEXT SESSION DETAIL TOGGLE (expandable like Today's Behavior)
 // ══════════════════════════════════════════════════════════
-let nextSessionVisible = false;
-function toggleNextSession() {
-  nextSessionVisible = !nextSessionVisible;
-  const body = document.getElementById('pred-next-body');
-  const hint = document.getElementById('pred-next-hint');
-  const icon = document.getElementById('pred-next-toggle-icon');
-  const text = document.getElementById('pred-next-toggle-text');
-  if (nextSessionVisible) {
-    body.classList.remove('hidden');
-    if (hint) hint.classList.add('hidden');
-    icon.textContent = 'visibility';
-    text.textContent = 'Hide';
+let nextDetailOpen = false;
+function toggleNextDetail() {
+  nextDetailOpen = !nextDetailOpen;
+  const card = document.getElementById('pred-next-detail-card');
+  const chevron = document.getElementById('pred-next-chevron');
+  if (nextDetailOpen) {
+    card.classList.remove('hidden');
+    chevron.style.transform = 'rotate(180deg)';
+    // Populate catalysts from key factors
+    const catalystsEl = document.getElementById('pred-next-catalysts');
+    const factorsEl = document.getElementById('pred-factors');
+    if (factorsEl && factorsEl.innerHTML.trim()) {
+      catalystsEl.innerHTML = factorsEl.innerHTML;
+    } else {
+      catalystsEl.innerHTML = '<span class="text-[9px] text-[#636366] font-mono">No factors available yet</span>';
+    }
+    // Populate reasoning from next session detail text
+    const reasoning = document.getElementById('pred-next-detail')?.textContent || 'No analysis available yet.';
+    document.getElementById('pred-next-reasoning').textContent = reasoning;
   } else {
-    body.classList.add('hidden');
-    if (hint) hint.classList.remove('hidden');
-    icon.textContent = 'visibility_off';
-    text.textContent = 'Show';
+    card.classList.add('hidden');
+    chevron.style.transform = 'rotate(0deg)';
   }
 }
+// Legacy compat — toggleNextSession still works for autoShow
+function toggleNextSession() { if (!nextDetailOpen) toggleNextDetail(); }
 function autoShowNextSession() {
   const mins = getISTMins();
   const day = getISTDay();
-  // Auto-show after 2:30 PM IST (870 mins) on weekdays
-  if (mins >= 870 && day >= 1 && day <= 5 && !nextSessionVisible) {
-    toggleNextSession();
+  // Auto-expand after 2:30 PM IST (870 mins) on weekdays
+  if (mins >= 870 && day >= 1 && day <= 5 && !nextDetailOpen) {
+    toggleNextDetail();
   }
 }
 

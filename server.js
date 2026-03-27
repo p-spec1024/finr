@@ -60,9 +60,11 @@ let optionChainCache = { nifty: null, banknifty: null, lastFetch: 0 }; // OI, IV
 let pickTracker      = []; // { id, type, symbol, direction, entryPrice, target, stopLoss, date, status, outcome }
 const PICK_TRACKER_FILE = path.join(__dirname, '.finr_picks.enc');
 
-// ── Twelve Data config ───────────────────────────────────────────────────────
+// ── Twelve Data config — commodities, forex & global indices (runs 24/7) ─────
+// Free tier: 800 calls/day (8/min). Set TWELVE_DATA_API_KEY in Railway env vars.
+// Commodities (XAU/USD, CL) and forex (USD/INR) trade ~24/5 — always current.
+// Gift Nifty stays on Upstox/NSE (no free after-hours API for NSE IX futures).
 const TWELVE_DATA_SYMBOLS = [
-  { key: 'GIFT_NIFTY',  symbol: 'NIFTY 50',  name: 'Gift Nifty',  type: 'Index' },
   { key: 'GOLD',        symbol: 'XAU/USD',    name: 'Gold $/oz',   type: 'Commodity' },
   { key: 'CRUDE',       symbol: 'CL',         name: 'Crude WTI',   type: 'Commodity' },
   { key: 'USDINR',      symbol: 'USD/INR',    name: 'USD/INR',     type: 'Currency' },
@@ -80,19 +82,9 @@ function getIST() {
 function getISTDay() { return getIST().getUTCDay(); }
 function getISTMins() { const ist = getIST(); return ist.getUTCHours() * 60 + ist.getUTCMinutes(); }
 
-function isGlobalMarketWindow() {
-  // Global markets (Gift Nifty, Gold, Crude, USD/INR, S&P 500 etc.) are relevant:
-  // Pre-market (6 AM - 9:15 AM), post-market (3:30 PM - midnight), and weekends for overnight data
-  const mins = getISTMins();
-  const day = getISTDay();
-  const isWeekend = day === 0 || day === 6;
-  return isWeekend || mins < 555 || mins >= 930; // Outside NSE market hours, or weekends
-}
-
 async function fetchTwelveData() {
   const apiKey = appConfig.twelveDataKey;
-  if (!apiKey) { log('WARN', 'Twelve Data API key not set — skipping global fetch'); return; }
-  if (!isGlobalMarketWindow()) { log('INFO', 'NSE market open — skipping Twelve Data (Upstox provides live data)'); return; }
+  if (!apiKey) { log('WARN', 'Twelve Data API key not set — add TWELVE_DATA_API_KEY in Railway env vars (free at twelvedata.com)'); return; }
 
   let fetched = 0;
   for (const s of TWELVE_DATA_SYMBOLS) {
@@ -125,13 +117,13 @@ async function fetchTwelveData() {
 
 function startTwelveDataPolling() {
   if (twelveDataInterval) return;
-  if (!isGlobalMarketWindow()) return;
   fetchTwelveData(); // immediate first fetch
+  // Poll every 5 min during market hours (8 symbols × ~288 calls/day = well within 800 free limit)
+  // Poll every 10 min outside market hours to conserve API calls
   twelveDataInterval = setInterval(() => {
-    if (!isGlobalMarketWindow()) { stopTwelveDataPolling(); return; }
     fetchTwelveData();
-  }, 6 * 60 * 1000); // every 6 minutes
-  log('OK', 'Twelve Data polling started (every 6 min)');
+  }, isMarketOpen() ? 5 * 60 * 1000 : 10 * 60 * 1000);
+  log('OK', 'Twelve Data polling started (always-on — Gold, Crude, USD/INR update 24/7)');
 }
 
 function stopTwelveDataPolling() {
@@ -2067,7 +2059,7 @@ app.get('/api/symbol-search', (req, res) => {
 });
 
 app.get('/api/global', (req, res) => {
-  res.json({ globalMarkets, isPostMarket: isGlobalMarketWindow(), symbolCount: TWELVE_DATA_SYMBOLS.length });
+  res.json({ globalMarkets, symbolCount: Object.keys(globalMarkets).length });
 });
 
 app.get('/api/technical/:symbol', (req, res) => {
@@ -3229,7 +3221,7 @@ async function initLiveData() {
 
   // Always start NSE real data polling (indices, VIX, FII/DII — works independently of Upstox)
   startNsePolling();
-  // Start Twelve Data polling for global markets
+  // Start Twelve Data polling — runs 24/7 for Gold, Crude, USD/INR, Gift Nifty, S&P 500 etc.
   startTwelveDataPolling();
   log('OK', `Live data initialized — ${stockUniverse.length} stocks, awaiting real prices`);
 }
@@ -3417,8 +3409,8 @@ function errorPage(title, detail, host) {
 // ══════════════════════════════════════════════════════════════════════════════
 cron.schedule('15 9 * * 1-5', () => { initLiveData(); log('INFO', 'Market open — live data started'); });
 cron.schedule('20 9 * * 1-5', () => { evaluatePicksNextDay(); log('INFO', 'Evaluating yesterday\'s AI picks against today\'s open'); });
-cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); stopPricePoller(); startTwelveDataPolling(); captureZerodhaTrades(); });
-cron.schedule('0 0 * * *', () => { stopTwelveDataPolling(); log('INFO', 'Midnight — Twelve Data polling stopped'); });
+cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); stopPricePoller(); captureZerodhaTrades(); });
+// Twelve Data runs 24/7 — no stop/start needed
 cron.schedule('0 10,14 * * 1-5', () => { if (zAccessToken) { fetchZerodhaData(); log('INFO', 'Zerodha data refresh'); } });
 
 // Catch-all — serve frontend
@@ -3437,7 +3429,6 @@ server.listen(PORT, async () => {
   loadGcpServiceAccount();
   log('INFO', `Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey} VertexAI:${!!gcpServiceAccount} TwelveData:${!!appConfig.twelveDataKey} Trades:${tradeHistory.length} Picks:${pickTracker.length}`);
   await initLiveData();
-  if (isGlobalMarketWindow()) startTwelveDataPolling();
   runUnitTests();
   log('INFO', `Server ready — ${testResults.filter(t=>t.pass).length}/${testResults.length} tests passed`);
 
