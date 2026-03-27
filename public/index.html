@@ -1830,12 +1830,19 @@ async function fetchNews() {
   try {
     const d = await fetch('/api/news').then(r=>r.json());
     if (d.news && d.news.length) {
-      NEWS_ITEMS = d.news;
-      document.getElementById('news-ts').textContent = `${d.news.length} items`;
+      // Stamp each item with the fetch time so we can show real timestamps
+      const genTime = d.generated || new Date().toISOString();
+      NEWS_ITEMS = d.news.map(n => ({ ...n, fetchedAt: n.fetchedAt || genTime }));
+      const tsEl = document.getElementById('news-ts');
+      if (tsEl) {
+        const t = new Date(genTime);
+        tsEl.textContent = `${d.news.length} items · ${t.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true})}`;
+      }
     }
-  } catch {}
+  } catch(e) { console.error('fetchNews error:', e); }
   renderNews();
-  setCardTs('news-ts');
+  filterNews(newsFilterMode); // reapply current filter
+  updateNewsPeek();
 }
 
 function renderNews() {
@@ -1850,15 +1857,17 @@ function renderNews() {
                      'bg-[#47e266]/12 text-[#47e266]';
     const sentColor = (n.sentiment||'').toLowerCase().includes('positive') ? 'text-[#47e266]' :
                       (n.sentiment||'').toLowerCase().includes('negative') ? 'text-[#ffb4ab]' : 'text-[#d0c6ab]';
-    return `<div class="news-item flex gap-3 cursor-pointer hover:bg-[#353534]/30 rounded-lg p-2 -mx-2 transition-colors" data-scope="${n.scope||'national'}" onclick="openNewsModal(${i})">
+    const timeStr = n.fetchedAt ? new Date(n.fetchedAt).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}) : (n.time||'Just now');
+    return `<div class="news-item flex gap-3 cursor-pointer hover:bg-[#353534]/30 rounded-lg p-2 -mx-2 transition-colors" data-scope="${(n.scope||'national').toLowerCase()}" onclick="openNewsModal(${i})">
       <div class="flex-shrink-0 w-10 h-10 bg-[#353534] rounded flex items-center justify-center text-lg">${n.icon||'📰'}</div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 mb-1">
           <span class="text-[8px] ${priClass} px-1.5 py-0.5 rounded font-black uppercase">${(n.priority||'Low').toUpperCase()}</span>
           <span class="text-[8px] ${sentColor} font-bold uppercase tracking-tighter">${n.sentiment||'Neutral'}</span>
+          <span class="text-[8px] text-[#636366] font-mono ml-auto">${(n.scope||'').toUpperCase()}</span>
         </div>
         <p class="text-[11px] font-bold leading-tight text-[#e5e2e1] line-clamp-2">${n.title}</p>
-        <span class="text-[9px] text-[#d0c6ab] mt-1 block font-mono">${n.time||'Just now'}</span>
+        <span class="text-[9px] text-[#d0c6ab] mt-1 block font-mono">${timeStr}</span>
       </div>
     </div>`;
   }).join('');
@@ -1875,7 +1884,7 @@ function openNewsModal(i) {
       <div class="flex items-center gap-3 mt-4">
         <span class="px-2 py-0.5 ${priClass} text-[10px] font-bold tracking-wider rounded border">${(n.priority||'LOW').toUpperCase()}</span>
         <span class="${sentColor} text-[12px] font-semibold">${n.sentiment||'Neutral'}</span>
-        <span class="text-[#d0c6ab] text-[12px] ml-auto font-mono">${n.time||'Just now'}</span>
+        <span class="text-[#d0c6ab] text-[12px] ml-auto font-mono">${n.fetchedAt ? new Date(n.fetchedAt).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}) : (n.time||'Just now')}</span>
       </div>
     </div>
     <div class="h-[1px] w-full bg-white/10 my-5"></div>
@@ -3362,10 +3371,15 @@ function setCardTs(id) {
 let newsFilterMode = 'all';
 function filterNews(mode, btn) {
   newsFilterMode = mode;
-  document.querySelectorAll('.news-filter-btn').forEach(b=>b.classList.remove('active'));
-  if(btn) btn.classList.add('active');
+  document.querySelectorAll('.news-filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === mode);
+  });
+  if(btn) {
+    document.querySelectorAll('.news-filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+  }
   document.querySelectorAll('.news-item').forEach(el => {
-    const scope = el.dataset.scope || 'national';
+    const scope = (el.dataset.scope || 'national').toLowerCase();
     el.style.display = (mode==='all' || scope===mode) ? '' : 'none';
   });
 }
@@ -3412,13 +3426,11 @@ function toggleDashCard(headerEl) {
 function updateNewsPeek() {
   const peekEl = document.getElementById('news-peek');
   if (!peekEl || !NEWS_ITEMS || !NEWS_ITEMS.length) return;
-  const first = NEWS_ITEMS[0];
-  if (first) {
-    peekEl.innerHTML = `<div class="px-4 py-2 flex items-start gap-2">
+  const top2 = NEWS_ITEMS.slice(0, 2);
+  peekEl.innerHTML = `<div class="max-h-[64px] overflow-y-auto">${top2.map(n => `<div class="px-4 py-1.5 flex items-start gap-2">
       <span class="w-1.5 h-1.5 rounded-full bg-[#ffd60a] mt-1.5 flex-shrink-0"></span>
-      <span class="text-[11px] text-[#d0c6ab] leading-tight line-clamp-1">${first.headline || first.title || 'Market update available'}</span>
-    </div>`;
-  }
+      <span class="text-[11px] text-[#d0c6ab] leading-tight line-clamp-1">${n.headline || n.title || 'Market update available'}</span>
+    </div>`).join('')}</div>`;
 }
 
 function updateFiiPeek() {
@@ -3663,12 +3675,16 @@ function renderHeroForIndex(idx) {
 }
 
 // Fetch global market data for non-Indian indices
-let globalMarketData = {};
+let globalMarkets = {};
 async function fetchGlobalMarkets() {
   try {
     const d = await fetch('/api/global').then(r => r.json());
-    if (d && typeof d === 'object') globalMarketData = d;
-  } catch(e) {}
+    if (d && d.globalMarkets && typeof d.globalMarkets === 'object') {
+      globalMarkets = d.globalMarkets;
+      // Re-render the hero index in case it's a global one (Gift Nifty, etc.)
+      renderHeroForIndex(activeHeroIndex);
+    }
+  } catch(e) { console.error('fetchGlobalMarkets error:', e); }
 }
 
 // ══════════════════════════════════════════════════════════
