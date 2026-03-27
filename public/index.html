@@ -3240,17 +3240,18 @@ async function testUpstox() {
 
 async function testGemini() {
   const key = document.getElementById('gk').value;
-  if (!key) { toast('Enter Gemini API key first'); return; }
+  // Allow connect even without input field — server may have key from env var
   toast('Testing Gemini...');
   const el = document.getElementById('gemini-test-result');
   try {
-    const r = await fetch('/api/gemini-test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})}).then(x=>x.json());
+    const body = key ? {key} : {};
+    const r = await fetch('/api/gemini-test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}).then(x=>x.json());
     if (r.ok) {
       if (el) el.innerHTML = '<span class="text-[#47e266]">✅ Connected — ' + (r.model||'OK') + '</span>';
       toast('Gemini connected ✅');
     } else {
       if (el) el.innerHTML = '<span class="text-[#ffb4ab]">❌ ' + (r.reason||'Failed') + '</span>';
-      toast('Gemini connection failed');
+      toast(r.reason === 'No API key' ? 'Enter Gemini API key or set GEMINI_API_KEY env var' : 'Gemini connection failed');
     }
     fetchStatus();
   } catch(e) {
@@ -3280,15 +3281,16 @@ async function testVertex() {
     const saved = await saveVertex(true); // silent save
     if (!saved) return; // save failed, error already shown
   }
+  // Allow test even without textarea input — server may have account from env var (GCP_SERVICE_ACCOUNT_JSON)
   toast('Testing Vertex AI...');
   try {
     const r = await fetch('/api/vertex-test', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}).then(x=>x.json());
     if (r.ok) {
       if (el) el.innerHTML = '<span class="text-[#47e266]">Connected · Project: ' + (r.projectId||'OK') + '</span>';
-      toast('Vertex AI connected');
+      toast('Vertex AI connected ✅');
     } else {
       if (el) el.innerHTML = '<span class="text-[#ffb4ab]">' + (r.reason||'Failed') + '</span>';
-      toast('Vertex AI: ' + (r.reason||'Connection failed'));
+      toast(r.reason === 'No service account configured' ? 'Paste JSON or set GCP_SERVICE_ACCOUNT_JSON env var' : 'Vertex AI: ' + (r.reason||'Connection failed'));
     }
     fetchStatus();
   } catch(e) {

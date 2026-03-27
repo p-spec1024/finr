@@ -558,9 +558,16 @@ let vertexTokenExpiry = 0;
 
 function loadGcpServiceAccount() {
   try {
+    // Priority 1: Environment variable (Vercel/Railway — stores the full JSON as a string)
+    if (process.env.GCP_SERVICE_ACCOUNT_JSON) {
+      gcpServiceAccount = JSON.parse(process.env.GCP_SERVICE_ACCOUNT_JSON);
+      log('OK', `Vertex AI service account loaded from env: ${gcpServiceAccount.client_email}`);
+      return true;
+    }
+    // Priority 2: Local JSON file
     if (fs.existsSync(GCP_SA_PATH)) {
       gcpServiceAccount = JSON.parse(fs.readFileSync(GCP_SA_PATH, 'utf8'));
-      log('OK', `Vertex AI service account loaded: ${gcpServiceAccount.client_email}`);
+      log('OK', `Vertex AI service account loaded from file: ${gcpServiceAccount.client_email}`);
       return true;
     }
   } catch (e) { log('WARN', 'Failed to load GCP service account: ' + e.message); }
@@ -3220,5 +3227,26 @@ server.listen(PORT, async () => {
   if (isPostMarketWindow()) startTwelveDataPolling();
   runUnitTests();
   log('INFO', `Server ready — ${testResults.filter(t=>t.pass).length}/${testResults.length} tests passed`);
+
+  // Auto-connect Gemini & Vertex AI if keys are present from env vars
+  if (appConfig.geminiKey && !geminiConnectionOk && !geminiDisabled) {
+    try {
+      const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 25000 });
+      geminiConnectionOk = true;
+      log('OK', `Gemini auto-connected on startup (model: ${g.model})`);
+    } catch(e) {
+      log('WARN', `Gemini auto-connect failed: ${e.message} — keys present but test call failed`);
+    }
+  }
+  if (gcpServiceAccount && !vertexConnectionOk && !vertexDisabled) {
+    try {
+      const v = await callVertexAI('Reply with just: OK', { maxOutputTokens: 10, timeout: 45000, grounding: false });
+      vertexConnectionOk = true;
+      log('OK', `Vertex AI auto-connected on startup (model: ${v.model})`);
+    } catch(e) {
+      log('WARN', `Vertex AI auto-connect failed: ${e.message}`);
+    }
+  }
+
   log('INFO', `═══════════════════════════════════════`);
 });
