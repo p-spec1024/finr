@@ -268,42 +268,99 @@ async function fetchNseFiiDii() {
   }
 }
 
-// Also fetch VIX from NSE when Upstox is not connected
-async function fetchNseVix() {
+// Fetch ALL NSE indices (Nifty 50, Bank Nifty, VIX, etc.) from NSE allIndices API
+// This single call provides real closing/last-traded prices for all major indices
+const NSE_INDEX_MAP = {
+  'NIFTY 50':        'Nifty 50',
+  'NIFTY BANK':      'Nifty Bank',
+  'NIFTY IT':        'Nifty IT',
+  'NIFTY PHARMA':    'Nifty Pharma',
+  'NIFTY NEXT 50':   'Nifty Next 50',
+  'NIFTY 100':       'Nifty 100',
+  'NIFTY MIDCAP 50': 'Nifty Midcap 50',
+  'NIFTY FIN SERVICE': 'Nifty Fin Service',
+  'NIFTY AUTO':      'Nifty Auto',
+  'NIFTY METAL':     'Nifty Metal',
+  'NIFTY ENERGY':    'Nifty Energy',
+  'NIFTY REALTY':    'Nifty Realty',
+  'NIFTY INFRA':     'Nifty Infra',
+  'NIFTY PSE':       'Nifty PSE',
+  'NIFTY MEDIA':     'Nifty Media',
+  'S&P BSE SENSEX':  'SENSEX',
+};
+
+async function fetchNseIndices() {
   try {
     const hasCookies = await getNseCookies();
-    if (!hasCookies) return false;
+    if (!hasCookies) { log('WARN', 'NSE Indices: No cookies, skipping'); return false; }
+
     const data = await nseRequest('/api/allIndices');
-    if (!data || !data.data) return false;
-    const vixEntry = data.data.find(d => (d.index||'').toUpperCase().includes('VIX'));
-    if (vixEntry) {
-      const val = parseFloat(vixEntry.last || vixEntry.indexValue || 0);
-      const chg = parseFloat(vixEntry.percentChange || 0);
-      if (val > 0) {
-        vixData.value = +val.toFixed(2);
-        vixData.change = +chg.toFixed(2);
-        vixData.trend = chg > 0.5 ? 'rising' : chg < -0.5 ? 'falling' : 'stable';
-        log('OK', `NSE VIX updated: ${vixData.value} (${vixData.trend})`);
-        return true;
+    if (!data || !data.data) { log('WARN', 'NSE Indices: Empty response'); return false; }
+
+    let updated = 0;
+    for (const entry of data.data) {
+      const nseKey = (entry.index || entry.indexSymbol || '').toUpperCase().trim();
+
+      // VIX
+      if (nseKey.includes('VIX')) {
+        const val = parseFloat(entry.last || entry.indexValue || 0);
+        const chg = parseFloat(entry.percentChange || 0);
+        if (val > 0) {
+          vixData.value = +val.toFixed(2);
+          vixData.change = +chg.toFixed(2);
+          vixData.trend = chg > 0.5 ? 'rising' : chg < -0.5 ? 'falling' : 'stable';
+          updated++;
+        }
+        continue;
+      }
+
+      // Major indices
+      const mappedName = NSE_INDEX_MAP[nseKey];
+      if (mappedName) {
+        const price = parseFloat(entry.last || entry.indexValue || 0);
+        const prevClose = parseFloat(entry.previousClose || entry.open || price);
+        if (price > 0) {
+          const change = +(price - prevClose).toFixed(2);
+          const changePct = prevClose ? +((change / prevClose) * 100).toFixed(2) : 0;
+          liveIndices[mappedName] = {
+            price: +price.toFixed(2),
+            change,
+            changePct,
+            name: mappedName,
+            previousClose: +prevClose.toFixed(2),
+            open: parseFloat(entry.open || 0) || undefined,
+            high: parseFloat(entry.high || 0) || undefined,
+            low: parseFloat(entry.low || 0) || undefined,
+            lastUpdate: Date.now(),
+            isNSE: true
+          };
+          updated++;
+        }
       }
     }
-    return false;
+
+    if (updated > 0) {
+      broadcastLiveData();
+      log('OK', `NSE Indices updated: ${updated} indices (incl. VIX=${vixData.value})`);
+    }
+    return updated > 0;
   } catch(e) {
-    log('WARN', `NSE VIX fetch failed: ${e.message}`);
+    log('WARN', `NSE Indices fetch failed: ${e.message}`);
     return false;
   }
 }
 
-function startFiiDiiPolling() {
+function startNsePolling() {
   if (fiiDiiInterval) return;
-  // Fetch immediately, then every 15 min during market hours, 30 min post-market
-  fetchNseFiiDii();
-  if (connectionStatus !== 'connected') fetchNseVix(); // VIX from NSE only if Upstox not connected
+  // Fetch immediately on startup
+  fetchNseIndices();  // Indices + VIX — always fetch (real closing prices)
+  fetchNseFiiDii();   // FII/DII flows
+  const pollMs = isMarketOpen() ? 10 * 60 * 1000 : 30 * 60 * 1000; // 10min market, 30min post
   fiiDiiInterval = setInterval(async () => {
+    await fetchNseIndices();
     await fetchNseFiiDii();
-    if (connectionStatus !== 'connected') await fetchNseVix();
-  }, isMarketOpen() ? 15 * 60 * 1000 : 30 * 60 * 1000);
-  log('OK', `NSE FII/DII polling started (every ${isMarketOpen() ? 15 : 30} min)`);
+  }, pollMs);
+  log('OK', `NSE polling started: indices + FII/DII (every ${pollMs/60000} min)`);
 }
 
 function stopFiiDiiPolling() {
@@ -1965,11 +2022,11 @@ app.get('/api/symbol-search', (req, res) => {
   const q = (req.query.q || '').toUpperCase().replace(/\s+/g, '');
   if (!q || q.length < 1) return res.json({ results: [] });
   const indexSyms = [
-    { symbol: 'NIFTY', name: 'Nifty 50', price: liveIndices?.NIFTY?.value || null },
-    { symbol: 'BANKNIFTY', name: 'Bank Nifty', price: liveIndices?.BANKNIFTY?.value || null },
-    { symbol: 'FINNIFTY', name: 'Finnifty', price: liveIndices?.FINNIFTY?.value || null },
-    { symbol: 'MIDCPNIFTY', name: 'Midcap Nifty', price: liveIndices?.MIDCPNIFTY?.value || null },
-    { symbol: 'SENSEX', name: 'BSE Sensex', price: liveIndices?.SENSEX?.value || null }
+    { symbol: 'NIFTY', name: 'Nifty 50', price: liveIndices['Nifty 50']?.price || null },
+    { symbol: 'BANKNIFTY', name: 'Bank Nifty', price: liveIndices['Nifty Bank']?.price || null },
+    { symbol: 'FINNIFTY', name: 'Finnifty', price: liveIndices['Nifty Fin Service']?.price || null },
+    { symbol: 'MIDCPNIFTY', name: 'Midcap Nifty', price: liveIndices['Nifty Midcap 50']?.price || null },
+    { symbol: 'SENSEX', name: 'BSE Sensex', price: liveIndices['SENSEX']?.price || null }
   ];
   const stockResults = STOCK_UNIVERSE
     .filter(s => s.symbol.includes(q) || s.name.toUpperCase().includes(q))
@@ -2038,6 +2095,20 @@ app.get('/api/fii-dii/refresh', async (req, res) => {
     });
   } catch(e) {
     res.json({ ok: false, data: { fii: fiiDiiData.fii, dii: fiiDiiData.dii, usdInr: fiiDiiData.usdInr, crude: fiiDiiData.crude }, message: e.message });
+  }
+});
+
+app.get('/api/indices/refresh', async (req, res) => {
+  try {
+    const ok = await fetchNseIndices();
+    res.json({
+      ok,
+      indices: liveIndices,
+      vix: vixData,
+      message: ok ? 'Indices refreshed from NSE' : 'NSE fetch failed, using cached data'
+    });
+  } catch(e) {
+    res.json({ ok: false, indices: liveIndices, vix: vixData, message: e.message });
   }
 });
 
@@ -3163,6 +3234,7 @@ function startMockTicks() {
       }
 
       for (const d of Object.values(liveIndices)) {
+        if (d.isNSE) continue; // Skip — real NSE data, don't overwrite with mock
         const base = IDX_BASE[d.name] || d.price;
         const delta = (Math.random() - 0.499 + mktMomentum) * d.price * 0.0004;
         d.price = +(d.price + delta).toFixed(2);
@@ -3219,7 +3291,7 @@ async function initLiveData() {
     log('INFO', 'Market closed — serving frozen base prices (no mock ticks)');
   }
   // Always start NSE FII/DII real data polling (works independently of Upstox)
-  startFiiDiiPolling();
+  startNsePolling();
   log('OK', `Live data initialized — ${stockUniverse.length} stocks`);
 }
 

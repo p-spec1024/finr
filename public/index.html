@@ -481,7 +481,7 @@ tailwind.config = {
         <div class="md:grid md:grid-cols-2 md:gap-6">
           <!-- Left: Index Card -->
           <section class="flex flex-col items-center md:items-start py-3 bg-[#1c1b1b] rounded-xl md:p-6 relative">
-            <button class="absolute top-3 right-3 p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="renderHeroIdx();fetchGlobalMarkets();toast('Index refreshed')" title="Refresh Index">
+            <button class="absolute top-3 right-3 p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="refreshIndices()" title="Refresh Index">
               <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
             </button>
             <span class="text-[#d0c6ab] font-mono text-[10px] uppercase tracking-[0.2em] mb-2 font-bold" id="h-index-label">Nifty 50</span>
@@ -1826,6 +1826,27 @@ function setSt(st) {
 // ══════════════════════════════════════════════════════════
 // HOME — HERO + INDEX
 // ══════════════════════════════════════════════════════════
+async function refreshIndices() {
+  toast('Fetching latest indices from NSE...');
+  try {
+    const r = await fetch('/api/indices/refresh').then(x=>x.json());
+    if (r.ok && r.indices) {
+      Object.assign(IDX, r.indices);
+      if (r.vix) VIX = r.vix;
+      renderHeroIdx();
+      toast('Indices updated from NSE');
+    } else {
+      fetchGlobalMarkets();
+      renderHeroIdx();
+      toast(r.message || 'Index refreshed (cached)');
+    }
+  } catch(e) {
+    renderHeroIdx();
+    fetchGlobalMarkets();
+    toast('Index refreshed');
+  }
+}
+
 function renderHeroIdx() {
   // Render active hero index
   renderHeroForIndex(activeHeroIndex);
@@ -1834,9 +1855,9 @@ function renderHeroIdx() {
   const subIndices = ['NIFTY50','NIFTYBANK','NIFTY100','INDIA_VIX'].filter(i => i !== activeHeroIndex);
   let html = '';
   subIndices.forEach(idx => {
-    const d = IDX[idx];
+    const d = IDX[idx] || IDX[INDEX_LABEL_MAP[idx]];
     if (d) {
-      const label = (INDEX_LABEL_MAP[idx] || idx).replace('Nifty ','N');
+      const label = (INDEX_DISPLAY_MAP[idx] || INDEX_LABEL_MAP[idx] || idx).replace('Nifty ','N');
       const cpct = d.chgPct !== undefined ? d.chgPct : (d.changePct !== undefined ? d.changePct : 0);
       const isUp = cpct >= 0;
       const borderCol = isUp ? 'border-[#47e266]' : 'border-[#ffb4ab]';
@@ -3739,9 +3760,16 @@ function renderSectorFlow(el) {
 // ══════════════════════════════════════════════════════════
 let activeHeroIndex = 'NIFTY50';
 const INDEX_LABEL_MAP = {
-  'NIFTY50': 'Nifty 50', 'NIFTYBANK': 'Bank Nifty', 'NIFTY100': 'Nifty 100',
+  'NIFTY50': 'Nifty 50', 'NIFTYBANK': 'Nifty Bank', 'NIFTY100': 'Nifty 100',
   'NIFTYFIFTY': 'Nifty Next 50', 'INDIA_VIX': 'India VIX', 'GIFT_NIFTY': 'Gift Nifty',
   'GOLD': 'Gold $/oz', 'CRUDE': 'Crude WTI', 'SP500': 'S&P 500',
+  'NASDAQ': 'NASDAQ', 'USDINR': 'USD/INR', 'DOW': 'Dow Jones', 'NIKKEI': 'Nikkei 225'
+};
+// Display labels for UI (different from data keys)
+const INDEX_DISPLAY_MAP = {
+  'NIFTY50': 'Nifty 50', 'NIFTYBANK': 'Bank Nifty', 'NIFTY100': 'Nifty 100',
+  'NIFTYFIFTY': 'Nifty Next 50', 'INDIA_VIX': 'India VIX', 'GIFT_NIFTY': 'Gift Nifty',
+  'GOLD': 'Gold', 'CRUDE': 'Crude Oil', 'SP500': 'S&P 500',
   'NASDAQ': 'NASDAQ', 'USDINR': 'USD/INR', 'DOW': 'Dow Jones', 'NIKKEI': 'Nikkei 225'
 };
 
@@ -3750,13 +3778,17 @@ function switchHeroIndex(chipEl) {
   activeHeroIndex = idx;
   document.querySelectorAll('.idx-chip').forEach(c => c.classList.remove('active'));
   chipEl.classList.add('active');
-  document.getElementById('h-index-label').textContent = INDEX_LABEL_MAP[idx] || idx;
+  document.getElementById('h-index-label').textContent = INDEX_DISPLAY_MAP[idx] || INDEX_LABEL_MAP[idx] || idx;
   renderHeroForIndex(idx);
 }
 
 function renderHeroForIndex(idx) {
-  // Check live indices first, then global markets
-  let data = IDX[idx] || IDX[INDEX_LABEL_MAP[idx]];
+  // Check live indices first (server key via INDEX_LABEL_MAP), then IDX directly, then global markets
+  let data = IDX[INDEX_LABEL_MAP[idx]] || IDX[idx];
+  // India VIX special handling — VIX data is in the VIX object
+  if (!data && idx === 'INDIA_VIX' && VIX && VIX.value) {
+    data = { price: VIX.value, changePct: VIX.change || 0, change: VIX.change || 0 };
+  }
   if (!data) {
     // Check global markets (Twelve Data)
     try {
