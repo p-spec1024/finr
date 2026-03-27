@@ -1465,6 +1465,40 @@ app.post('/api/vertex-save', (req, res) => {
   }
 });
 
+// Disconnect endpoints — revoke tokens / disable connections
+app.post('/api/disconnect', (req, res) => {
+  const { service } = req.body;
+  if (!service) return res.status(400).json({ error: 'Specify service to disconnect' });
+  switch (service) {
+    case 'upstox':
+      accessToken = null;
+      appConfig.tokenExpiry = 0;
+      connectionStatus = 'disconnected';
+      if (mockInterval) { clearInterval(mockInterval); mockInterval = null; }
+      broadcastStatus();
+      log('WARN', 'Upstox disconnected by user');
+      return res.json({ ok: true, service: 'upstox' });
+    case 'zerodha':
+      zAccessToken = null;
+      appConfig.zTokenExpiry = 0;
+      zerodhaHoldings = []; zerodhaPositions = []; zerodhaOrders = [];
+      log('WARN', 'Zerodha disconnected by user');
+      return res.json({ ok: true, service: 'zerodha' });
+    case 'gemini':
+      geminiConnectionOk = false;
+      log('WARN', 'Gemini AI disconnected by user');
+      return res.json({ ok: true, service: 'gemini' });
+    case 'vertex':
+      vertexConnectionOk = false;
+      vertexAccessToken = null;
+      vertexTokenExpiry = 0;
+      log('WARN', 'Vertex AI disconnected by user');
+      return res.json({ ok: true, service: 'vertex' });
+    default:
+      return res.status(400).json({ error: 'Unknown service: ' + service });
+  }
+});
+
 app.get('/api/logs', (req, res) => {
   res.json({ logs: LOGS.slice(0, 100) });
 });

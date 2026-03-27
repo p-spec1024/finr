@@ -1226,7 +1226,7 @@ tailwind.config = {
                 </div>
                 <div class="flex items-center gap-2">
                   <span id="upstox-status-dot" class="w-2 h-2 rounded-full bg-[#636366]"></span>
-                  <button class="px-2.5 py-1 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-[10px] font-bold hover:bg-[#ffd60a]/10 transition-colors" onclick="testUpstox()">Connect</button>
+                  <button id="upstox-connect-btn" class="px-2.5 py-1 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-[10px] font-bold hover:bg-[#ffd60a]/10 transition-colors" onclick="toggleUpstoxConnection()">Connect</button>
                   <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200 cursor-pointer" onclick="toggleApiCard(this.closest('.api-card').querySelector('.px-4'))">expand_more</span>
                 </div>
               </div>
@@ -1248,7 +1248,7 @@ tailwind.config = {
                 </div>
                 <div class="flex items-center gap-2">
                   <span id="zerodha-status-dot" class="w-2 h-2 rounded-full bg-[#636366]"></span>
-                  <button class="px-2.5 py-1 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-[10px] font-bold hover:bg-[#ffd60a]/10 transition-colors" onclick="doZerodhaRefresh()">Connect</button>
+                  <button id="zerodha-connect-btn" class="px-2.5 py-1 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-[10px] font-bold hover:bg-[#ffd60a]/10 transition-colors" onclick="toggleZerodhaConnection()">Connect</button>
                   <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200 cursor-pointer" onclick="toggleApiCard(this.closest('.api-card').querySelector('.px-4'))">expand_more</span>
                 </div>
               </div>
@@ -1270,7 +1270,7 @@ tailwind.config = {
                 </div>
                 <div class="flex items-center gap-2">
                   <span id="gemini-status-dot" class="w-2 h-2 rounded-full bg-[#636366]"></span>
-                  <button class="px-2.5 py-1 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-[10px] font-bold hover:bg-[#ffd60a]/10 transition-colors" onclick="testGemini()" id="gemini-test-btn">Connect</button>
+                  <button id="gemini-connect-btn" class="px-2.5 py-1 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-[10px] font-bold hover:bg-[#ffd60a]/10 transition-colors" onclick="toggleGeminiConnection()">Connect</button>
                   <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200 cursor-pointer" onclick="toggleApiCard(this.closest('.api-card').querySelector('.px-4'))">expand_more</span>
                 </div>
               </div>
@@ -1291,7 +1291,7 @@ tailwind.config = {
                 </div>
                 <div class="flex items-center gap-2">
                   <span id="vertex-status-dot" class="w-2 h-2 rounded-full bg-[#636366]"></span>
-                  <button class="px-2.5 py-1 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-[10px] font-bold hover:bg-[#ffd60a]/10 transition-colors" onclick="testVertex()">Connect</button>
+                  <button id="vertex-connect-btn" class="px-2.5 py-1 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-[10px] font-bold hover:bg-[#ffd60a]/10 transition-colors" onclick="toggleVertexConnection()">Connect</button>
                   <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200 cursor-pointer" onclick="toggleApiCard(this.closest('.api-card').querySelector('.px-4'))">expand_more</span>
                 </div>
               </div>
@@ -2859,7 +2859,54 @@ function updateApiStatusDots(health) {
       vDot.className = 'w-2 h-2 rounded-full ' + (vertexConnected ? 'bg-[#47e266]' : 'bg-[#ffb4ab]');
       vDot.title = vertexConnected ? 'Connected' : (health.vertexAI && health.vertexAI.configured ? 'Configured but not verified' : 'Not configured');
     }
+    // Update Connect/Disconnect button labels
+    updateConnectBtn('upstox-connect-btn', health.upstox?.connected);
+    updateConnectBtn('zerodha-connect-btn', health.zerodha?.connected);
+    updateConnectBtn('gemini-connect-btn', health.gemini?.connected);
+    updateConnectBtn('vertex-connect-btn', health.vertexAI?.connected);
   } catch(e) {}
+}
+
+function updateConnectBtn(id, isConnected) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  if (isConnected) {
+    btn.textContent = 'Disconnect';
+    btn.className = 'px-2.5 py-1 rounded-lg border border-[#ffb4ab]/30 text-[#ffb4ab] text-[10px] font-bold hover:bg-[#ffb4ab]/10 transition-colors';
+  } else {
+    btn.textContent = 'Connect';
+    btn.className = 'px-2.5 py-1 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-[10px] font-bold hover:bg-[#ffd60a]/10 transition-colors';
+  }
+}
+
+async function disconnectService(service) {
+  toast('Disconnecting ' + service + '...');
+  try {
+    const r = await fetch('/api/disconnect', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({service})}).then(x=>x.json());
+    if (r.ok) { toast(service + ' disconnected'); fetchStatus(); }
+    else toast('Error: ' + (r.error || 'Failed'));
+  } catch { toast('Error disconnecting'); }
+}
+
+function toggleUpstoxConnection() {
+  const btn = document.getElementById('upstox-connect-btn');
+  if (btn && btn.textContent === 'Disconnect') disconnectService('upstox');
+  else testUpstox();
+}
+function toggleZerodhaConnection() {
+  const btn = document.getElementById('zerodha-connect-btn');
+  if (btn && btn.textContent === 'Disconnect') disconnectService('zerodha');
+  else doZerodhaRefresh();
+}
+function toggleGeminiConnection() {
+  const btn = document.getElementById('gemini-connect-btn');
+  if (btn && btn.textContent === 'Disconnect') disconnectService('gemini');
+  else testGemini();
+}
+function toggleVertexConnection() {
+  const btn = document.getElementById('vertex-connect-btn');
+  if (btn && btn.textContent === 'Disconnect') disconnectService('vertex');
+  else testVertex();
 }
 
 async function loadAiTrackingData() {
