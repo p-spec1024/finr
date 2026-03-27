@@ -1867,11 +1867,14 @@ For each news item, provide:
 4. Affected sectors (buy/avoid)
 5. Sentiment: BULLISH, BEARISH, or NEUTRAL
 6. Source type: RBI, GOVT, GLOBAL, CORPORATE, ECONOMIC, GEOPOLITICAL
+7. Scope: NATIONAL (India-specific: RBI, SEBI, Indian corporate earnings, budget, elections, monsoon, policy) or INTERNATIONAL (US Fed, global markets, crude oil, China, geopolitical, foreign trade)
+
+Include a balanced mix — at least 3 NATIONAL and 3 INTERNATIONAL news items.
 
 Reply ONLY valid JSON array, NO markdown fences:
-[{"title":"Specific headline here","priority":"HIGH/MEDIUM/LOW","impact":"How this affects Indian market in 30 words","sentiment":"BULLISH/BEARISH/NEUTRAL","source":"RBI/GOVT/GLOBAL/CORPORATE/ECONOMIC/GEOPOLITICAL","icon":"relevant emoji","sectors":{"buy":["sector1"],"avoid":["sector2"]},"detail":"50-word deeper analysis with specific stocks/indices affected and expected price action"}]
+[{"title":"Specific headline here","priority":"HIGH/MEDIUM/LOW","impact":"How this affects Indian market in 30 words","sentiment":"BULLISH/BEARISH/NEUTRAL","source":"RBI/GOVT/GLOBAL/CORPORATE/ECONOMIC/GEOPOLITICAL","scope":"NATIONAL/INTERNATIONAL","icon":"relevant emoji","sectors":{"buy":["sector1"],"avoid":["sector2"]},"detail":"50-word deeper analysis with specific stocks/indices affected and expected price action"}]
 
-Be specific, factual, and relevant to current Indian market conditions. Include global events (US Fed, crude oil, China) that impact India.`;
+Be specific, factual, and relevant to current Indian market conditions. Include both Indian domestic events AND global events that impact India.`;
 
     const g = await callAI(prompt, { temperature: 0.5, maxOutputTokens: 4000, timeout: 45000 });
     const raw = g.text || '[]';

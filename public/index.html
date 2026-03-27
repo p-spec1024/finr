@@ -95,6 +95,11 @@ tailwind.config = {
   .idx-chip:hover{color:#fff5dc;background:#353534;}
   .idx-chip.active{background:rgba(255,214,10,0.12);color:#ffd60a;border-color:rgba(255,214,10,0.3);}
 
+  /* News filter buttons */
+  .news-filter-btn{background:#242426;color:#d0c6ab;border:1px solid transparent;}
+  .news-filter-btn.active{background:#ffd60a;color:#131313;border-color:#ffd60a;}
+  .news-filter-btn:hover:not(.active){border-color:#4d4632;}
+
   /* Theme toggle */
   .light-mode{--bg:#f5f5f0;--surface:#ffffff;--surface-dim:#e8e8e3;--text:#1a1a1a;--text-secondary:#666;--border:#ddd;}
   html.light body{background:var(--bg)!important;color:var(--text)!important;}
@@ -139,6 +144,7 @@ tailwind.config = {
   input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);}
 
   /* Dashboard card collapse */
+  .dash-card{align-self:start;}
   .dash-card-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;transition:background 0.15s;}
   .dash-card-header:hover{background:rgba(53,53,52,0.3);}
   .dash-card-chevron{transition:transform 0.2s ease;}
@@ -463,6 +469,7 @@ tailwind.config = {
           <button class="idx-chip flex-shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider transition-all" data-index="NIFTY100" onclick="switchHeroIndex(this)">Nifty 100</button>
           <button class="idx-chip flex-shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider transition-all" data-index="NIFTYFIFTY" onclick="switchHeroIndex(this)">Nifty Next 50</button>
           <button class="idx-chip flex-shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider transition-all" data-index="INDIA_VIX" onclick="switchHeroIndex(this)">India VIX</button>
+          <button class="idx-chip flex-shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider transition-all" data-index="GIFT_NIFTY" onclick="switchHeroIndex(this)">Gift Nifty</button>
           <button class="idx-chip flex-shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider transition-all" data-index="GOLD" onclick="switchHeroIndex(this)">Gold</button>
           <button class="idx-chip flex-shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider transition-all" data-index="CRUDE" onclick="switchHeroIndex(this)">Crude Oil</button>
           <button class="idx-chip flex-shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider transition-all" data-index="SP500" onclick="switchHeroIndex(this)">S&P 500</button>
@@ -571,6 +578,11 @@ tailwind.config = {
               <div class="text-[11px] text-[#d0c6ab] font-mono px-4 py-2">Loading news...</div>
             </div>
             <div class="dash-card-body collapsed">
+              <div class="flex gap-1 px-4 pt-3 pb-1">
+                <button class="news-filter-btn active px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all" data-filter="all" onclick="filterNews('all',this)">All</button>
+                <button class="news-filter-btn px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all" data-filter="national" onclick="filterNews('national',this)">National</button>
+                <button class="news-filter-btn px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all" data-filter="international" onclick="filterNews('international',this)">International</button>
+              </div>
               <div id="news-list" class="space-y-3 max-h-[350px] overflow-y-auto px-4 pb-4"></div>
               <div id="news-loading" class="text-center py-5 text-[#636366] text-sm">Loading news...</div>
             </div>
@@ -583,7 +595,10 @@ tailwind.config = {
                 <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">swap_vert</span>
                 <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Flows & Macros</h3>
               </div>
-              <span class="material-symbols-outlined dash-card-chevron text-[#d0c6ab]" style="font-size:18px">expand_more</span>
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="fii-ts"></span>
+                <span class="material-symbols-outlined dash-card-chevron text-[#d0c6ab]" style="font-size:18px">expand_more</span>
+              </div>
             </div>
             <div class="dash-card-peek" id="fii-peek">
               <div class="flex justify-between items-center px-4 py-2 text-[11px] font-mono">
@@ -603,7 +618,10 @@ tailwind.config = {
                 <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">event</span>
                 <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Economic Calendar</h3>
               </div>
-              <span class="material-symbols-outlined dash-card-chevron text-[#d0c6ab]" style="font-size:18px">expand_more</span>
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="events-ts"></span>
+                <span class="material-symbols-outlined dash-card-chevron text-[#d0c6ab]" style="font-size:18px">expand_more</span>
+              </div>
             </div>
             <div class="dash-card-peek" id="events-peek">
               <div class="text-[11px] text-[#d0c6ab] font-mono px-4 py-2">Loading events...</div>
@@ -615,18 +633,24 @@ tailwind.config = {
 
           <!-- CARD 4: Market Breadth -->
           <section class="dash-card bg-[#1c1b1b] rounded-xl p-4" id="breadth-card">
-            <div class="flex items-center gap-2 mb-3">
-              <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">equalizer</span>
-              <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Breadth</h3>
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">equalizer</span>
+                <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Breadth</h3>
+              </div>
+              <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="breadth-ts"></span>
             </div>
             <div id="breadth-bar"></div>
           </section>
 
           <!-- CARD 5: Market Health Scorecard (bigger) -->
           <section class="dash-card bg-[#1c1b1b] rounded-xl p-4">
-            <div class="flex items-center gap-2 mb-3">
-              <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">health_and_safety</span>
-              <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Health</h3>
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">health_and_safety</span>
+                <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Health</h3>
+              </div>
+              <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="health-ts"></span>
             </div>
             <div class="flex flex-col items-center">
               <svg viewBox="0 0 130 76" style="width:140px;height:80px;flex-shrink:0">
@@ -647,12 +671,15 @@ tailwind.config = {
                 <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">monitoring</span>
                 <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Pulse</h3>
               </div>
-              <select id="pulse-select" class="bg-[#0e0e0e] border border-[#353534] rounded-lg text-[10px] font-mono font-bold text-[#d0c6ab] px-2 py-1 outline-none focus:border-[#ffd60a] cursor-pointer appearance-none" onchange="renderPulseChart(this.value)" style="min-width:110px">
-                <option value="fii-dii">FII vs DII</option>
-                <option value="health-radar">Health Radar</option>
-                <option value="vix-meter">VIX Meter</option>
-                <option value="sector-flow">Sector Flow</option>
-              </select>
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="pulse-ts"></span>
+                <select id="pulse-select" class="bg-[#0e0e0e] border border-[#353534] rounded-lg text-[10px] font-mono font-bold text-[#d0c6ab] px-2 py-1 outline-none focus:border-[#ffd60a] cursor-pointer appearance-none" onchange="renderPulseChart(this.value)" style="min-width:110px">
+                  <option value="fii-dii">FII vs DII</option>
+                  <option value="health-radar">Health Radar</option>
+                  <option value="vix-meter">VIX Meter</option>
+                  <option value="sector-flow">Sector Flow</option>
+                </select>
+              </div>
             </div>
             <div id="pulse-chart" class="flex items-center justify-center" style="min-height:160px">
               <div class="text-[#636366] text-xs font-mono">Loading...</div>
@@ -1502,7 +1529,10 @@ function refreshAll() {
   renderHomeFiiDii();
   fetchGlobalMarkets();
   loadMarketPrediction();
-  setTimeout(()=>toast('Data refreshed ✅'),800);
+  setTimeout(()=>{
+    const ts = new Date().toLocaleString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true, day:'numeric', month:'short'});
+    toast('Data refreshed at ' + ts);
+  },800);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1768,6 +1798,7 @@ function renderGauge() {
     ];
     grid.innerHTML = items.map(i=>`<div><div class="text-[8px] text-[#d0c6ab] font-bold uppercase font-mono">${i.l}</div><div class="text-[10px] font-bold" style="color:${i.c}">${i.v}</div></div>`).join('');
   }
+  setCardTs('health-ts');
 }
 
 function renderBreadth() {
@@ -1789,6 +1820,7 @@ function renderBreadth() {
       <div class="flex items-center gap-1.5 text-[#47e266]"><span class="w-2 h-2 rounded-full bg-[#47e266]"></span>${up} UP (${upPct}%)</div>
       <div class="flex items-center gap-1.5 text-[#ffb4ab]">${dn} DOWN (${dnPct}%)<span class="w-2 h-2 rounded-full bg-[#ffb4ab]"></span></div>
     </div>`;
+  setCardTs('breadth-ts');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1803,6 +1835,7 @@ async function fetchNews() {
     }
   } catch {}
   renderNews();
+  setCardTs('news-ts');
 }
 
 function renderNews() {
@@ -1817,7 +1850,7 @@ function renderNews() {
                      'bg-[#47e266]/12 text-[#47e266]';
     const sentColor = (n.sentiment||'').toLowerCase().includes('positive') ? 'text-[#47e266]' :
                       (n.sentiment||'').toLowerCase().includes('negative') ? 'text-[#ffb4ab]' : 'text-[#d0c6ab]';
-    return `<div class="flex gap-3 cursor-pointer hover:bg-[#353534]/30 rounded-lg p-2 -mx-2 transition-colors" onclick="openNewsModal(${i})">
+    return `<div class="news-item flex gap-3 cursor-pointer hover:bg-[#353534]/30 rounded-lg p-2 -mx-2 transition-colors" data-scope="${n.scope||'national'}" onclick="openNewsModal(${i})">
       <div class="flex-shrink-0 w-10 h-10 bg-[#353534] rounded flex items-center justify-center text-lg">${n.icon||'📰'}</div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 mb-1">
@@ -1883,6 +1916,8 @@ function renderHomeFiiDii() {
       <span class="text-[11px] font-bold tnum font-mono ${r.neutral ? 'text-[#e5e2e1]' : r.isUp ? 'text-[#47e266]' : 'text-[#ffb4ab]'}">${r.isUp && !r.neutral ? '+' : r.neutral ? '' : '-'}${r.val}</span>
     </div>
   `).join('');
+  setCardTs('fii-ts');
+  setCardTs('pulse-ts');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1892,7 +1927,7 @@ function renderEconCal() {
   const events = generateEventCalendar();
   const el = document.getElementById('h-events');
   if (!el) return;
-  if (!events.length) { el.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">No upcoming events</div>'; return; }
+  if (!events.length) { el.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">No upcoming events</div>'; setCardTs('events-ts'); return; }
   el.innerHTML = events.slice(0,3).map(e => {
     const priCol = e.priority.toLowerCase()==='high' ? '#ffb4ab' : e.priority.toLowerCase()==='medium' ? '#ffd60a' : '#47e266';
     return `<div class="flex gap-3">
@@ -1900,14 +1935,16 @@ function renderEconCal() {
       <div class="pb-2"><div class="flex justify-between items-start mb-0.5"><span class="text-[11px] font-bold">${e.title}</span><span class="text-[9px] font-bold text-[#ffd60a] tnum font-mono">${e.date}</span></div>${e.desc ? `<p class="text-[10px] text-[#d0c6ab] leading-tight">${e.desc}</p>` : ''}</div>
     </div>`;
   }).join('');
+  setCardTs('events-ts');
 }
 
 let MARKET_EVENTS = [];
 async function loadEventCalendar() {
   try {
     const d = await fetch('/api/market-context').then(r=>r.json());
-    if (d && d.length) {
-      MARKET_EVENTS = d;
+    const events = d.events || d || [];
+    if (events && events.length) {
+      MARKET_EVENTS = events;
       renderEconCal();
       renderFullEventCalendar();
     }
@@ -1973,6 +2010,20 @@ function generateEventCalendar() {
 // ══════════════════════════════════════════════════════════
 async function loadAiPicks() {
   const el = document.getElementById('picks-list');
+  // Market hours gate: only works 9:15-15:30 IST on weekdays
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
+  const day = ist.getDay();
+  const mins = ist.getHours()*60 + ist.getMinutes();
+  const marketOpen = day>=1 && day<=5 && mins>=555 && mins<=930; // 9:15=555, 15:30=930
+  if (!marketOpen) {
+    el.innerHTML = `<div class="text-center py-12">
+      <span class="material-symbols-outlined text-[#ffd60a] mb-3" style="font-size:48px">schedule</span>
+      <h3 class="text-lg font-bold text-[#e5e2e1] mb-2">Market Closed</h3>
+      <p class="text-[#d0c6ab] text-sm">AI Picks are available during market hours<br><strong class="text-[#ffd60a]">Mon–Fri, 9:15 AM – 3:30 PM IST</strong></p>
+    </div>`;
+    return;
+  }
   el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Loading AI picks...</div>';
   try {
     const d = await fetch('/api/ai-picks').then(r=>r.json());
@@ -1984,13 +2035,13 @@ async function loadAiPicks() {
           <div class="p-4">
             <div class="flex justify-between items-start mb-4">
               <div><h3 class="font-headline font-extrabold text-xl tracking-tight">${p.symbol}</h3><p class="text-[0.75rem] text-[#d0c6ab] font-medium">${p.name||'--'}</p></div>
-              <div class="text-right"><div class="text-lg font-bold tnum">₹${fmt(p.price)}</div><div class="text-[0.75rem] font-bold text-[#47e266] uppercase tracking-wider">+${p.upside}% UPSIDE</div></div>
+              <div class="text-right"><div class="text-lg font-bold tnum">₹${fmt(p.livePrice || p.currentPrice || 0)}</div><div class="text-[0.75rem] font-bold text-[#47e266] uppercase tracking-wider">${p.upside ? '+'+p.upside+'%' : (((p.targetPrice||0)-(p.livePrice||p.currentPrice||1))/((p.livePrice||p.currentPrice||1))*100).toFixed(1)+'%'} UPSIDE</div></div>
             </div>
             <div class="grid grid-cols-2 gap-2.5 mb-4">
-              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Target</p><p class="text-sm font-bold tnum text-[#ffd60a]">₹${fmt(p.target)}</p></div>
+              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Target</p><p class="text-sm font-bold tnum text-[#ffd60a]">₹${fmt(p.targetPrice || 0)}</p></div>
               <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Confidence</p><p class="text-sm font-bold tnum text-[#47e266]">${p.confidence}%</p></div>
               <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Timeframe</p><p class="text-sm font-bold text-[#e5e2e1]">${p.timeframe}</p></div>
-              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Risk</p><p class="text-sm font-bold text-[#e5e2e1]">${p.risk}</p></div>
+              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Risk</p><p class="text-sm font-bold text-[#e5e2e1]">${p.riskLevel || 'N/A'}</p></div>
             </div>
             ${p.reason ? `<div class="mb-3"><p class="text-[0.8125rem] text-[#d0c6ab] line-clamp-2 leading-relaxed" id="reason-${p.symbol}">${p.reason.substring(0,120)}...</p><button class="text-[#ffd60a] font-bold text-sm mt-1" onclick="const r=document.getElementById('reason-${p.symbol}');r.classList.toggle('line-clamp-2');this.textContent=r.classList.contains('line-clamp-2')?'View AI Reasoning ▸':'Collapse ▴'">View AI Reasoning ▸</button></div>` : ''}
             <div class="flex flex-wrap gap-2">${(p.tags||[]).map(t=>`<span class="px-2 py-0.5 rounded bg-[#353534] text-[0.625rem] font-bold text-[#e5e2e1] uppercase tracking-tight">${t}</span>`).join('')}</div>
@@ -2011,6 +2062,20 @@ async function loadOptionsLab() {
   const elHidden = document.getElementById('opts-list');
   const target = el || elHidden;
   if (!target) return;
+  // Market hours gate: only works 9:15-15:30 IST on weekdays
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
+  const day = ist.getDay();
+  const mins = ist.getHours()*60 + ist.getMinutes();
+  const marketOpen = day>=1 && day<=5 && mins>=555 && mins<=930; // 9:15=555, 15:30=930
+  if (!marketOpen) {
+    target.innerHTML = `<div class="text-center py-12">
+      <span class="material-symbols-outlined text-[#ffd60a] mb-3" style="font-size:48px">schedule</span>
+      <h3 class="text-lg font-bold text-[#e5e2e1] mb-2">Market Closed</h3>
+      <p class="text-[#d0c6ab] text-sm">Options Lab is available during market hours<br><strong class="text-[#ffd60a]">Mon–Fri, 9:15 AM – 3:30 PM IST</strong></p>
+    </div>`;
+    return;
+  }
   target.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Loading options strategies...</div>';
   try {
     const d = await fetch('/api/options-lab').then(r=>r.json());
@@ -3289,6 +3354,22 @@ function toast(msg) {
   setTimeout(() => el.classList.remove('on'), 2000);
 }
 
+function setCardTs(id) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', hour12:true});
+}
+
+let newsFilterMode = 'all';
+function filterNews(mode, btn) {
+  newsFilterMode = mode;
+  document.querySelectorAll('.news-filter-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  document.querySelectorAll('.news-item').forEach(el => {
+    const scope = el.dataset.scope || 'national';
+    el.style.display = (mode==='all' || scope===mode) ? '' : 'none';
+  });
+}
+
 function closeMod(e) { if (e.target === e.currentTarget) document.getElementById('mod').classList.remove('on'); }
 function closeModD() { document.getElementById('mod').classList.remove('on'); }
 
@@ -3542,7 +3623,7 @@ function renderSectorFlow(el) {
 let activeHeroIndex = 'NIFTY50';
 const INDEX_LABEL_MAP = {
   'NIFTY50': 'Nifty 50', 'NIFTYBANK': 'Bank Nifty', 'NIFTY100': 'Nifty 100',
-  'NIFTYFIFTY': 'Nifty Next 50', 'INDIA_VIX': 'India VIX',
+  'NIFTYFIFTY': 'Nifty Next 50', 'INDIA_VIX': 'India VIX', 'GIFT_NIFTY': 'Gift Nifty',
   'GOLD': 'Gold $/oz', 'CRUDE': 'Crude WTI', 'SP500': 'S&P 500',
   'NASDAQ': 'NASDAQ', 'USDINR': 'USD/INR', 'DOW': 'Dow Jones', 'NIKKEI': 'Nikkei 225'
 };
