@@ -144,7 +144,7 @@ tailwind.config = {
   input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);}
 
   /* Dashboard card collapse */
-  .dash-card{align-self:start;}
+  .dash-card{align-self:start;position:relative;}
   .dash-card-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;transition:background 0.15s;}
   .dash-card-header:hover{background:rgba(53,53,52,0.3);}
   .dash-card-chevron{transition:transform 0.2s ease;}
@@ -152,7 +152,7 @@ tailwind.config = {
   .dash-card-peek{transition:max-height 0.2s ease,opacity 0.2s;max-height:60px;overflow:hidden;}
   .dash-card.expanded .dash-card-peek{max-height:0;opacity:0;}
   .dash-card-body.collapsed{max-height:0;opacity:0;overflow:hidden;transition:max-height 0.3s ease,opacity 0.2s;}
-  .dash-card.expanded .dash-card-body.collapsed{max-height:600px;opacity:1;}
+  .dash-card.expanded .dash-card-body.collapsed{max-height:450px;opacity:1;position:absolute;left:0;right:0;z-index:20;background:#1c1b1b;border-radius:0 0 12px 12px;box-shadow:0 8px 32px rgba(0,0,0,0.6);overflow-y:auto;}
 
   /* ═══════ DESKTOP RESPONSIVE LAYER ═══════ */
 
@@ -480,7 +480,10 @@ tailwind.config = {
         <!-- Two-column: Index (left) + Market Prediction (right) -->
         <div class="md:grid md:grid-cols-2 md:gap-6">
           <!-- Left: Index Card -->
-          <section class="flex flex-col items-center md:items-start py-3 bg-[#1c1b1b] rounded-xl md:p-6">
+          <section class="flex flex-col items-center md:items-start py-3 bg-[#1c1b1b] rounded-xl md:p-6 relative">
+            <button class="absolute top-3 right-3 p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="renderHeroIdx();fetchGlobalMarkets();toast('Index refreshed')" title="Refresh Index">
+              <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
+            </button>
             <span class="text-[#d0c6ab] font-mono text-[10px] uppercase tracking-[0.2em] mb-2 font-bold" id="h-index-label">Nifty 50</span>
             <h2 class="font-headline font-extrabold text-[3.2rem] tracking-tighter tnum leading-none" id="h-nifty">--<span class="text-[1.6rem] font-semibold text-[#d0c6ab]">.--</span></h2>
             <div class="flex items-center gap-2 mt-3">
@@ -521,22 +524,32 @@ tailwind.config = {
                 <div class="text-[8px] text-[#d0c6ab] font-mono uppercase">Conf.</div>
               </div>
             </div>
-            <!-- Divider -->
-            <div class="h-px bg-[#353534] mb-4"></div>
-            <!-- Next session outlook -->
-            <div class="flex items-center gap-3 mb-4" id="pred-next">
-              <div class="w-12 h-12 rounded-xl flex items-center justify-center" id="pred-next-icon" style="background:rgba(71,226,102,0.1)">
-                <span class="material-symbols-outlined text-[#47e266]" style="font-size:24px">schedule</span>
+            <!-- Divider + Next Session toggle -->
+            <div class="h-px bg-[#353534] mb-3"></div>
+            <div id="pred-next-wrapper">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider">Next Session Outlook</span>
+                <button class="text-[8px] font-mono px-2 py-0.5 rounded border border-[#4d4632] hover:text-[#ffd60a] hover:border-[#ffd60a] transition-colors active:scale-95" id="pred-next-toggle" onclick="toggleNextSession()" style="color:#d0c6ab">
+                  <span class="material-symbols-outlined text-[10px] align-middle" id="pred-next-toggle-icon">visibility_off</span>
+                  <span id="pred-next-toggle-text">Show</span>
+                </button>
               </div>
-              <div class="flex-1">
-                <div class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider">Next Session</div>
-                <div class="text-sm font-bold text-[#e5e2e1] font-headline" id="pred-next-label">Waiting...</div>
-                <div class="text-[10px] text-[#d0c6ab] line-clamp-2 leading-tight mt-0.5" id="pred-next-detail">Available after market analysis</div>
+              <div id="pred-next-body" class="hidden">
+                <div class="flex items-center gap-3 mb-4" id="pred-next">
+                  <div class="w-12 h-12 rounded-xl flex items-center justify-center" id="pred-next-icon" style="background:rgba(71,226,102,0.1)">
+                    <span class="material-symbols-outlined text-[#47e266]" style="font-size:24px">schedule</span>
+                  </div>
+                  <div class="flex-1">
+                    <div class="text-sm font-bold text-[#e5e2e1] font-headline" id="pred-next-label">Waiting...</div>
+                    <div class="text-[10px] text-[#d0c6ab] line-clamp-2 leading-tight mt-0.5" id="pred-next-detail">Available after market analysis</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-lg font-bold font-headline tnum" id="pred-next-conf" style="color:#47e266">--%</div>
+                    <div class="text-[8px] text-[#d0c6ab] font-mono uppercase">Conf.</div>
+                  </div>
+                </div>
               </div>
-              <div class="text-right">
-                <div class="text-lg font-bold font-headline tnum" id="pred-next-conf" style="color:#47e266">--%</div>
-                <div class="text-[8px] text-[#d0c6ab] font-mono uppercase">Conf.</div>
-              </div>
+              <div id="pred-next-hint" class="text-[8px] text-[#636366] italic">Best viewed near market close (after 2:30 PM)</div>
             </div>
             <!-- Key factors -->
             <div class="flex flex-wrap gap-1.5" id="pred-factors"></div>
@@ -571,6 +584,9 @@ tailwind.config = {
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="news-ts"></span>
+                <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="event.stopPropagation();fetchNews()" title="Refresh News">
+                  <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
+                </button>
                 <span class="material-symbols-outlined dash-card-chevron text-[#d0c6ab]" style="font-size:18px">expand_more</span>
               </div>
             </div>
@@ -597,6 +613,9 @@ tailwind.config = {
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="fii-ts"></span>
+                <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="event.stopPropagation();renderHomeFiiDii();updateFiiPeek();toast('Flows refreshed')" title="Refresh Flows">
+                  <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
+                </button>
                 <span class="material-symbols-outlined dash-card-chevron text-[#d0c6ab]" style="font-size:18px">expand_more</span>
               </div>
             </div>
@@ -620,6 +639,9 @@ tailwind.config = {
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="events-ts"></span>
+                <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="event.stopPropagation();loadEventCalendar();toast('Calendar refreshing...')" title="Refresh Calendar">
+                  <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
+                </button>
                 <span class="material-symbols-outlined dash-card-chevron text-[#d0c6ab]" style="font-size:18px">expand_more</span>
               </div>
             </div>
@@ -627,7 +649,7 @@ tailwind.config = {
               <div class="text-[11px] text-[#d0c6ab] font-mono px-4 py-2">Loading events...</div>
             </div>
             <div class="dash-card-body collapsed">
-              <div id="h-events" class="space-y-3 px-4 pb-4"></div>
+              <div id="h-events" class="space-y-3 px-4 pb-4 max-h-[350px] overflow-y-auto"></div>
             </div>
           </section>
 
@@ -638,7 +660,12 @@ tailwind.config = {
                 <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">equalizer</span>
                 <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Breadth</h3>
               </div>
-              <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="breadth-ts"></span>
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="breadth-ts"></span>
+                <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="renderBreadth();toast('Breadth refreshed')" title="Refresh Breadth">
+                  <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
+                </button>
+              </div>
             </div>
             <div id="breadth-bar"></div>
           </section>
@@ -650,7 +677,12 @@ tailwind.config = {
                 <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">health_and_safety</span>
                 <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Health</h3>
               </div>
-              <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="health-ts"></span>
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="health-ts"></span>
+                <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="renderGauge();toast('Health refreshed')" title="Refresh Health">
+                  <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
+                </button>
+              </div>
             </div>
             <div class="flex flex-col items-center">
               <svg viewBox="0 0 130 76" style="width:140px;height:80px;flex-shrink:0">
@@ -673,6 +705,9 @@ tailwind.config = {
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="pulse-ts"></span>
+                <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="renderPulseChart(document.getElementById('pulse-select')?.value||'fii-dii');toast('Pulse refreshed')" title="Refresh Pulse">
+                  <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
+                </button>
                 <select id="pulse-select" class="bg-[#0e0e0e] border border-[#353534] rounded-lg text-[10px] font-mono font-bold text-[#d0c6ab] px-2 py-1 outline-none focus:border-[#ffd60a] cursor-pointer appearance-none" onchange="renderPulseChart(this.value)" style="min-width:110px">
                   <option value="fii-dii">FII vs DII</option>
                   <option value="health-radar">Health Radar</option>
@@ -1696,7 +1731,23 @@ function connectWS() {
         if (d.signals) Object.assign(SIG, d.signals);
         if (d.vix) VIX = d.vix;
         if (d.fiiDii) FIIDII = d.fiiDii;
+        if (d.globalMarkets) globalMarkets = d.globalMarkets;
         renderHeroIdx(); renderGauge(); renderBreadth(); renderHomeFiiDii();
+        updateFiiPeek();
+        renderPulseChart(document.getElementById('pulse-select')?.value || 'fii-dii');
+      }
+      else if (d.type==='tick') {
+        if (d.stocks) Object.assign(S, d.stocks);
+        if (d.indices) Object.assign(IDX, d.indices);
+        if (d.signals) Object.assign(SIG, d.signals);
+        if (d.vix) VIX = d.vix;
+        if (d.fiiDii) FIIDII = d.fiiDii;
+        if (d.globalMarkets) globalMarkets = d.globalMarkets;
+        if (curTab==='home') {
+          renderHeroIdx(); renderGauge(); renderBreadth(); renderHomeFiiDii();
+          updateFiiPeek();
+          renderPulseChart(document.getElementById('pulse-select')?.value || 'fii-dii');
+        }
       }
       else if (d.type==='quote') processUpstoxQuote(d);
       else if (d.type==='status') setSt(d.status);
@@ -1857,7 +1908,7 @@ function renderNews() {
                      'bg-[#47e266]/12 text-[#47e266]';
     const sentColor = (n.sentiment||'').toLowerCase().includes('positive') ? 'text-[#47e266]' :
                       (n.sentiment||'').toLowerCase().includes('negative') ? 'text-[#ffb4ab]' : 'text-[#d0c6ab]';
-    const timeStr = n.fetchedAt ? new Date(n.fetchedAt).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}) : (n.time||'Just now');
+    const timeStr = n.date || (n.fetchedAt ? new Date(n.fetchedAt).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}) : (n.time||'Just now'));
     return `<div class="news-item flex gap-3 cursor-pointer hover:bg-[#353534]/30 rounded-lg p-2 -mx-2 transition-colors" data-scope="${(n.scope||'national').toLowerCase()}" onclick="openNewsModal(${i})">
       <div class="flex-shrink-0 w-10 h-10 bg-[#353534] rounded flex items-center justify-center text-lg">${n.icon||'📰'}</div>
       <div class="flex-1 min-w-0">
@@ -1937,11 +1988,17 @@ function renderEconCal() {
   const el = document.getElementById('h-events');
   if (!el) return;
   if (!events.length) { el.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">No upcoming events</div>'; setCardTs('events-ts'); return; }
-  el.innerHTML = events.slice(0,3).map(e => {
+  el.innerHTML = events.map(e => {
     const priCol = e.priority.toLowerCase()==='high' ? '#ffb4ab' : e.priority.toLowerCase()==='medium' ? '#ffd60a' : '#47e266';
     return `<div class="flex gap-3">
       <div class="flex flex-col items-center"><div class="w-2 h-2 rounded-full mt-1" style="background:${priCol}"></div><div class="w-[1px] h-full bg-[#353534] mt-1"></div></div>
-      <div class="pb-2"><div class="flex justify-between items-start mb-0.5"><span class="text-[11px] font-bold">${e.title}</span><span class="text-[9px] font-bold text-[#ffd60a] tnum font-mono">${e.date}</span></div>${e.desc ? `<p class="text-[10px] text-[#d0c6ab] leading-tight">${e.desc}</p>` : ''}</div>
+      <div class="pb-2 flex-1">
+        <div class="flex items-start gap-2 mb-0.5">
+          <span class="text-[11px] font-bold flex-1">${e.title}</span>
+          <span class="text-[9px] font-bold text-[#ffd60a] tnum font-mono whitespace-nowrap flex-shrink-0">${e.date}</span>
+        </div>
+        ${e.desc ? `<p class="text-[10px] text-[#d0c6ab] leading-tight">${e.desc}</p>` : ''}
+      </div>
     </div>`;
   }).join('');
   setCardTs('events-ts');
@@ -4119,6 +4176,37 @@ function applyStoredLayout() {
 }
 
 // ══════════════════════════════════════════════════════════
+// NEXT SESSION TOGGLE
+// ══════════════════════════════════════════════════════════
+let nextSessionVisible = false;
+function toggleNextSession() {
+  nextSessionVisible = !nextSessionVisible;
+  const body = document.getElementById('pred-next-body');
+  const hint = document.getElementById('pred-next-hint');
+  const icon = document.getElementById('pred-next-toggle-icon');
+  const text = document.getElementById('pred-next-toggle-text');
+  if (nextSessionVisible) {
+    body.classList.remove('hidden');
+    if (hint) hint.classList.add('hidden');
+    icon.textContent = 'visibility';
+    text.textContent = 'Hide';
+  } else {
+    body.classList.add('hidden');
+    if (hint) hint.classList.remove('hidden');
+    icon.textContent = 'visibility_off';
+    text.textContent = 'Show';
+  }
+}
+function autoShowNextSession() {
+  const ist = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+  const mins = ist.getHours()*60+ist.getMinutes();
+  // Auto-show after 2:30 PM IST (870 mins) on weekdays
+  if (mins >= 870 && ist.getDay()>=1 && ist.getDay()<=5 && !nextSessionVisible) {
+    toggleNextSession();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
 // INIT APP
 // ══════════════════════════════════════════════════════════
 async function initApp() {
@@ -4142,6 +4230,7 @@ async function initApp() {
     // Fetch global markets and market prediction
     fetchGlobalMarkets();
     loadMarketPrediction();
+    autoShowNextSession();
     // Apply saved desktop layout customizations
     if (window.innerWidth >= 768) applyStoredLayout();
   }, 500);
