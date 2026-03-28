@@ -4372,10 +4372,31 @@ async function loadMarketPrediction() {
   document.getElementById('pred-next-label').textContent = 'Loading...';
   try {
     const d = await fetch('/api/market-prediction').then(r => r.json());
-    if (d.error) {
-      document.getElementById('pred-today-label').textContent = 'Unavailable';
+    // Market closed with NO cached data — show closed state for both sections
+    if (d.error && !d.todayBehavior) {
+      document.getElementById('pred-today-label').textContent = 'Market Closed';
+      document.getElementById('pred-today-label').style.color = '#636366';
       document.getElementById('pred-today-detail').textContent = d.error;
+      document.getElementById('pred-today-conf').textContent = '--%';
+      document.getElementById('pred-today-conf').style.color = '#636366';
+      const todayIcon = document.getElementById('pred-today-icon');
+      todayIcon.style.background = 'rgba(99,99,102,0.1)';
+      todayIcon.innerHTML = '<span class="material-symbols-outlined" style="font-size:24px;color:#636366">bedtime</span>';
+      // Next session also closed
+      document.getElementById('pred-next-label').textContent = 'Market Closed';
+      document.getElementById('pred-next-label').style.color = '#636366';
+      document.getElementById('pred-next-detail').textContent = d.nextOpen ? `Next session: ${new Date(d.nextOpen).toLocaleString('en-IN', {weekday:'short', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}` : 'Available during market hours';
+      document.getElementById('pred-next-conf').textContent = '--%';
+      document.getElementById('pred-next-conf').style.color = '#636366';
+      const nextIcon = document.getElementById('pred-next-icon');
+      nextIcon.style.background = 'rgba(99,99,102,0.1)';
+      nextIcon.innerHTML = '<span class="material-symbols-outlined" style="font-size:24px;color:#636366">schedule</span>';
       return;
+    }
+    // If stale cached data with market closed, show a stale badge
+    if (d.marketClosed && d.stale && d.lastUpdated) {
+      const staleTime = new Date(d.lastUpdated).toLocaleString('en-IN', {hour:'2-digit', minute:'2-digit', day:'numeric', month:'short'});
+      document.getElementById('pred-today-detail').dataset.staleSuffix = ` [Last updated: ${staleTime}]`;
     }
     // Today's behavior
     const behaviorMap = {
@@ -4392,7 +4413,8 @@ async function loadMarketPrediction() {
     iconEl.innerHTML = `<span class="material-symbols-outlined" style="font-size:24px;color:${tb.color}">${tb.icon}</span>`;
     document.getElementById('pred-today-label').textContent = (d.todayBehavior || 'UNKNOWN').replace(/_/g, ' ');
     document.getElementById('pred-today-label').style.color = tb.color;
-    document.getElementById('pred-today-detail').textContent = d.todayExplanation || '';
+    const staleSuffix = document.getElementById('pred-today-detail').dataset.staleSuffix || '';
+    document.getElementById('pred-today-detail').textContent = (d.todayExplanation || '') + staleSuffix;
     document.getElementById('pred-today-conf').textContent = (d.todayConfidence || '--') + '%';
     document.getElementById('pred-today-conf').style.color = tb.color;
 
