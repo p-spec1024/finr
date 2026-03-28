@@ -3025,6 +3025,258 @@ function buildChainSummary(oc) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// SMART SCREENER — Pure in-memory filtering, no AI calls, instant response
+// ══════════════════════════════════════════════════════════════════════════════
+app.get('/api/screener', (req, res) => {
+  // ── Market hours gate — allow cached data outside hours ──
+  const hasCache = Object.keys(signalCache).length > 0;
+  if (!isMarketOpen() && !hasCache) {
+    return res.json(marketClosedResponse(null));
+  }
+
+  // ── Parse filter parameters ──
+  const filters = {
+    preset:      req.query.preset || null,
+    scoreMin:    req.query.scoreMin ? +req.query.scoreMin : null,
+    scoreMax:    req.query.scoreMax ? +req.query.scoreMax : null,
+    rsiZone:     req.query.rsiZone || null,       // oversold, neutral, overbought
+    emaAlign:    req.query.emaAlign || null,       // bullish, bearish
+    macdDir:     req.query.macdDir || null,        // bullish, bearish
+    sector:      req.query.sector || null,
+    cap:         req.query.cap || null,            // Large, Mid, Small
+    fnoOnly:     req.query.fnoOnly === 'true',
+    changePctMin: req.query.changePctMin ? +req.query.changePctMin : null,
+    changePctMax: req.query.changePctMax ? +req.query.changePctMax : null,
+    nearSupport: req.query.nearSupport === 'true',
+    near52Low:   req.query.near52Low === 'true',
+    near52High:  req.query.near52High === 'true',
+    sortBy:      req.query.sortBy || 'score',     // score, changePct, rsi, symbol
+    sortDir:     req.query.sortDir || 'desc',
+    limit:       req.query.limit ? Math.min(+req.query.limit, 165) : 50
+  };
+
+  // ── Apply presets (override individual filters) ──
+  if (filters.preset === 'oversold-quality') {
+    filters.scoreMin = filters.scoreMin || 55;
+    filters.rsiZone = 'oversold';
+    // above 200 EMA checked in filter loop
+    filters._above200EMA = true;
+  } else if (filters.preset === 'momentum-breakouts') {
+    filters.scoreMin = filters.scoreMin || 60;
+    filters.emaAlign = 'bullish';
+    filters.macdDir = 'bullish';
+  } else if (filters.preset === 'value-dips') {
+    filters.scoreMin = filters.scoreMin || 40;
+    filters.near52Low = true;
+  } else if (filters.preset === 'fno-high-iv') {
+    filters.fnoOnly = true;
+    filters._hasIV = true;
+  } else if (filters.preset === 'strong-buys') {
+    filters.scoreMin = 75;
+  }
+
+  // ── Build result set ──
+  const results = [];
+  const sectors = new Set();
+  let totalScanned = 0;
+
+  for (const stock of STOCK_UNIVERSE) {
+    const sym = stock.symbol;
+    const live = liveStocks[sym];
+    const sig = signalCache[sym];
+
+    // Must have live price data
+    if (!live || !live.price) continue;
+    totalScanned++;
+
+    // Collect sectors for filter dropdown
+    if (stock.sector) sectors.add(stock.sector);
+
+    // ── Apply filters ──
+
+    // Signal score range
+    const score = sig?.score ?? 0;
+    if (filters.scoreMin !== null && score < filters.scoreMin) continue;
+    if (filters.scoreMax !== null && score > filters.scoreMax) continue;
+
+    // RSI zone filter
+    if (filters.rsiZone) {
+      const prices = priceHistory[sym] || [];
+      let rsi = 50;
+      if (prices.length >= 15) {
+        rsi = calcRSI(prices, 14);
+      }
+      if (filters.rsiZone === 'oversold' && rsi >= 35) continue;
+      if (filters.rsiZone === 'overbought' && rsi <= 65) continue;
+      if (filters.rsiZone === 'neutral' && (rsi < 35 || rsi > 65)) continue;
+    }
+
+    // EMA alignment
+    if (filters.emaAlign || filters._above200EMA) {
+      const prices = priceHistory[sym] || [];
+      if (prices.length >= 20) {
+        const ema20 = calcEMA(prices, 20);
+        const ema50 = calcEMA(prices, Math.min(50, prices.length));
+        const ema200 = calcEMA(prices, Math.min(200, prices.length));
+        if (filters.emaAlign === 'bullish' && !(ema20 > ema50 && live.price > ema20)) continue;
+        if (filters.emaAlign === 'bearish' && !(ema20 < ema50 && live.price < ema20)) continue;
+        if (filters._above200EMA && live.price < ema200) continue;
+      } else if (filters.emaAlign || filters._above200EMA) {
+        continue; // Not enough data to evaluate
+      }
+    }
+
+    // MACD direction
+    if (filters.macdDir) {
+      const prices = priceHistory[sym] || [];
+      if (prices.length >= 26) {
+        const macdData = calcMACD(prices);
+        if (filters.macdDir === 'bullish' && !(macdData.macd > macdData.signal)) continue;
+        if (filters.macdDir === 'bearish' && !(macdData.macd < macdData.signal)) continue;
+      } else {
+        continue; // Not enough data
+      }
+    }
+
+    // Sector filter
+    if (filters.sector && stock.sector !== filters.sector) continue;
+
+    // Cap size
+    if (filters.cap && stock.cap !== filters.cap) continue;
+
+    // F&O only
+    if (filters.fnoOnly && !FNO_STOCKS.includes(sym)) continue;
+
+    // Change % range
+    if (filters.changePctMin !== null && (live.changePct || 0) < filters.changePctMin) continue;
+    if (filters.changePctMax !== null && (live.changePct || 0) > filters.changePctMax) continue;
+
+    // Near support
+    if (filters.nearSupport) {
+      const prices = priceHistory[sym] || [];
+      if (prices.length >= 20) {
+        const support = calcSupport(prices, prices);
+        const dist = support > 0 ? ((live.price - support) / live.price) * 100 : 999;
+        if (dist > 5) continue;
+      } else {
+        continue;
+      }
+    }
+
+    // Near 52W low (within 10%)
+    if (filters.near52Low) {
+      const f52 = fundamentals[sym];
+      if (!f52 || !f52.low52) continue;
+      const dist = ((live.price - f52.low52) / f52.low52) * 100;
+      if (dist > 10) continue;
+    }
+
+    // Near 52W high (within 5%)
+    if (filters.near52High) {
+      const f52 = fundamentals[sym];
+      if (!f52 || !f52.high52) continue;
+      const dist = ((f52.high52 - live.price) / f52.high52) * 100;
+      if (dist > 5) continue;
+    }
+
+    // F&O High IV preset: must have option chain data
+    if (filters._hasIV) {
+      const oc = optionChainCache.stocks[sym];
+      if (!oc || !oc.avgIV) continue;
+    }
+
+    // ── Build result row ──
+    const prices = priceHistory[sym] || [];
+    let rsi = null, ema20 = null, ema50 = null, support = null, resistance = null;
+    if (prices.length >= 15) rsi = calcRSI(prices, 14);
+    if (prices.length >= 20) {
+      ema20 = calcEMA(prices, 20);
+      ema50 = calcEMA(prices, Math.min(50, prices.length));
+      support = calcSupport(prices, prices);
+      resistance = calcResistance(prices, prices);
+    }
+
+    const f52 = fundamentals[sym];
+    const oc = optionChainCache.stocks[sym];
+    const isFnO = FNO_STOCKS.includes(sym);
+
+    results.push({
+      symbol: sym,
+      name: stock.name,
+      sector: stock.sector,
+      cap: stock.cap,
+      price: live.price,
+      changePct: +(live.changePct || 0).toFixed(2),
+      volume: live.volume || 0,
+      score,
+      signal: sig?.signal || 'N/A',
+      techBias: sig?.techBias || 'NEUTRAL',
+      techScore: sig?.techScore || 50,
+      upside: sig?.upside || 0,
+      downside: sig?.downside || 0,
+      rsi: rsi !== null ? +rsi.toFixed(1) : null,
+      ema20,
+      ema50,
+      support,
+      resistance,
+      high52: f52?.high52 || null,
+      low52: f52?.low52 || null,
+      isFnO,
+      lotSize: isFnO ? (NSE_LOT_SIZES[sym] || null) : null,
+      pcr: oc?.pcr || null,
+      avgIV: oc?.avgIV || null,
+      maxPain: oc?.maxPain || null,
+      reason: sig?.reason || null,
+      lastUpdate: live.lastUpdate || null
+    });
+  }
+
+  // ── Sort ──
+  const dir = filters.sortDir === 'asc' ? 1 : -1;
+  results.sort((a, b) => {
+    if (filters.sortBy === 'changePct') return ((a.changePct || 0) - (b.changePct || 0)) * dir;
+    if (filters.sortBy === 'rsi') return ((a.rsi || 50) - (b.rsi || 50)) * dir;
+    if (filters.sortBy === 'symbol') return a.symbol.localeCompare(b.symbol) * dir;
+    return ((a.score || 0) - (b.score || 0)) * dir; // default: score
+  });
+
+  // ── Trim to limit ──
+  const trimmed = results.slice(0, filters.limit);
+
+  // ── Response ──
+  const response = {
+    stocks: trimmed,
+    total: results.length,
+    scanned: totalScanned,
+    sectors: [...sectors].sort(),
+    filters: {
+      preset: filters.preset,
+      scoreMin: filters.scoreMin,
+      scoreMax: filters.scoreMax,
+      rsiZone: filters.rsiZone,
+      emaAlign: filters.emaAlign,
+      macdDir: filters.macdDir,
+      sector: filters.sector,
+      cap: filters.cap,
+      fnoOnly: filters.fnoOnly,
+      nearSupport: filters.nearSupport,
+      near52Low: filters.near52Low,
+      near52High: filters.near52High
+    },
+    marketOpen: isMarketOpen(),
+    lastSignalUpdate: Object.values(signalCache).length > 0 ? Date.now() : null
+  };
+
+  if (!isMarketOpen()) {
+    response.stale = true;
+    response.lastUpdated = Object.values(liveStocks).reduce((max, s) => Math.max(max, s.lastUpdate || 0), 0);
+    if (response.lastUpdated) response.lastUpdated = new Date(response.lastUpdated).toISOString();
+  }
+
+  res.json(response);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 // TRADES CSV IMPORT (Zerodha tradebook format)
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/api/trades/import-csv', (req, res) => {

@@ -814,6 +814,7 @@ tailwind.config = {
           <button class="stab" data-it="options"></button>
           <button class="stab" data-it="verify"></button>
           <button class="stab" data-it="market-pulse"></button>
+          <button class="stab" data-it="screener"></button>
         </div>
 
         <!-- Navigation pills for Insights -->
@@ -829,6 +830,9 @@ tailwind.config = {
           </button>
           <button class="ins-pill flex items-center gap-2 px-4 py-2.5 rounded-lg text-[#d0c6ab] font-headline uppercase tracking-[0.05em] text-[0.6875rem] whitespace-nowrap hover:text-white transition-all" id="nav-pulse" onclick="switchInsightTab('market-pulse')">
             <span class="material-symbols-outlined text-sm">monitoring</span> Market Pulse
+          </button>
+          <button class="ins-pill flex items-center gap-2 px-4 py-2.5 rounded-lg text-[#d0c6ab] font-headline uppercase tracking-[0.05em] text-[0.6875rem] whitespace-nowrap hover:text-white transition-all" id="nav-screener" onclick="switchInsightTab('screener')">
+            <span class="material-symbols-outlined text-sm">filter_list</span> Screener
           </button>
         </nav>
 
@@ -911,6 +915,128 @@ tailwind.config = {
             <div id="pulse-results" class="space-y-3"></div>
             <footer class="text-center mt-3">
               <p class="text-[8px] text-[#636366] italic px-4 leading-normal">Institutional flow analysis — not financial advice. Always use your own judgment.</p>
+            </footer>
+          </section>
+        </div>
+
+        <!-- Smart Screener Content -->
+        <div class="stab-content" id="stab-screener">
+          <section class="space-y-3">
+            <div class="flex items-center justify-between mb-1">
+              <div>
+                <h3 class="text-base font-bold text-[#e5e2e1] flex items-center gap-2">
+                  <span class="material-symbols-outlined text-sm">filter_list</span> Smart Screener
+                </h3>
+                <p class="text-xs text-[#d0c6ab]">Filter 165+ stocks by signals, technicals &amp; F&amp;O data</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="screener-ts" class="text-[10px] text-[#636366] font-mono"></span>
+                <button class="flex items-center gap-1.5 border border-[#ffd60a] text-[#ffd60a] px-3 py-1 rounded-lg text-[10px] font-bold active:scale-95 transition-transform" onclick="loadScreener(true)">
+                  <span class="material-symbols-outlined text-xs">refresh</span> Scan
+                </button>
+              </div>
+            </div>
+
+            <!-- Preset pills -->
+            <div class="flex overflow-x-auto no-scrollbar gap-1.5 pb-1" id="screener-presets">
+              <button class="scr-preset text-[10px] px-3 py-1 rounded-full font-bold transition-all text-[#ffd60a] bg-[#ffd60a]/15 border border-[#ffd60a]/30" data-preset="" onclick="applyScreenerPreset('')">ALL</button>
+              <button class="scr-preset text-[10px] px-3 py-1 rounded-full font-bold transition-all text-[#d0c6ab] bg-transparent border border-[#4d4632]/30" data-preset="strong-buys" onclick="applyScreenerPreset('strong-buys')">Strong Buys</button>
+              <button class="scr-preset text-[10px] px-3 py-1 rounded-full font-bold transition-all text-[#d0c6ab] bg-transparent border border-[#4d4632]/30" data-preset="momentum-breakouts" onclick="applyScreenerPreset('momentum-breakouts')">Momentum</button>
+              <button class="scr-preset text-[10px] px-3 py-1 rounded-full font-bold transition-all text-[#d0c6ab] bg-transparent border border-[#4d4632]/30" data-preset="oversold-quality" onclick="applyScreenerPreset('oversold-quality')">Oversold</button>
+              <button class="scr-preset text-[10px] px-3 py-1 rounded-full font-bold transition-all text-[#d0c6ab] bg-transparent border border-[#4d4632]/30" data-preset="value-dips" onclick="applyScreenerPreset('value-dips')">Value Dips</button>
+              <button class="scr-preset text-[10px] px-3 py-1 rounded-full font-bold transition-all text-[#d0c6ab] bg-transparent border border-[#4d4632]/30" data-preset="fno-high-iv" onclick="applyScreenerPreset('fno-high-iv')">F&amp;O High IV</button>
+            </div>
+
+            <!-- Expandable custom filters -->
+            <div>
+              <button class="flex items-center gap-1 text-[10px] text-[#d0c6ab] font-bold uppercase tracking-wider" onclick="toggleScreenerFilters()">
+                <span class="material-symbols-outlined text-xs" id="scr-filter-chevron">expand_more</span> Custom Filters
+              </button>
+              <div id="scr-filters-panel" class="hidden mt-2 bg-[#1c1c1e] rounded-xl p-3 space-y-3">
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-[9px] text-[#636366] font-mono uppercase block mb-1">Sector</label>
+                    <select id="scr-sector" class="w-full bg-[#242426] text-[#e5e2e1] text-xs rounded-lg px-2 py-1.5 border-none focus:ring-1 focus:ring-[#ffd60a] outline-none">
+                      <option value="">All Sectors</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-[9px] text-[#636366] font-mono uppercase block mb-1">Cap Size</label>
+                    <select id="scr-cap" class="w-full bg-[#242426] text-[#e5e2e1] text-xs rounded-lg px-2 py-1.5 border-none focus:ring-1 focus:ring-[#ffd60a] outline-none">
+                      <option value="">All</option>
+                      <option value="Large">Large</option>
+                      <option value="Mid">Mid</option>
+                      <option value="Small">Small</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-[9px] text-[#636366] font-mono uppercase block mb-1">RSI Zone</label>
+                    <select id="scr-rsi" class="w-full bg-[#242426] text-[#e5e2e1] text-xs rounded-lg px-2 py-1.5 border-none focus:ring-1 focus:ring-[#ffd60a] outline-none">
+                      <option value="">Any</option>
+                      <option value="oversold">Oversold (&lt;35)</option>
+                      <option value="neutral">Neutral (35-65)</option>
+                      <option value="overbought">Overbought (&gt;65)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-[9px] text-[#636366] font-mono uppercase block mb-1">EMA Alignment</label>
+                    <select id="scr-ema" class="w-full bg-[#242426] text-[#e5e2e1] text-xs rounded-lg px-2 py-1.5 border-none focus:ring-1 focus:ring-[#ffd60a] outline-none">
+                      <option value="">Any</option>
+                      <option value="bullish">Bullish</option>
+                      <option value="bearish">Bearish</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-[9px] text-[#636366] font-mono uppercase block mb-1">MACD</label>
+                    <select id="scr-macd" class="w-full bg-[#242426] text-[#e5e2e1] text-xs rounded-lg px-2 py-1.5 border-none focus:ring-1 focus:ring-[#ffd60a] outline-none">
+                      <option value="">Any</option>
+                      <option value="bullish">Bullish</option>
+                      <option value="bearish">Bearish</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-[9px] text-[#636366] font-mono uppercase block mb-1">Min Score</label>
+                    <input type="number" id="scr-score-min" class="w-full bg-[#242426] text-[#e5e2e1] text-xs rounded-lg px-2 py-1.5 border-none focus:ring-1 focus:ring-[#ffd60a] outline-none font-mono" placeholder="0" min="0" max="100">
+                  </div>
+                </div>
+                <div class="flex items-center gap-4 text-xs">
+                  <label class="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" id="scr-fno" class="accent-[#ffd60a] w-3.5 h-3.5">
+                    <span class="text-[#d0c6ab]">F&amp;O Only</span>
+                  </label>
+                  <label class="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" id="scr-near-support" class="accent-[#ffd60a] w-3.5 h-3.5">
+                    <span class="text-[#d0c6ab]">Near Support</span>
+                  </label>
+                  <label class="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" id="scr-near-52low" class="accent-[#ffd60a] w-3.5 h-3.5">
+                    <span class="text-[#d0c6ab]">Near 52W Low</span>
+                  </label>
+                </div>
+                <button class="w-full bg-[#ffd60a] text-[#3b2f00] py-2 rounded-lg font-bold text-xs active:scale-[0.98] transition-transform" onclick="runScreenerCustom()">Apply Filters</button>
+              </div>
+            </div>
+
+            <!-- Results count & sort -->
+            <div class="flex items-center justify-between">
+              <span id="scr-count" class="text-[10px] text-[#636366] font-mono"></span>
+              <select id="scr-sort" class="bg-[#242426] text-[#d0c6ab] text-[10px] rounded-lg px-2 py-1 border-none focus:ring-1 focus:ring-[#ffd60a] outline-none font-mono" onchange="loadScreener()">
+                <option value="score">Score ↓</option>
+                <option value="changePct">Change% ↓</option>
+                <option value="rsi">RSI ↑</option>
+                <option value="symbol">A-Z</option>
+              </select>
+            </div>
+
+            <!-- Results list -->
+            <div id="screener-results" class="space-y-2"></div>
+
+            <footer class="text-center mt-3">
+              <p class="text-[8px] text-[#636366] italic px-4 leading-normal">Computed from live signals — not financial advice. Tap any stock to plan a trade.</p>
             </footer>
           </section>
         </div>
@@ -2758,7 +2884,7 @@ function switchInsightTab(tab) {
     p.classList.remove('text-[#ffd60a]', 'bg-[#353534]', 'border-b-2', 'border-[#ffd60a]');
     p.classList.add('text-[#d0c6ab]');
   });
-  const activeMap = {picks:'nav-picks', options:'nav-options', verify:'nav-verify', 'market-pulse':'nav-pulse'};
+  const activeMap = {picks:'nav-picks', options:'nav-options', verify:'nav-verify', 'market-pulse':'nav-pulse', screener:'nav-screener'};
   const activeBtn = document.getElementById(activeMap[tab]);
   if (activeBtn) {
     activeBtn.classList.add('text-[#ffd60a]', 'bg-[#353534]', 'border-b-2', 'border-[#ffd60a]');
@@ -2768,6 +2894,7 @@ function switchInsightTab(tab) {
   if (tab === 'picks') loadAiPicks();
   else if (tab === 'options') loadOptionsLabInline();
   else if (tab === 'market-pulse') loadMarketPulse();
+  else if (tab === 'screener') loadScreener();
 }
 
 async function loadOptionsLabInline(force = false) {
@@ -3107,6 +3234,183 @@ function renderMarketPulse(d) {
     </div>`;
 
   return html;
+}
+
+// ══════════════════════════════════════════════════════════
+// SMART SCREENER — Live stock filtering
+// ══════════════════════════════════════════════════════════
+let _screenerPreset = '';
+let _screenerSectors = [];
+
+function toggleScreenerFilters() {
+  const panel = document.getElementById('scr-filters-panel');
+  const chevron = document.getElementById('scr-filter-chevron');
+  if (!panel) return;
+  panel.classList.toggle('hidden');
+  chevron.textContent = panel.classList.contains('hidden') ? 'expand_more' : 'expand_less';
+}
+
+function applyScreenerPreset(preset) {
+  _screenerPreset = preset;
+  // Update pill styles
+  document.querySelectorAll('.scr-preset').forEach(p => {
+    if (p.dataset.preset === preset) {
+      p.classList.add('text-[#ffd60a]', 'bg-[#ffd60a]/15', 'border-[#ffd60a]/30');
+      p.classList.remove('text-[#d0c6ab]', 'bg-transparent', 'border-[#4d4632]/30');
+    } else {
+      p.classList.remove('text-[#ffd60a]', 'bg-[#ffd60a]/15', 'border-[#ffd60a]/30');
+      p.classList.add('text-[#d0c6ab]', 'bg-transparent', 'border-[#4d4632]/30');
+    }
+  });
+  // Reset custom filters when using preset
+  if (preset) {
+    const ids = ['scr-sector','scr-cap','scr-rsi','scr-ema','scr-macd','scr-score-min'];
+    ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    ['scr-fno','scr-near-support','scr-near-52low'].forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
+  }
+  loadScreener();
+}
+
+function runScreenerCustom() {
+  _screenerPreset = '';
+  // Remove active preset highlight
+  document.querySelectorAll('.scr-preset').forEach(p => {
+    p.classList.remove('text-[#ffd60a]', 'bg-[#ffd60a]/15', 'border-[#ffd60a]/30');
+    p.classList.add('text-[#d0c6ab]', 'bg-transparent', 'border-[#4d4632]/30');
+  });
+  loadScreener();
+}
+
+async function loadScreener(force = false) {
+  const el = document.getElementById('screener-results');
+  if (!el) return;
+  el.innerHTML = '<div class="text-center py-8 text-[#636366] font-mono text-xs"><div class="inline-block w-5 h-5 border-2 border-[#ffd60a] border-t-transparent rounded-full animate-spin mb-2"></div><br>Scanning stocks...</div>';
+
+  // Build query params
+  const params = new URLSearchParams();
+  if (_screenerPreset) params.set('preset', _screenerPreset);
+
+  // Custom filters
+  const sector = document.getElementById('scr-sector')?.value;
+  const cap = document.getElementById('scr-cap')?.value;
+  const rsi = document.getElementById('scr-rsi')?.value;
+  const ema = document.getElementById('scr-ema')?.value;
+  const macd = document.getElementById('scr-macd')?.value;
+  const scoreMin = document.getElementById('scr-score-min')?.value;
+  const fno = document.getElementById('scr-fno')?.checked;
+  const nearSupport = document.getElementById('scr-near-support')?.checked;
+  const near52Low = document.getElementById('scr-near-52low')?.checked;
+
+  if (!_screenerPreset) {
+    if (sector) params.set('sector', sector);
+    if (cap) params.set('cap', cap);
+    if (rsi) params.set('rsiZone', rsi);
+    if (ema) params.set('emaAlign', ema);
+    if (macd) params.set('macdDir', macd);
+    if (scoreMin) params.set('scoreMin', scoreMin);
+    if (fno) params.set('fnoOnly', 'true');
+    if (nearSupport) params.set('nearSupport', 'true');
+    if (near52Low) params.set('near52Low', 'true');
+  }
+
+  // Sort
+  const sortVal = document.getElementById('scr-sort')?.value || 'score';
+  params.set('sortBy', sortVal);
+  params.set('sortDir', sortVal === 'rsi' || sortVal === 'symbol' ? 'asc' : 'desc');
+
+  try {
+    const d = await fetch('/api/screener?' + params.toString()).then(r => r.json());
+
+    if (d.marketClosed && !d.stocks?.length) {
+      el.innerHTML = `<div class="bg-[#1c1c1e] rounded-xl p-6 text-center"><span class="material-symbols-outlined text-3xl text-[#636366] mb-2">schedule</span><p class="text-sm font-bold text-[#e5e2e1] mb-1">Market Closed</p><p class="text-xs text-[#636366]">Screener data available during market hours (9:15 AM – 3:30 PM IST)</p>${d.nextOpen ? `<p class="text-[10px] text-[#636366] mt-2 font-mono">Next open: ${new Date(d.nextOpen).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', weekday:'short', hour:'2-digit', minute:'2-digit'})}</p>` : ''}</div>`;
+      return;
+    }
+
+    // Update timestamp
+    const tsEl = document.getElementById('screener-ts');
+    if (tsEl) {
+      if (d.stale && d.lastUpdated) {
+        tsEl.textContent = new Date(d.lastUpdated).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short'}) + ' (cached)';
+      } else {
+        tsEl.textContent = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit'}) + ' (live)';
+      }
+    }
+
+    // Update count
+    const countEl = document.getElementById('scr-count');
+    if (countEl) countEl.textContent = `${d.total} match${d.total !== 1 ? 'es' : ''} of ${d.scanned} scanned`;
+
+    // Populate sector dropdown (once)
+    if (d.sectors && d.sectors.length && _screenerSectors.length !== d.sectors.length) {
+      _screenerSectors = d.sectors;
+      const sel = document.getElementById('scr-sector');
+      if (sel) {
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">All Sectors</option>' + d.sectors.map(s => `<option value="${s}"${s===cur?' selected':''}>${s}</option>`).join('');
+      }
+    }
+
+    if (!d.stocks || !d.stocks.length) {
+      el.innerHTML = '<div class="bg-[#1c1c1e] rounded-xl p-6 text-center"><span class="material-symbols-outlined text-2xl text-[#636366] mb-2">search_off</span><p class="text-sm font-bold text-[#e5e2e1] mb-1">No Matches</p><p class="text-xs text-[#636366]">Try adjusting your filters or selecting a different preset</p></div>';
+      return;
+    }
+
+    el.innerHTML = d.stocks.map(s => renderScreenerCard(s)).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="text-center py-6 text-[#636366] font-mono text-xs">Error loading screener: ${e.message}</div>`;
+  }
+}
+
+function renderScreenerCard(s) {
+  const scoreCol = s.score >= 65 ? '#47e266' : s.score >= 40 ? '#ffd60a' : '#ffb4ab';
+  const sigCol = s.signal === 'STRONG BUY' ? '#47e266' : s.signal === 'BUY' ? '#47e266' : s.signal === 'WATCH' ? '#ffd60a' : s.signal === 'HOLD' ? '#ff9f0a' : '#ffb4ab';
+  const chgCol = s.changePct >= 0 ? '#47e266' : '#ffb4ab';
+  const biasCol = s.techBias === 'BULLISH' ? '#47e266' : s.techBias === 'BEARISH' ? '#ffb4ab' : '#ffd60a';
+  const rsiCol = s.rsi !== null ? (s.rsi < 35 ? '#47e266' : s.rsi > 65 ? '#ffb4ab' : '#d0c6ab') : '#636366';
+
+  let badges = '';
+  if (s.isFnO) badges += '<span class="text-[8px] px-1.5 py-0.5 rounded bg-[#64d2ff]/15 text-[#64d2ff] font-bold">F&O</span>';
+  if (s.pcr !== null) badges += `<span class="text-[8px] px-1.5 py-0.5 rounded bg-[#ffd60a]/10 text-[#ffd60a] font-bold">PCR ${s.pcr}</span>`;
+  if (s.avgIV !== null) badges += `<span class="text-[8px] px-1.5 py-0.5 rounded bg-[#ff9f0a]/10 text-[#ff9f0a] font-bold">IV ${s.avgIV}%</span>`;
+
+  return `
+    <div class="bg-[#1c1c1e] rounded-xl p-3 active:bg-[#242426] transition-colors cursor-pointer" onclick="openTradePlan('${s.symbol}')">
+      <div class="flex items-start justify-between mb-2">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-headline font-black text-[#e5e2e1]">${s.symbol}</span>
+            <span class="text-[9px] font-bold px-1.5 py-0.5 rounded" style="background:${sigCol}22;color:${sigCol}">${s.signal}</span>
+            ${badges}
+          </div>
+          <p class="text-[10px] text-[#636366] truncate">${s.name} · ${s.sector} · ${s.cap}</p>
+        </div>
+        <div class="text-right flex-shrink-0 ml-2">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:${scoreCol}18">
+            <span class="text-base font-black font-mono tnum" style="color:${scoreCol}">${s.score}</span>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-4 gap-2 text-[10px]">
+        <div>
+          <p class="text-[#636366] font-mono">Price</p>
+          <p class="font-bold font-mono tnum text-[#e5e2e1]">₹${fmt(s.price)}</p>
+        </div>
+        <div>
+          <p class="text-[#636366] font-mono">Chg%</p>
+          <p class="font-bold font-mono tnum" style="color:${chgCol}">${s.changePct >= 0 ? '+' : ''}${s.changePct.toFixed(2)}%</p>
+        </div>
+        <div>
+          <p class="text-[#636366] font-mono">RSI</p>
+          <p class="font-bold font-mono tnum" style="color:${rsiCol}">${s.rsi !== null ? s.rsi : '--'}</p>
+        </div>
+        <div>
+          <p class="text-[#636366] font-mono">Bias</p>
+          <p class="font-bold font-mono tnum" style="color:${biasCol}">${s.techBias === 'BULLISH' ? '▲ Bull' : s.techBias === 'BEARISH' ? '▼ Bear' : '— Neut'}</p>
+        </div>
+      </div>
+      ${s.reason ? `<p class="text-[9px] text-[#d0c6ab] mt-1.5 truncate">${s.reason}</p>` : ''}
+      ${s.high52 || s.low52 ? `<div class="flex items-center gap-3 mt-1.5 text-[9px] text-[#636366] font-mono"><span>52W: ₹${s.low52 ? fmt(s.low52) : '--'} – ₹${s.high52 ? fmt(s.high52) : '--'}</span>${s.upside > 0 ? `<span class="text-[#47e266]">↑${s.upside}%</span>` : ''}${s.support ? `<span>Sup: ₹${fmt(s.support)}</span>` : ''}</div>` : ''}
+    </div>`;
 }
 
 // ══════════════════════════════════════════════════════════
