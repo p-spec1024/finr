@@ -795,7 +795,7 @@ tailwind.config = {
         <div class="stab-content on" id="stab-picks">
           <div class="flex justify-between items-center mb-5">
             <span class="text-[0.6875rem] text-[#d0c6ab] font-medium font-mono">Cache updated: <span id="picks-ts">--</span></span>
-            <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#4d4632] text-[0.75rem] font-bold text-[#d0c6ab] active:scale-95 duration-200" onclick="loadAiPicks()">
+            <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#4d4632] text-[0.75rem] font-bold text-[#d0c6ab] active:scale-95 duration-200" onclick="loadAiPicks(true)">
               <span class="material-symbols-outlined text-sm">refresh</span> Refresh
             </button>
           </div>
@@ -804,24 +804,28 @@ tailwind.config = {
 
         <!-- Options Lab Content (inline) -->
         <div class="stab-content" id="stab-options">
-          <section class="mb-5 space-y-3">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="text-xl">📊</span>
-                <h3 class="text-[16px] font-bold text-white">AI Options Scanner</h3>
-              </div>
-              <p class="text-[12px] text-[#d0c6ab] mt-1 leading-relaxed">AI scans the market and recommends the best option trades right now</p>
-            </div>
+          <section class="mb-4 space-y-2">
             <div class="flex items-center justify-between">
-              <span class="text-[12px] text-[#d0c6ab] font-mono">Last scanned: <span id="opts-ts-inline">--</span></span>
-              <button class="flex items-center gap-2 border border-[#ffd60a] text-[#ffd60a] px-4 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-transform" onclick="loadOptionsLabInline()">
-                <span class="material-symbols-outlined text-xs">refresh</span> Scan Now
+              <div class="flex items-center gap-2">
+                <span class="text-lg">📊</span>
+                <h3 class="text-[15px] font-bold text-white">Options Scanner</h3>
+              </div>
+              <button class="flex items-center gap-1.5 border border-[#ffd60a] text-[#ffd60a] px-3 py-1 rounded-lg text-[10px] font-bold active:scale-95 transition-transform" onclick="loadOptionsLabInline(true)">
+                <span class="material-symbols-outlined text-xs">refresh</span> Scan
               </button>
             </div>
+            <div class="flex items-center justify-between">
+              <div class="flex gap-1" id="opts-type-pills">
+                <button class="opts-pill text-[10px] px-3 py-1 rounded-full font-bold transition-all text-[#ffd60a] bg-[#ffd60a]/15 border border-[#ffd60a]/30" onclick="filterOptionsTrades('all')" data-type="all">ALL</button>
+                <button class="opts-pill text-[10px] px-3 py-1 rounded-full font-bold transition-all text-[#d0c6ab] bg-transparent border border-[#4d4632]/30" onclick="filterOptionsTrades('index')" data-type="index">INDEX</button>
+                <button class="opts-pill text-[10px] px-3 py-1 rounded-full font-bold transition-all text-[#d0c6ab] bg-transparent border border-[#4d4632]/30" onclick="filterOptionsTrades('stock')" data-type="stock">STOCK</button>
+              </div>
+              <span class="text-[10px] text-[#d0c6ab] font-mono"><span id="opts-ts-inline">--</span></span>
+            </div>
           </section>
-          <div id="opts-list-inline" class="space-y-4"></div>
-          <footer class="mt-6 text-center">
-            <p class="text-[10px] text-[#d0c6ab] px-4 leading-normal italic">⚠ Options involve risk. These are AI suggestions, not financial advice.</p>
+          <div id="opts-list-inline" class="space-y-3"></div>
+          <footer class="mt-4 text-center">
+            <p class="text-[9px] text-[#d0c6ab] px-4 leading-normal italic">Options involve risk. AI suggestions, not financial advice.</p>
           </footer>
         </div>
 
@@ -1025,7 +1029,7 @@ tailwind.config = {
           </div>
           <div class="flex items-center justify-between">
             <span class="text-[12px] text-[#d0c6ab] font-mono">Last scanned: <span id="opts-ts-page">--</span></span>
-            <button class="flex items-center gap-2 border border-[#ffd60a] text-[#ffd60a] px-4 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-transform" onclick="loadOptionsLab()">
+            <button class="flex items-center gap-2 border border-[#ffd60a] text-[#ffd60a] px-4 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-transform" onclick="loadOptionsLab(true)">
               <span class="material-symbols-outlined text-xs">refresh</span> Scan Now
             </button>
           </div>
@@ -2335,43 +2339,58 @@ function generateEventCalendar() {
 // ══════════════════════════════════════════════════════════
 // INSIGHTS — AI PICKS & OPTIONS LAB
 // ══════════════════════════════════════════════════════════
-async function loadAiPicks() {
+async function loadAiPicks(force = false) {
   const el = document.getElementById('picks-list');
-  // Market hours gate: only works 9:15-15:30 IST on weekdays
-  if (!isMarketOpen()) {
-    el.innerHTML = `<div class="text-center py-12">
-      <span class="material-symbols-outlined text-[#ffd60a] mb-3" style="font-size:48px">schedule</span>
-      <h3 class="text-lg font-bold text-[#e5e2e1] mb-2">Market Closed</h3>
-      <p class="text-[#d0c6ab] text-sm">AI Picks are available during market hours<br><strong class="text-[#ffd60a]">Mon–Fri, 9:15 AM – 3:30 PM IST</strong></p>
-    </div>`;
-    return;
-  }
+  const url = force ? '/api/ai-picks?force=true' : '/api/ai-picks';
   el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Loading AI picks...</div>';
   try {
-    const d = await fetch('/api/ai-picks').then(r=>r.json());
+    const d = await fetch(url).then(r=>r.json());
     if (d.picks && d.picks.length) {
-      document.getElementById('picks-ts').textContent = new Date().toLocaleTimeString();
+      // Show generation timestamp — prefer server's generated time, fallback to now
+      const genTime = d.generated ? new Date(d.generated).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short'}) : new Date().toLocaleTimeString();
+      document.getElementById('picks-ts').textContent = genTime + (d.cached ? ' (cached)' : ' (fresh)');
       el.innerHTML = d.picks.map(p => {
-        const borderCol = p.upside >= 0 ? 'border-[#47e266]' : 'border-[#ffb4ab]';
+        // Calculate upside robustly
+        const price = parseFloat(p.livePrice || p.currentPrice) || 0;
+        const target = parseFloat(p.targetPrice) || 0;
+        const upsideNum = p.upside ? parseFloat(String(p.upside).replace('%','')) : (price > 0 && target > 0 ? ((target - price) / price * 100) : 0);
+        const upsideStr = upsideNum > 0 ? '+' + upsideNum.toFixed(1) + '%' : upsideNum.toFixed(1) + '%';
+        const borderCol = upsideNum >= 0 ? 'border-[#47e266]' : 'border-[#ffb4ab]';
+        // Confidence: handle both numeric (85) and string ("HIGH") formats
+        const confRaw = p.confidence;
+        const confNum = typeof confRaw === 'number' ? confRaw : parseFloat(confRaw);
+        const confDisplay = !isNaN(confNum) ? confNum + '%' : (confRaw || 'N/A');
+        const confColor = !isNaN(confNum) ? (confNum >= 75 ? '#47e266' : confNum >= 50 ? '#ffd60a' : '#ffb4ab') : '#ffd60a';
+        // Risk color
+        const riskStr = (p.riskLevel || 'N/A').toUpperCase();
+        const riskColor = riskStr === 'LOW' ? '#47e266' : riskStr === 'HIGH' ? '#ffb4ab' : '#ffd60a';
+        // Reasoning: check both field names
+        const reasoning = p.reasoning || p.reason || '';
+        // Stop loss
+        const sl = p.stopLoss ? '₹' + fmt(parseFloat(String(p.stopLoss).replace(/[₹,]/g,'')) || 0) : '';
         return `<div class="bg-[#1c1c1e] rounded-xl ${borderCol} border-l-4 overflow-hidden">
           <div class="p-4">
-            <div class="flex justify-between items-start mb-4">
-              <div><h3 class="font-headline font-extrabold text-xl tracking-tight">${p.symbol}</h3><p class="text-[0.75rem] text-[#d0c6ab] font-medium">${p.name||'--'}</p></div>
-              <div class="text-right"><div class="text-lg font-bold tnum">₹${fmt(p.livePrice || p.currentPrice || 0)}</div><div class="text-[0.75rem] font-bold text-[#47e266] uppercase tracking-wider">${p.upside ? '+'+p.upside+'%' : (((p.targetPrice||0)-(p.livePrice||p.currentPrice||1))/((p.livePrice||p.currentPrice||1))*100).toFixed(1)+'%'} UPSIDE</div></div>
+            <div class="flex justify-between items-start mb-2">
+              <div><h3 class="font-headline font-extrabold text-xl tracking-tight">${p.symbol}</h3><p class="text-[0.7rem] text-[#d0c6ab] font-medium">${p.name||'--'} <span class="text-[#636366]">· ${p.sector||''}</span></p></div>
+              <div class="text-right"><div class="text-lg font-bold tnum">₹${fmt(price)}</div><div class="text-[0.75rem] font-bold ${upsideNum >= 0 ? 'text-[#47e266]' : 'text-[#ffb4ab]'} uppercase tracking-wider">${upsideStr} UPSIDE</div></div>
             </div>
-            <div class="grid grid-cols-2 gap-2.5 mb-4">
-              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Target</p><p class="text-sm font-bold tnum text-[#ffd60a]">₹${fmt(p.targetPrice || 0)}</p></div>
-              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Confidence</p><p class="text-sm font-bold tnum text-[#47e266]">${p.confidence}%</p></div>
-              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Timeframe</p><p class="text-sm font-bold text-[#e5e2e1]">${p.timeframe}</p></div>
-              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Risk</p><p class="text-sm font-bold text-[#e5e2e1]">${p.riskLevel || 'N/A'}</p></div>
+            <div class="grid grid-cols-2 gap-2.5 mb-3">
+              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Target</p><p class="text-sm font-bold tnum text-[#ffd60a]">₹${fmt(target)}</p></div>
+              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Confidence</p><p class="text-sm font-bold tnum" style="color:${confColor}">${confDisplay}</p></div>
+              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Timeframe</p><p class="text-sm font-bold text-[#e5e2e1]">${p.timeframe||'--'}</p></div>
+              <div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Risk</p><p class="text-sm font-bold" style="color:${riskColor}">${riskStr}</p></div>
+              ${sl ? `<div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Stop Loss</p><p class="text-sm font-bold tnum text-[#ffb4ab]">${sl}</p></div>` : ''}
+              ${p.signal ? `<div class="p-3 bg-[#1c1b1b] rounded-lg"><p class="text-[0.6rem] uppercase tracking-widest text-[#d0c6ab] mb-1 font-mono">Signal</p><p class="text-sm font-bold tnum text-[#47e266]">${p.signal}</p></div>` : ''}
             </div>
-            ${p.reason ? `<div class="mb-3"><p class="text-[0.8125rem] text-[#d0c6ab] line-clamp-2 leading-relaxed" id="reason-${p.symbol}">${p.reason.substring(0,120)}...</p><button class="text-[#ffd60a] font-bold text-sm mt-1" onclick="const r=document.getElementById('reason-${p.symbol}');r.classList.toggle('line-clamp-2');this.textContent=r.classList.contains('line-clamp-2')?'View AI Reasoning ▸':'Collapse ▴'">View AI Reasoning ▸</button></div>` : ''}
+            ${reasoning ? `<div class="mb-3"><p class="text-[0.8125rem] text-[#d0c6ab] line-clamp-2 leading-relaxed" id="reason-${p.symbol}">${reasoning}</p><button class="text-[#ffd60a] font-bold text-xs mt-1" onclick="const r=document.getElementById('reason-${p.symbol}');r.classList.toggle('line-clamp-2');this.textContent=r.classList.contains('line-clamp-2')?'View AI Reasoning ▸':'Collapse ▴'">View AI Reasoning ▸</button></div>` : ''}
             <div class="flex flex-wrap gap-2">${(p.tags||[]).map(t=>`<span class="px-2 py-0.5 rounded bg-[#353534] text-[0.625rem] font-bold text-[#e5e2e1] uppercase tracking-tight">${t}</span>`).join('')}</div>
           </div>
         </div>`;
       }).join('');
+    } else if (d.error) {
+      el.innerHTML = `<div class="text-center py-6 text-[#636366] font-mono text-xs">⚠️ ${d.error}</div>`;
     } else {
-      el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">📊 No AI picks available yet</div>';
+      el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">No AI picks available — try refreshing during market hours</div>';
     }
   } catch (err) {
     el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⚠️ Error loading picks</div>';
@@ -2379,78 +2398,161 @@ async function loadAiPicks() {
   }
 }
 
-async function loadOptionsLab() {
+async function loadOptionsLab(force = false) {
+  // Standalone page version — delegates to shared renderer
   const el = document.getElementById('opts-list-page');
   const elHidden = document.getElementById('opts-list');
   const target = el || elHidden;
   if (!target) return;
-  // Market hours gate: only works 9:15-15:30 IST on weekdays
-  if (!isMarketOpen()) {
-    target.innerHTML = `<div class="text-center py-12">
-      <span class="material-symbols-outlined text-[#ffd60a] mb-3" style="font-size:48px">schedule</span>
-      <h3 class="text-lg font-bold text-[#e5e2e1] mb-2">Market Closed</h3>
-      <p class="text-[#d0c6ab] text-sm">Options Lab is available during market hours<br><strong class="text-[#ffd60a]">Mon–Fri, 9:15 AM – 3:30 PM IST</strong></p>
-    </div>`;
-    return;
-  }
-  target.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Loading options strategies...</div>';
+  const url = force ? '/api/options-lab?force=true' : '/api/options-lab';
+  target.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">Scanning options chain...</div>';
   try {
-    const d = await fetch('/api/options-lab').then(r=>r.json());
+    const d = await fetch(url).then(r=>r.json());
     if (d.trades && d.trades.length) {
+      _latestOptionsData = d;
+      const genTime = d.generated ? new Date(d.generated).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short'}) : new Date().toLocaleTimeString();
       const tsEl = document.getElementById('opts-ts-page');
-      if (tsEl) tsEl.textContent = new Date().toLocaleTimeString();
-
-      // Show option chain summary if available
-      let chainHtml = '';
-      if (d.chainData) {
-        const cd = d.chainData;
-        chainHtml = `<div class="bg-[#242426] rounded-xl p-4 mb-4 border border-[#4d4632]/20">
-          <div class="text-[10px] text-[#d0c6ab] uppercase font-mono font-bold mb-2 tracking-widest">Live Option Chain Data</div>
-          <div class="grid grid-cols-3 gap-3 text-center">
-            <div><div class="text-[10px] text-[#d0c6ab] font-mono">PCR</div><div class="text-sm font-bold ${(cd.niftyPCR||0) > 1 ? 'text-[#47e266]' : 'text-[#ffb4ab]'}">${cd.niftyPCR||'—'}</div></div>
-            <div><div class="text-[10px] text-[#d0c6ab] font-mono">Max Pain</div><div class="text-sm font-bold text-[#ffd60a]">${cd.niftyMaxPain||'—'}</div></div>
-            <div><div class="text-[10px] text-[#d0c6ab] font-mono">Avg IV</div><div class="text-sm font-bold text-white">${cd.niftyAvgIV||'—'}%</div></div>
-          </div>
-        </div>`;
-      }
-
-      const html = chainHtml + d.trades.map(t => {
-        const dirClass = t.direction === 'CE' ? 'bg-[#47e266]/10 text-[#47e266]' : 'bg-[#ffb4ab]/10 text-[#ffb4ab]';
-        // Signal Alignment display
-        const sa = t.signalAlignment || {};
-        const alignScore = sa.score || 0;
-        const alignTotal = sa.total || 10;
-        const alignPct = (alignScore / alignTotal) * 100;
-        const alignColor = alignPct >= 70 ? '#47e266' : alignPct >= 50 ? '#ffd60a' : '#ffb4ab';
-        const factorsHtml = sa.factors ? Object.entries(sa.factors).map(([k,v]) => {
-          const fc = v === 'ALIGNED' ? '#47e266' : v === 'MISALIGNED' ? '#ffb4ab' : '#d0c6ab';
-          return `<span class="inline-block px-1.5 py-0.5 rounded text-[8px] font-mono font-bold" style="color:${fc};background:${fc}15">${k.toUpperCase()}</span>`;
-        }).join(' ') : '';
-
-        return `<article class="bg-[#1c1c1e] rounded-[16px] p-5 border border-[#4d4632]/10">
-          <div class="flex justify-between items-start mb-3">
-            <div><div class="flex items-center gap-2 mb-1"><h3 class="text-lg font-bold font-headline tracking-tight">${t.symbol}</h3><span class="${dirClass} text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">${t.direction}</span></div><p class="text-[#ffd60a] font-mono text-xs font-bold uppercase tracking-widest">${t.strategy || t.strategyType || ''}</p></div>
-            <div class="text-right"><div class="text-[10px] text-[#d0c6ab] uppercase font-medium">Signal Alignment</div><div class="text-xl font-bold font-headline" style="color:${alignColor}">${alignScore}/${alignTotal}</div></div>
-          </div>
-          ${factorsHtml ? `<div class="flex flex-wrap gap-1 mb-3">${factorsHtml}</div>` : ''}
-          <div class="grid grid-cols-3 gap-0.5 bg-[#242426] rounded-xl overflow-hidden mb-3">
-            <div class="bg-[#1c1c1e] p-3"><div class="text-[10px] text-[#d0c6ab] uppercase mb-1 font-mono">Entry</div><div class="text-sm font-bold tnum">${t.entry || '—'}</div></div>
-            <div class="bg-[#1c1c1e] p-3"><div class="text-[10px] text-[#d0c6ab] uppercase mb-1 font-mono">Target</div><div class="text-sm font-bold tnum">${t.target || '—'}</div></div>
-            <div class="bg-[#1c1c1e] p-3"><div class="text-[10px] text-[#d0c6ab] uppercase mb-1 font-mono">Stoploss</div><div class="text-sm font-bold tnum">${t.stopLoss || t.sl || '—'}</div></div>
-          </div>
-          <div class="flex items-center justify-between px-1 mb-2"><span class="text-xs text-[#d0c6ab]">R:R Ratio</span><span class="text-xs font-bold font-headline">${t.riskReward || '—'}</span></div>
-          ${t.hedgeSuggestion ? `<div class="bg-[#242426] rounded-lg p-2.5 mt-2 flex items-start gap-2"><span class="material-symbols-outlined text-[#ffd60a] text-sm mt-0.5">shield</span><p class="text-[10px] text-[#d0c6ab] leading-relaxed">${t.hedgeSuggestion}</p></div>` : ''}
-          ${t.reasoning ? `<p class="text-[10px] text-[#999077] leading-relaxed mt-2 border-t border-[#4d4632]/20 pt-2">${t.reasoning}</p>` : ''}
-        </article>`;
-      }).join('');
+      if (tsEl) tsEl.textContent = genTime + (d.cached ? ' (cached)' : ' (fresh)');
+      const html = renderOptionsCards(d);
       target.innerHTML = html;
       if (el && elHidden) elHidden.innerHTML = html;
+    } else if (d.error) {
+      target.innerHTML = `<div class="text-center py-4 text-[#636366] font-mono text-xs">${d.error}</div>`;
     } else {
-      target.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">No options trades available</div>';
+      target.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">No trades — scan during market hours</div>';
     }
   } catch (err) {
-    target.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">Error loading options</div>';
+    target.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">Error loading options</div>';
   }
+}
+
+// Store latest options data for client-side filtering
+let _latestOptionsData = null;
+let _currentOptionsFilter = 'all';
+
+function filterOptionsTrades(type) {
+  _currentOptionsFilter = type;
+  // Update pill styles
+  document.querySelectorAll('.opts-pill').forEach(p => {
+    if (p.dataset.type === type) {
+      p.className = 'opts-pill text-[10px] px-3 py-1 rounded-full font-bold transition-all text-[#ffd60a] bg-[#ffd60a]/15 border border-[#ffd60a]/30';
+    } else {
+      p.className = 'opts-pill text-[10px] px-3 py-1 rounded-full font-bold transition-all text-[#d0c6ab] bg-transparent border border-[#4d4632]/30';
+    }
+  });
+  if (_latestOptionsData) {
+    const filtered = { ..._latestOptionsData };
+    if (type === 'index') filtered.trades = filtered.trades.filter(t => t.optionType === 'INDEX' || t.symbol === 'NIFTY' || t.symbol === 'BANKNIFTY');
+    else if (type === 'stock') filtered.trades = filtered.trades.filter(t => t.optionType === 'STOCK' && t.symbol !== 'NIFTY' && t.symbol !== 'BANKNIFTY');
+    const el = document.getElementById('opts-list-inline');
+    if (el) el.innerHTML = renderOptionsCards(filtered);
+    const el2 = document.getElementById('opts-list-page') || document.getElementById('opts-list');
+    if (el2) el2.innerHTML = renderOptionsCards(filtered);
+  }
+}
+
+// Shared renderer for options cards — COMPACT design
+function renderOptionsCards(d) {
+  let chainHtml = '';
+  if (d.chainData) {
+    const cd = d.chainData;
+    const dteStr = d.dte !== undefined ? d.dte : '?';
+    const dteCol = dteStr <= 2 ? '#ffb4ab' : dteStr <= 5 ? '#ffd60a' : '#47e266';
+    chainHtml = `<div class="bg-[#242426] rounded-xl p-3 mb-3 border border-[#4d4632]/20">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[9px] text-[#d0c6ab] uppercase font-mono font-bold tracking-widest">Chain Data</span>
+        <span class="text-[9px] font-mono font-bold" style="color:${dteCol}">${dteStr}D${d.expiry ? ' · ' + d.expiry : ''}</span>
+      </div>
+      <div class="flex justify-between text-center">
+        <div class="flex-1"><div class="text-[8px] text-[#d0c6ab] font-mono">PCR</div><div class="text-xs font-bold ${(cd.niftyPCR||0) > 1 ? 'text-[#47e266]' : 'text-[#ffb4ab]'}">${cd.niftyPCR||'—'}</div></div>
+        <div class="flex-1"><div class="text-[8px] text-[#d0c6ab] font-mono">MaxPain</div><div class="text-xs font-bold text-[#ffd60a]">${cd.niftyMaxPain ? fmt(cd.niftyMaxPain) : '—'}</div></div>
+        <div class="flex-1"><div class="text-[8px] text-[#d0c6ab] font-mono">IV</div><div class="text-xs font-bold text-white">${cd.niftyAvgIV||'—'}%</div></div>
+        <div class="flex-1"><div class="text-[8px] text-[#d0c6ab] font-mono">BNF PCR</div><div class="text-xs font-bold ${(cd.bnfPCR||0) > 1 ? 'text-[#47e266]' : 'text-[#ffb4ab]'}">${cd.bnfPCR||'—'}</div></div>
+      </div>
+    </div>`;
+  }
+  if (!d.trades || !d.trades.length) return chainHtml + '<div class="text-center py-4 text-[#636366] font-mono text-xs">No trades for this filter</div>';
+  return chainHtml + d.trades.map(t => {
+    const isCE = t.direction === 'CE';
+    const dirBg = isCE ? 'bg-[#47e266]/10' : 'bg-[#ffb4ab]/10';
+    const dirTxt = isCE ? 'text-[#47e266]' : 'text-[#ffb4ab]';
+    const sa = t.signalAlignment || {};
+    const alignScore = sa.score || 0;
+    const alignTotal = sa.total || 10;
+    const alignPct = (alignScore / alignTotal) * 100;
+    const alignColor = alignPct >= 70 ? '#47e266' : alignPct >= 50 ? '#ffd60a' : '#ffb4ab';
+    const entryNum = typeof t.entry === 'number' ? t.entry : parseFloat(String(t.entry).replace(/[₹,]/g,'')) || 0;
+    const targetNum = typeof t.target === 'number' ? t.target : parseFloat(String(t.target).replace(/[₹,]/g,'')) || 0;
+    const slNum = typeof t.stopLoss === 'number' ? t.stopLoss : parseFloat(String(t.stopLoss || t.sl || '0').replace(/[₹,]/g,'')) || 0;
+    const estBadge = t.isEstimated ? '<span class="text-[7px] px-1 py-0.5 rounded bg-[#ffd60a]/15 text-[#ffd60a] font-mono font-bold">EST</span>' : '';
+    const typeBadge = t.optionType === 'STOCK' ? '<span class="text-[7px] px-1 py-0.5 rounded bg-[#8b5cf6]/15 text-[#a78bfa] font-mono font-bold">STOCK</span>' : '<span class="text-[7px] px-1 py-0.5 rounded bg-[#38bdf8]/15 text-[#38bdf8] font-mono font-bold">INDEX</span>';
+    const riskCol = (t.riskType||'').includes('AGGR') ? '#ffb4ab' : (t.riskType||'').includes('CONS') ? '#47e266' : '#ffd60a';
+    const maxLossStr = t.maxLoss ? '₹' + fmt(t.maxLoss) : '';
+    const lotStr = t.lotSize ? 'x' + t.lotSize : '';
+    const spotStr = t.spotPrice ? '₹' + fmt(t.spotPrice) : '';
+    const dteStr = t.dte !== undefined ? t.dte + 'D' : '';
+    const dteCol = (t.dte||99) <= 2 ? '#ffb4ab' : (t.dte||99) <= 5 ? '#ffd60a' : '#47e266';
+
+    // Compact signal factors — just colored dots
+    const factorDots = sa.factors ? Object.entries(sa.factors).map(([k,v]) => {
+      const fc = v === 'ALIGNED' ? '#47e266' : v === 'MISALIGNED' ? '#ffb4ab' : '#636366';
+      return `<span title="${k}: ${v}" class="inline-block w-1.5 h-1.5 rounded-full" style="background:${fc}"></span>`;
+    }).join('') : '';
+
+    // Expandable details ID
+    const cardId = 'ocard-' + (t.symbol + t.strike + t.direction).replace(/[^a-zA-Z0-9]/g, '');
+
+    return `<article class="bg-[#1c1c1e] rounded-xl border border-[#4d4632]/10 overflow-hidden" onclick="document.getElementById('${cardId}').classList.toggle('hidden')">
+      <!-- Compact header row -->
+      <div class="px-3 pt-2.5 pb-1.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5">
+            <span class="text-sm font-bold font-headline tracking-tight text-white">${t.symbol}</span>
+            <span class="${dirBg} ${dirTxt} text-[9px] px-1.5 py-0.5 rounded font-bold">${t.direction}</span>
+            <span class="text-[10px] text-[#d0c6ab] font-mono font-bold">${t.strike||''}</span>
+            ${typeBadge}${estBadge}
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[9px] font-mono font-bold" style="color:${dteCol}">${dteStr}</span>
+            <span class="text-sm font-bold font-headline" style="color:${alignColor}">${alignScore}/${alignTotal}</span>
+          </div>
+        </div>
+        <!-- Price row -->
+        <div class="flex items-center justify-between mt-1.5">
+          <div class="flex items-center gap-3">
+            <span class="text-[10px] text-[#d0c6ab] font-mono">Entry <strong class="text-white">${entryNum > 0 ? '₹'+fmt(entryNum) : '—'}</strong></span>
+            <span class="text-[10px] font-mono">T <strong class="text-[#47e266]">${targetNum > 0 ? '₹'+fmt(targetNum) : '—'}</strong></span>
+            <span class="text-[10px] font-mono">SL <strong class="text-[#ffb4ab]">${slNum > 0 ? '₹'+fmt(slNum) : '—'}</strong></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[9px] text-[#d0c6ab] font-mono">${t.riskReward||''}</span>
+            <span class="text-[8px] font-bold font-mono px-1.5 py-0.5 rounded" style="color:${riskCol};background:${riskCol}15">${(t.riskType||'').replace('_',' ')}</span>
+          </div>
+        </div>
+        <!-- Meta row -->
+        <div class="flex items-center justify-between mt-1 pb-0.5">
+          <div class="flex items-center gap-2">
+            ${spotStr ? `<span class="text-[9px] text-[#636366] font-mono">Spot ${spotStr}</span>` : ''}
+            ${lotStr ? `<span class="text-[9px] text-[#636366] font-mono">Lot ${lotStr}</span>` : ''}
+            ${maxLossStr ? `<span class="text-[9px] text-[#636366] font-mono">MaxLoss <span class="text-[#ffb4ab]">${maxLossStr}</span></span>` : ''}
+          </div>
+          <div class="flex items-center gap-0.5">${factorDots}</div>
+        </div>
+      </div>
+      <!-- Expandable details (hidden by default) -->
+      <div id="${cardId}" class="hidden border-t border-[#4d4632]/15 px-3 py-2 bg-[#1a1a1c]">
+        <p class="text-[9px] text-[#ffd60a] font-mono font-bold uppercase mb-1">${t.strategy || t.strategyType || ''}</p>
+        ${t.hedgeSuggestion ? `<div class="flex items-start gap-1.5 mb-1.5"><span class="material-symbols-outlined text-[#38bdf8] text-xs mt-0.5">shield</span><p class="text-[9px] text-[#d0c6ab] leading-relaxed"><strong class="text-[#38bdf8]">Hedge:</strong> ${t.hedgeSuggestion}</p></div>` : ''}
+        ${t.rollLevel ? `<div class="flex items-start gap-1.5 mb-1.5"><span class="material-symbols-outlined text-[#ffd60a] text-xs mt-0.5">sync</span><p class="text-[9px] text-[#d0c6ab] leading-relaxed"><strong class="text-[#ffd60a]">Roll:</strong> ${t.rollLevel}</p></div>` : ''}
+        ${sa.factors ? `<div class="flex flex-wrap gap-1 mb-1.5">${Object.entries(sa.factors).map(([k,v]) => {
+          const fc = v === 'ALIGNED' ? '#47e266' : v === 'MISALIGNED' ? '#ffb4ab' : '#d0c6ab';
+          return `<span class="inline-block px-1 py-0.5 rounded text-[7px] font-mono font-bold" style="color:${fc};background:${fc}10">${k}</span>`;
+        }).join('')}</div>` : ''}
+        ${t.realLTP ? `<span class="text-[8px] text-[#636366] font-mono">Real LTP: ₹${t.realLTP} | OI: ${t.realOI ? (t.realOI/1000).toFixed(0)+'K' : '—'} | IV: ${t.realIV||'—'}%</span>` : ''}
+        ${t.reasoning ? `<p class="text-[9px] text-[#999077] leading-relaxed mt-1">${t.reasoning}</p>` : ''}
+      </div>
+    </article>`;
+  }).join('');
 }
 
 async function verifyPick() {
@@ -2505,53 +2607,27 @@ function switchInsightTab(tab) {
   else if (tab === 'options') loadOptionsLabInline();
 }
 
-async function loadOptionsLabInline() {
+async function loadOptionsLabInline(force = false) {
   const el = document.getElementById('opts-list-inline');
   if (!el) return;
-  el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Loading options strategies...</div>';
+  const url = force ? '/api/options-lab?force=true' : '/api/options-lab';
+  el.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">Scanning options chain...</div>';
   try {
-    const d = await fetch('/api/options-lab').then(r => r.json());
+    const d = await fetch(url).then(r => r.json());
     if (d.trades && d.trades.length) {
+      _latestOptionsData = d;
+      const genTime = d.generated ? new Date(d.generated).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short'}) : new Date().toLocaleTimeString();
       const tsEl = document.getElementById('opts-ts-inline');
-      if (tsEl) tsEl.textContent = new Date().toLocaleTimeString();
-      let chainHtml = '';
-      if (d.chainData) {
-        const cd = d.chainData;
-        chainHtml = `<div class="bg-[#242426] rounded-xl p-4 mb-4 border border-[#4d4632]/20">
-          <div class="text-[10px] text-[#d0c6ab] uppercase font-mono font-bold mb-2 tracking-widest">Live Option Chain Data</div>
-          <div class="grid grid-cols-3 gap-3 text-center">
-            <div><div class="text-[10px] text-[#d0c6ab] font-mono">PCR</div><div class="text-sm font-bold ${(cd.niftyPCR||0)>1?'text-[#47e266]':'text-[#ffb4ab]'}">${cd.niftyPCR||'—'}</div></div>
-            <div><div class="text-[10px] text-[#d0c6ab] font-mono">Max Pain</div><div class="text-sm font-bold text-[#ffd60a]">${cd.niftyMaxPain||'—'}</div></div>
-            <div><div class="text-[10px] text-[#d0c6ab] font-mono">Avg IV</div><div class="text-sm font-bold text-white">${cd.niftyAvgIV||'—'}%</div></div>
-          </div>
-        </div>`;
-      }
-      el.innerHTML = chainHtml + d.trades.map(t => {
-        const dirClass = t.direction === 'CE' ? 'bg-[#47e266]/10 text-[#47e266]' : 'bg-[#ffb4ab]/10 text-[#ffb4ab]';
-        const sa = t.signalAlignment || {};
-        const alignScore = sa.score || 0;
-        const alignTotal = sa.total || 10;
-        const alignColor = (alignScore/alignTotal)*100 >= 70 ? '#47e266' : (alignScore/alignTotal)*100 >= 50 ? '#ffd60a' : '#ffb4ab';
-        return `<article class="bg-[#1c1c1e] rounded-[16px] p-5 border border-[#4d4632]/10">
-          <div class="flex justify-between items-start mb-3">
-            <div><div class="flex items-center gap-2 mb-1"><h3 class="text-lg font-bold font-headline tracking-tight">${t.symbol}</h3><span class="${dirClass} text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">${t.direction}</span></div><p class="text-[#ffd60a] font-mono text-xs font-bold uppercase tracking-widest">${t.strategy||t.strategyType||''}</p></div>
-            <div class="text-right"><div class="text-[10px] text-[#d0c6ab] uppercase font-medium">Signal</div><div class="text-xl font-bold font-headline" style="color:${alignColor}">${alignScore}/${alignTotal}</div></div>
-          </div>
-          <div class="grid grid-cols-3 gap-0.5 bg-[#242426] rounded-xl overflow-hidden mb-3">
-            <div class="bg-[#1c1c1e] p-3"><div class="text-[10px] text-[#d0c6ab] uppercase mb-1 font-mono">Entry</div><div class="text-sm font-bold tnum">${t.entry||'—'}</div></div>
-            <div class="bg-[#1c1c1e] p-3"><div class="text-[10px] text-[#d0c6ab] uppercase mb-1 font-mono">Target</div><div class="text-sm font-bold tnum">${t.target||'—'}</div></div>
-            <div class="bg-[#1c1c1e] p-3"><div class="text-[10px] text-[#d0c6ab] uppercase mb-1 font-mono">Stoploss</div><div class="text-sm font-bold tnum">${t.stopLoss||t.sl||'—'}</div></div>
-          </div>
-          <div class="flex items-center justify-between px-1 mb-2"><span class="text-xs text-[#d0c6ab]">R:R Ratio</span><span class="text-xs font-bold font-headline">${t.riskReward||'—'}</span></div>
-          ${t.hedgeSuggestion ? `<div class="bg-[#242426] rounded-lg p-2.5 mt-2 flex items-start gap-2"><span class="material-symbols-outlined text-[#ffd60a] text-sm mt-0.5">shield</span><p class="text-[10px] text-[#d0c6ab] leading-relaxed">${t.hedgeSuggestion}</p></div>` : ''}
-          ${t.reasoning ? `<p class="text-[10px] text-[#999077] leading-relaxed mt-2 border-t border-[#4d4632]/20 pt-2">${t.reasoning}</p>` : ''}
-        </article>`;
-      }).join('');
+      if (tsEl) tsEl.textContent = genTime + (d.cached ? ' (cached)' : ' (fresh)');
+      // Apply current filter
+      filterOptionsTrades(_currentOptionsFilter);
+    } else if (d.error) {
+      el.innerHTML = `<div class="text-center py-4 text-[#636366] font-mono text-xs">${d.error}</div>`;
     } else {
-      el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">No options trades available</div>';
+      el.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">No trades — scan during market hours</div>';
     }
   } catch(e) {
-    el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">Error loading options</div>';
+    el.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">Error loading options</div>';
   }
 }
 
