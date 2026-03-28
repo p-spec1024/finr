@@ -588,10 +588,51 @@ tailwind.config = {
               </div>
               <p class="text-[10px] text-[#d0c6ab] leading-relaxed" id="pred-strategy-text"></p>
             </div>
-            <!-- Grounded badge -->
-            <div class="flex items-center gap-1.5 mt-3 hidden" id="pred-grounded-badge">
-              <span class="material-symbols-outlined text-[#47e266] text-xs">verified</span>
-              <span class="text-[8px] font-mono text-[#47e266] uppercase tracking-wider">Grounded with Google Search</span>
+            <!-- Active macro events -->
+            <div class="mt-3 hidden" id="pred-events">
+              <div class="flex flex-wrap gap-1.5" id="pred-events-list"></div>
+            </div>
+            <!-- Nifty levels -->
+            <div class="mt-3 hidden bg-[#0e0e0e] rounded-lg p-2.5" id="pred-levels">
+              <div class="flex justify-between items-center">
+                <div class="text-center flex-1">
+                  <div class="text-[8px] text-[#636366] font-mono uppercase">Support</div>
+                  <div class="text-xs font-bold font-mono text-[#47e266]" id="pred-support">--</div>
+                </div>
+                <div class="text-[#636366] text-[8px]">|</div>
+                <div class="text-center flex-1">
+                  <div class="text-[8px] text-[#636366] font-mono uppercase">Resistance</div>
+                  <div class="text-xs font-bold font-mono text-[#ffb4ab]" id="pred-resistance">--</div>
+                </div>
+                <div class="text-[#636366] text-[8px]">|</div>
+                <div class="text-center flex-1">
+                  <div class="text-[8px] text-[#636366] font-mono uppercase">PCR</div>
+                  <div class="text-xs font-bold font-mono" id="pred-pcr" style="color:#ffd60a">--</div>
+                </div>
+                <div class="text-[#636366] text-[8px]">|</div>
+                <div class="text-center flex-1">
+                  <div class="text-[8px] text-[#636366] font-mono uppercase">Max Pain</div>
+                  <div class="text-xs font-bold font-mono text-[#e5e2e1]" id="pred-maxpain">--</div>
+                </div>
+              </div>
+            </div>
+            <!-- Breadth conflict warning -->
+            <div class="mt-2 hidden bg-[#ff453a]/10 border border-[#ff453a]/30 rounded-lg p-2" id="pred-conflict">
+              <div class="flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[#ff453a] text-xs">warning</span>
+                <span class="text-[9px] text-[#ff453a] font-mono font-bold">Breadth conflict detected — AI analysis may diverge from market internals</span>
+              </div>
+            </div>
+            <!-- Grounded badge + data sources -->
+            <div class="flex items-center gap-2 flex-wrap mt-3" id="pred-badges">
+              <div class="items-center gap-1 hidden" id="pred-grounded-badge" style="display:none">
+                <span class="material-symbols-outlined text-[#47e266] text-xs">verified</span>
+                <span class="text-[8px] font-mono text-[#47e266] uppercase tracking-wider">Grounded with Google Search</span>
+              </div>
+              <div class="flex items-center gap-1 hidden" id="pred-source-count">
+                <span class="material-symbols-outlined text-[#0a84ff] text-xs">database</span>
+                <span class="text-[8px] font-mono text-[#0a84ff] uppercase tracking-wider" id="pred-source-text">-- data sources</span>
+              </div>
             </div>
             <p class="text-[8px] text-[#636366] italic mt-2">AI analysis — not financial advice. Past predictions do not guarantee future accuracy.</p>
           </section>
@@ -2347,6 +2388,10 @@ async function loadAiPicks(force = false) {
   el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Loading AI picks...</div>';
   try {
     const d = await fetch(url).then(r=>r.json());
+    if (d.marketClosed && !d.picks?.length) {
+      el.innerHTML = '<div class="bg-[#1c1c1e] rounded-xl p-6 text-center"><span class="material-symbols-outlined text-3xl text-[#636366] mb-2">schedule</span><p class="text-sm font-bold text-[#e5e2e1] mb-1">Market Closed</p><p class="text-xs text-[#636366]">AI picks are generated during market hours (9:15 AM – 3:30 PM IST)</p></div>';
+      return;
+    }
     if (d.picks && d.picks.length) {
       // Show generation timestamp — prefer server's generated time, fallback to now
       const genTime = d.generated ? new Date(d.generated).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short'}) : new Date().toLocaleTimeString();
@@ -2569,6 +2614,19 @@ function renderVerifyResult(containerId, d) {
     return;
   }
 
+  // Market closed state
+  if (d.marketClosed && !d.verdict) {
+    el.innerHTML = `
+      <div class="bg-[#1c1c1e] rounded-xl p-6 text-center">
+        <span class="material-symbols-outlined text-3xl text-[#636366] mb-2">schedule</span>
+        <p class="text-sm font-bold text-[#e5e2e1] mb-1">Market Closed</p>
+        <p class="text-xs text-[#636366]">Insights are available during Indian market hours</p>
+        <p class="text-xs text-[#d0c6ab] mt-1">9:15 AM – 3:30 PM IST, Mon–Fri</p>
+        ${d.nextOpen ? `<p class="text-[10px] text-[#636366] mt-2 font-mono">Next open: ${new Date(d.nextOpen).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', weekday:'short', hour:'2-digit', minute:'2-digit'})}</p>` : ''}
+      </div>`;
+    return;
+  }
+
   const verdictCol = d.verdict === 'BUY' ? 'bg-[#09bf49] text-[#004615]' : d.verdict === 'HOLD' ? 'bg-[#ffd60a] text-[#3b2f00]' : 'bg-[#93000a] text-[#ffdad6]';
   const confPct = d.confidence || 0;
   const confCol = confPct >= 70 ? '#09bf49' : confPct >= 45 ? '#ffd60a' : '#ff453a';
@@ -2577,8 +2635,12 @@ function renderVerifyResult(containerId, d) {
   const downsideVal = parseFloat(d.downside) || 0;
   const cp = d._computed || {};
 
-  // Conflict warnings
+  // Stale / market closed banner
   let warningsHtml = '';
+  if (d.marketClosed && d.stale) {
+    warningsHtml += `<div class="bg-[#1c1c1e] border border-[#636366]/30 rounded-xl p-3 mb-3 flex items-start gap-2"><span class="material-symbols-outlined text-[#636366] text-sm mt-0.5">schedule</span><p class="text-xs text-[#636366]">Market closed — showing last analysis${d.lastUpdated ? ' from ' + new Date(d.lastUpdated).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short'}) : ''}</p></div>`;
+  }
+  // Conflict warnings
   if (d._verdictConflict) {
     warningsHtml += `<div class="bg-[#3b2f00] border border-[#ffd60a]/30 rounded-xl p-3 mb-3 flex items-start gap-2"><span class="material-symbols-outlined text-[#ffd60a] text-sm mt-0.5">warning</span><p class="text-xs text-[#ffd60a]">${d._verdictConflict}</p></div>`;
   }
@@ -2647,13 +2709,13 @@ function renderVerifyResult(containerId, d) {
     ${cp.signalLabel && cp.signalLabel !== 'N/A' ? `
     <div class="bg-[#1c1c1e] rounded-xl p-3 mb-3 border border-[#2c2c2e]">
       <div class="flex items-center justify-between mb-2">
-        <p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono flex items-center gap-1"><span class="material-symbols-outlined text-xs">analytics</span> FINR Engine</p>
+        <p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono flex items-center gap-1"><span class="material-symbols-outlined text-xs">analytics</span> FINR Engine <span class="text-[8px] text-[#636366]">(live technicals)</span></p>
         <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:${cp.compositeScore >= 65 ? '#09bf49' : cp.compositeScore >= 40 ? '#ffd60a' : '#ff453a'}20;color:${cp.compositeScore >= 65 ? '#09bf49' : cp.compositeScore >= 40 ? '#ffd60a' : '#ff453a'}">${cp.signalLabel} · ${cp.compositeScore}/100</span>
       </div>
       <div class="grid grid-cols-3 gap-2 text-center text-[10px] mb-2">
-        <div><p class="text-[#636366]">Fund Score</p><p class="text-white font-bold">${cp.signalScore}/100</p></div>
+        <div><p class="text-[#636366]">Signal Score</p><p class="text-white font-bold">${cp.signalScore}/100</p></div>
         <div><p class="text-[#636366]">Tech Score</p><p class="text-white font-bold">${cp.techScore}/100</p></div>
-        <div><p class="text-[#636366]">Tech Bias</p><p class="font-bold" style="color:${cp.techBias === 'BULLISH' ? '#47e266' : cp.techBias === 'BEARISH' ? '#ff453a' : '#ffd60a'}">${cp.techBias}</p></div>
+        <div><p class="text-[#636366]">Bias</p><p class="font-bold" style="color:${cp.techBias === 'BULLISH' ? '#47e266' : cp.techBias === 'BEARISH' ? '#ff453a' : '#ffd60a'}">${cp.techBias}</p></div>
       </div>
       ${cp.rsi !== null ? `
       <div class="grid grid-cols-4 gap-1 text-[9px] font-mono text-[#d0c6ab]">
@@ -2664,10 +2726,10 @@ function renderVerifyResult(containerId, d) {
       </div>` : ''}
     </div>` : ''}
 
-    <!-- Fundamentals Row -->
+    <!-- Fundamentals Row (AI-sourced via grounding) -->
     ${d.pe || d.roe || d.debtToEquity ? `
     <div class="bg-[#1c1c1e] rounded-xl p-3 mb-3">
-      <p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono mb-2">Fundamentals</p>
+      <p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono mb-2 flex items-center gap-1">Fundamentals <span class="text-[8px] text-[#636366]">(via AI search)</span></p>
       <div class="grid grid-cols-3 gap-2 text-center text-[10px]">
         ${d.pe ? `<div><p class="text-[#636366]">P/E</p><p class="text-white font-bold">${d.pe}x ${d.sectorPe ? '<span class=text-[#636366]>vs ' + d.sectorPe + 'x</span>' : ''}</p></div>` : ''}
         ${d.roe ? `<div><p class="text-[#636366]">ROE</p><p class="text-white font-bold">${d.roe}%</p></div>` : ''}
@@ -2735,7 +2797,19 @@ function renderVerifyResult(containerId, d) {
       <div class="px-3 pb-3 space-y-1">${techDots}</div>
     </details>` : ''}
 
-    <!-- Footer -->
+    <!-- Data Sources & Footer -->
+    ${d._dataSources ? `
+    <details class="bg-[#1c1c1e] rounded-xl mb-3">
+      <summary class="p-3 text-xs font-bold text-[#636366] cursor-pointer flex items-center gap-1"><span class="material-symbols-outlined text-xs">database</span> Data Sources</summary>
+      <div class="px-3 pb-3 grid grid-cols-2 gap-1 text-[9px] font-mono text-[#636366]">
+        <div>Price: <span class="${d._dataSources.price?.includes('LIVE') ? 'text-[#47e266]' : 'text-[#ff453a]'}">${d._dataSources.price || '?'}</span></div>
+        <div>${d._dataSources.priceAge ? 'Age: ' + d._dataSources.priceAge : ''}</div>
+        <div>Fundamentals: <span class="${d._dataSources.fundamentals?.includes('STATIC') ? 'text-[#ff9f0a]' : d._dataSources.fundamentals?.includes('LIVE') ? 'text-[#47e266]' : 'text-[#ff453a]'}">${d._dataSources.fundamentals?.split('(')[0] || '?'}</span></div>
+        <div>Technicals: <span class="${d._dataSources.technicals?.includes('COMPUTED') ? 'text-[#47e266]' : 'text-[#ff453a]'}">${d._dataSources.technicals?.split('(')[0] || '?'}</span></div>
+        <div>AI: <span class="${d._dataSources.aiGrounding?.includes('GROUNDED') ? 'text-[#47e266]' : 'text-[#ff9f0a]'}">${d._dataSources.aiGrounding?.split('(')[0] || '?'}</span></div>
+        <div>Options: <span class="${d._dataSources.optionChain?.includes('LIVE') ? 'text-[#47e266]' : 'text-[#636366]'}">${d._dataSources.optionChain?.split('(')[0] || 'N/A'}</span></div>
+      </div>
+    </details>` : ''}
     <div class="flex items-center justify-between text-[9px] text-[#636366] font-mono px-1">
       <span>${d.model || ''} ${d.grounded ? '· grounded' : ''}</span>
       <span>${d.cached ? '(cached)' : ''} ${d.stale ? '⚠️ stale' : ''}</span>
@@ -2826,6 +2900,10 @@ async function loadOptionsLabInline(force = false) {
   el.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">Scanning options chain...</div>';
   try {
     const d = await fetch(url).then(r => r.json());
+    if (d.marketClosed && !d.trades?.length) {
+      el.innerHTML = `<div class="bg-[#1c1c1e] rounded-xl p-6 text-center"><span class="material-symbols-outlined text-3xl text-[#636366] mb-2">schedule</span><p class="text-sm font-bold text-[#e5e2e1] mb-1">Market Closed</p><p class="text-xs text-[#636366]">Options data available during market hours (9:15 AM – 3:30 PM IST)</p></div>`;
+      return;
+    }
     if (d.trades && d.trades.length) {
       _latestOptionsData = d;
       const genTime = d.generated ? new Date(d.generated).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short'}) : new Date().toLocaleTimeString();
@@ -4350,7 +4428,52 @@ async function loadMarketPrediction() {
     }
 
     // Grounded badge
-    if (d.grounded) document.getElementById('pred-grounded-badge').classList.remove('hidden');
+    if (d.grounded) {
+      const gb = document.getElementById('pred-grounded-badge');
+      gb.classList.remove('hidden');
+      gb.style.display = 'flex';
+    }
+
+    // Data source count
+    if (d._dataSources) {
+      const liveCount = Object.values(d._dataSources).filter(v => v !== 'Unavailable').length;
+      const totalCount = Object.keys(d._dataSources).length;
+      const srcEl = document.getElementById('pred-source-count');
+      srcEl.classList.remove('hidden');
+      document.getElementById('pred-source-text').textContent = `${liveCount}/${totalCount} data feeds live`;
+    }
+
+    // Nifty levels (support, resistance, PCR, max pain)
+    const levelsEl = document.getElementById('pred-levels');
+    const snap = d._dataSnapshot || {};
+    if (d.niftySupport || d.niftyResistance || snap.niftyPCR) {
+      levelsEl.classList.remove('hidden');
+      if (d.niftySupport) document.getElementById('pred-support').textContent = Number(d.niftySupport).toLocaleString('en-IN');
+      if (d.niftyResistance) document.getElementById('pred-resistance').textContent = Number(d.niftyResistance).toLocaleString('en-IN');
+      if (snap.niftyPCR) {
+        const pcrEl = document.getElementById('pred-pcr');
+        pcrEl.textContent = snap.niftyPCR;
+        pcrEl.style.color = snap.niftyPCR > 1.2 ? '#47e266' : snap.niftyPCR < 0.7 ? '#ffb4ab' : '#ffd60a';
+      }
+      if (snap.niftyMaxPain) document.getElementById('pred-maxpain').textContent = Number(snap.niftyMaxPain).toLocaleString('en-IN');
+    }
+
+    // Active macro events
+    if (d._activeEvents && d._activeEvents.length) {
+      const evEl = document.getElementById('pred-events');
+      evEl.classList.remove('hidden');
+      document.getElementById('pred-events-list').innerHTML = d._activeEvents.map(e =>
+        `<span class="px-2 py-0.5 rounded bg-[#ff453a]/10 border border-[#ff453a]/20 text-[9px] font-bold text-[#ffb4ab] font-mono">${e.icon} ${e.title}</span>`
+      ).join('');
+    }
+
+    // Breadth conflict warning
+    if (d._breadthConflict) {
+      document.getElementById('pred-conflict').classList.remove('hidden');
+    }
+
+    // Store full prediction data for detail toggles
+    window._lastPrediction = d;
 
   } catch(e) {
     document.getElementById('pred-today-label').textContent = 'Error';
@@ -4706,25 +4829,42 @@ function togglePredDetail() {
   if (predDetailOpen) {
     card.classList.remove('hidden');
     chevron.style.transform = 'rotate(180deg)';
-    // Populate with live data snapshot
+    // Use backend snapshot if available, fallback to live frontend data
+    const snap = window._lastPrediction?._dataSnapshot || {};
     const nifty = IDX['NIFTY50'] || IDX['Nifty 50'] || {};
     const bank = IDX['NIFTYBANK'] || IDX['Nifty Bank'] || {};
-    const nPct = nifty.chgPct !== undefined ? nifty.chgPct : (nifty.changePct || 0);
+    const nPct = snap.niftyChg ?? (nifty.chgPct !== undefined ? nifty.chgPct : (nifty.changePct || 0));
     const bPct = bank.chgPct !== undefined ? bank.chgPct : (bank.changePct || 0);
-    const stocks = Object.values(S).filter(s => s.price);
-    const adv = stocks.filter(s => (s.changePct||s.chgPct||0) >= 0).length;
-    const dec = stocks.filter(s => (s.changePct||s.chgPct||0) < 0).length;
+    const adv = snap.breadth?.adv ?? Object.values(S).filter(s => s.price && (s.changePct||s.chgPct||0) >= 0).length;
+    const dec = snap.breadth?.dec ?? Object.values(S).filter(s => s.price && (s.changePct||s.chgPct||0) < 0).length;
     const dataEl = document.getElementById('pred-detail-data');
-    dataEl.innerHTML = [
-      {l:'Nifty 50', v:`${fmt(nifty.price||0)} (${nPct>=0?'+':''}${nPct.toFixed(2)}%)`, c:nPct>=0?'#47e266':'#ffb4ab'},
-      {l:'Bank Nifty', v:`${fmt(bank.price||0)} (${bPct>=0?'+':''}${bPct.toFixed(2)}%)`, c:bPct>=0?'#47e266':'#ffb4ab'},
-      {l:'India VIX', v:`${VIX.value} (${VIX.trend})`, c:VIX.value>20?'#ffb4ab':'#47e266'},
-      {l:'FII Flow', v:`₹${fmt(Math.abs(FIIDII.fii))} Cr`, c:FIIDII.fii>=0?'#47e266':'#ffb4ab'},
-      {l:'DII Flow', v:`₹${fmt(Math.abs(FIIDII.dii))} Cr`, c:FIIDII.dii>=0?'#47e266':'#ffb4ab'},
-      {l:'USD/INR', v: FIIDII.usdInr ? `${FIIDII.usdInr}` : '--', c:'#e5e2e1'},
-      {l:'Crude Oil', v: FIIDII.crude ? `$${FIIDII.crude}` : '--', c:'#e5e2e1'},
+    const rows = [
+      {l:'Nifty 50', v:`${fmt(snap.niftyPrice || nifty.price||0)} (${nPct>=0?'+':''}${Number(nPct).toFixed(2)}%)`, c:nPct>=0?'#47e266':'#ffb4ab'},
+      {l:'Bank Nifty', v:`${fmt(snap.bankNiftyPrice || bank.price||0)} (${bPct>=0?'+':''}${Number(bPct).toFixed(2)}%)`, c:bPct>=0?'#47e266':'#ffb4ab'},
+      {l:'India VIX', v: snap.vixValue ? `${snap.vixValue} (${VIX.trend})` : (VIX.value ? `${VIX.value} (${VIX.trend})` : '--'), c:(snap.vixValue||VIX.value)>20?'#ffb4ab':'#47e266'},
+      {l:'FII Flow', v: snap.fiiFlow !== null ? `₹${fmt(Math.abs(snap.fiiFlow))} Cr` : (FIIDII.fii ? `₹${fmt(Math.abs(FIIDII.fii))} Cr` : '--'), c:(snap.fiiFlow??FIIDII.fii)>=0?'#47e266':'#ffb4ab'},
+      {l:'DII Flow', v: snap.diiFlow !== null ? `₹${fmt(Math.abs(snap.diiFlow))} Cr` : (FIIDII.dii ? `₹${fmt(Math.abs(FIIDII.dii))} Cr` : '--'), c:(snap.diiFlow??FIIDII.dii)>=0?'#47e266':'#ffb4ab'},
+      {l:'USD/INR', v: (snap.usdInr || FIIDII.usdInr) ? `${snap.usdInr || FIIDII.usdInr}` : '--', c:'#e5e2e1'},
+      {l:'Crude Oil', v: (snap.crude || FIIDII.crude) ? `$${snap.crude || FIIDII.crude}` : '--', c:'#e5e2e1'},
       {l:'Breadth', v:`${adv} Adv / ${dec} Dec`, c:adv>dec?'#47e266':'#ffb4ab'},
-    ].map(r => `<div class="flex justify-between"><span class="text-[9px] text-[#636366] font-mono">${r.l}</span><span class="text-[9px] font-mono font-bold" style="color:${r.c}">${r.v}</span></div>`).join('');
+    ];
+    // Add options data if available
+    if (snap.niftyPCR) rows.push({l:'Nifty PCR', v:`${snap.niftyPCR}`, c: snap.niftyPCR > 1.2 ? '#47e266' : snap.niftyPCR < 0.7 ? '#ffb4ab' : '#ffd60a'});
+    if (snap.niftyMaxPain) rows.push({l:'Max Pain', v:`${Number(snap.niftyMaxPain).toLocaleString('en-IN')}`, c:'#e5e2e1'});
+    if (snap.niftyAvgIV) rows.push({l:'Avg IV', v:`${snap.niftyAvgIV}%`, c:'#ffd60a'});
+    if (snap.avgSignalScore) rows.push({l:'FINR Score', v:`${snap.avgSignalScore}/100 (${snap.stocksTracked} stocks)`, c: snap.avgSignalScore >= 65 ? '#47e266' : snap.avgSignalScore >= 50 ? '#ffd60a' : '#ffb4ab'});
+    dataEl.innerHTML = rows.map(r => `<div class="flex justify-between"><span class="text-[9px] text-[#636366] font-mono">${r.l}</span><span class="text-[9px] font-mono font-bold" style="color:${r.c}">${r.v}</span></div>`).join('');
+
+    // Data sources section
+    const sources = window._lastPrediction?._dataSources;
+    if (sources) {
+      const srcHtml = Object.entries(sources).map(([k, v]) => {
+        const live = v !== 'Unavailable';
+        return `<span class="text-[8px] font-mono px-1.5 py-0.5 rounded ${live ? 'bg-[#47e266]/10 text-[#47e266]' : 'bg-[#ff453a]/10 text-[#636366]'}">${k}: ${live ? '✓' : '✗'}</span>`;
+      }).join('');
+      dataEl.innerHTML += `<div class="col-span-2 mt-2 pt-2 border-t border-[#353534]"><div class="text-[8px] font-bold text-[#636366] uppercase font-mono mb-1">Data Sources</div><div class="flex flex-wrap gap-1">${srcHtml}</div></div>`;
+    }
+
     // Reasoning from the stored prediction detail
     const reasoning = document.getElementById('pred-today-detail')?.textContent || 'No analysis available yet.';
     document.getElementById('pred-detail-reasoning').textContent = reasoning;
