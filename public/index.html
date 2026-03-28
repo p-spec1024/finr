@@ -1455,6 +1455,34 @@ tailwind.config = {
                 </div>
               </div>
             </div>
+            <!-- Twelve Data -->
+            <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5 api-card">
+              <div class="px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-3 cursor-pointer flex-1" onclick="toggleApiCard(this.parentElement)">
+                  <div class="w-8 h-8 rounded-lg bg-[#353534] flex items-center justify-center"><span class="material-symbols-outlined text-[#ffd60a] text-base">public</span></div>
+                  <div>
+                    <span class="font-bold text-sm text-[#e5e2e1]">Twelve Data</span>
+                    <p class="text-[9px] text-[#636366]">Gold, Crude, USD/INR, S&P500, NASDAQ</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span id="twelvedata-status-dot" class="w-2 h-2 rounded-full bg-[#636366]"></span>
+                  <button id="twelvedata-connect-btn" class="px-2.5 py-1 rounded-lg border border-[#ffd60a]/30 text-[#ffd60a] text-[10px] font-bold hover:bg-[#ffd60a]/10 transition-colors" onclick="toggleTwelveDataConnection()">Connect</button>
+                  <span class="material-symbols-outlined text-[#d0c6ab] text-base api-chevron transition-transform duration-200 cursor-pointer" onclick="toggleApiCard(this.closest('.api-card').querySelector('.px-4'))">expand_more</span>
+                </div>
+              </div>
+              <div class="api-card-body" style="max-height:0;overflow:hidden;opacity:0;transition:max-height 0.25s ease,opacity 0.2s ease;">
+                <div class="px-4 pb-3 space-y-2">
+                  <p class="text-[11px] text-[#d0c6ab]">Free at <span class="font-mono text-[#ffd60a]">twelvedata.com</span> — 800 calls/day. Powers Gold, Crude, USD/INR, S&P 500, NASDAQ, Dow Jones, Nikkei.</p>
+                  <div class="space-y-1"><label class="text-[10px] font-bold text-[#d0c6ab] ml-1 uppercase tracking-tight">API Key</label><input id="tdk" type="password" class="w-full bg-[#242426] border-none rounded-lg text-xs py-2.5 px-3 focus:ring-1 focus:ring-[#ffd60a] text-[#e5e2e1] outline-none" placeholder="Your Twelve Data API Key"></div>
+                  <div id="twelvedata-test-result" class="font-mono text-[10px] text-[#d0c6ab]"></div>
+                  <div class="flex gap-2">
+                    <button class="flex-1 py-1.5 rounded-lg bg-[#353534] text-[#d0c6ab] text-[10px] font-bold" onclick="saveSettings()">Save</button>
+                    <button class="flex-1 py-1.5 rounded-lg bg-[#ffd60a]/20 text-[#ffd60a] text-[10px] font-bold" onclick="testTwelveData()">Save & Test</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </section>
 
           <!-- COLUMN 2: SYSTEM -->
@@ -4031,11 +4059,17 @@ function updateApiStatusDots(health) {
       vDot.className = 'w-2 h-2 rounded-full ' + (vertexConnected ? 'bg-[#47e266]' : 'bg-[#ffb4ab]');
       vDot.title = vertexConnected ? 'Connected' : (health.vertexAI?.disabled ? 'Disconnected by user' : (health.vertexAI?.configured ? 'Configured but not verified' : 'Not configured'));
     }
+    const tdDot = document.getElementById('twelvedata-status-dot');
+    if (tdDot && health.twelveData) {
+      tdDot.className = 'w-2 h-2 rounded-full ' + (health.twelveData.connected ? 'bg-[#47e266]' : health.twelveData.configured ? 'bg-[#ffd60a]' : 'bg-[#636366]');
+      tdDot.title = health.twelveData.connected ? `Connected — ${health.twelveData.symbolsLoaded} symbols` : (health.twelveData.disabled ? 'Disconnected by user' : (health.twelveData.configured ? 'Key set, awaiting data' : 'Not configured'));
+    }
     // Update Connect/Disconnect button labels
     updateConnectBtn('upstox-connect-btn', health.upstox?.connected);
     updateConnectBtn('zerodha-connect-btn', health.zerodha?.connected);
     updateConnectBtn('gemini-connect-btn', health.gemini?.connected);
     updateConnectBtn('vertex-connect-btn', health.vertexAI?.connected);
+    updateConnectBtn('twelvedata-connect-btn', health.twelveData?.connected);
     // Update the Connect All / Disconnect All toggle button
     updateConnectAllBtn(health);
   } catch(e) {}
@@ -4082,6 +4116,11 @@ function toggleVertexConnection() {
   if (btn && btn.textContent === 'Disconnect') disconnectService('vertex');
   else testVertex();
 }
+function toggleTwelveDataConnection() {
+  const btn = document.getElementById('twelvedata-connect-btn');
+  if (btn && btn.textContent === 'Disconnect') disconnectService('twelvedata');
+  else testTwelveData();
+}
 
 // Toggle Connect All / Disconnect All based on current button state
 function toggleConnectAll() {
@@ -4098,7 +4137,8 @@ function updateConnectAllBtn(health) {
     health?.upstox?.connected,
     health?.zerodha?.connected,
     health?.gemini?.connected,
-    health?.vertexAI?.connected
+    health?.vertexAI?.connected,
+    health?.twelveData?.connected
   ].filter(Boolean).length;
   const icon = btn.querySelector('.material-symbols-outlined');
   if (connected >= 2) {
@@ -4152,6 +4192,15 @@ async function connectAll() {
     if (r.ok) { if(el) el.innerHTML='<span class="text-[#47e266]">Connected · Project: '+r.projectId+'</span>'; results.push({service:'Vertex AI',ok:true,msg:r.projectId}); }
     else { if(el) el.innerHTML='<span class="text-[#ffb4ab]">'+r.reason+'</span>'; results.push({service:'Vertex AI',ok:false,msg:r.reason}); }
   })());
+  // Twelve Data
+  const tdKey = document.getElementById('tdk')?.value?.trim();
+  if (tdKey) {
+    tasks.push(fetch('/api/twelvedata-test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:tdKey})}).then(x=>x.json()).then(r => {
+      const el = document.getElementById('twelvedata-test-result');
+      if (r.ok) { if(el) el.innerHTML=`<span class="text-[#47e266]">Connected — USD/INR: ₹${r.price}</span>`; results.push({service:'Twelve Data',ok:true,msg:'USD/INR: ₹'+r.price}); }
+      else { if(el) el.innerHTML='<span class="text-[#ffb4ab]">'+r.reason+'</span>'; results.push({service:'Twelve Data',ok:false,msg:r.reason}); }
+    }).catch(()=>results.push({service:'Twelve Data',ok:false,msg:'Error'})));
+  }
   await Promise.allSettled(tasks);
   await fetchStatus();
   if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
@@ -4167,7 +4216,7 @@ async function disconnectAll() {
   const btn = document.getElementById('connect-all-btn');
   if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
   toast('Disconnecting all services...');
-  const services = ['upstox', 'zerodha', 'gemini', 'vertex'];
+  const services = ['upstox', 'zerodha', 'gemini', 'vertex', 'twelvedata'];
   await Promise.allSettled(services.map(s =>
     fetch('/api/disconnect', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({service:s})}).then(x=>x.json()).catch(()=>({ok:false}))
   ));
@@ -4220,6 +4269,7 @@ async function saveSettings() {
   const gk = document.getElementById('gk').value.trim();
   const gk2 = document.getElementById('gk2').value.trim();
   const gk3 = document.getElementById('gk3').value.trim();
+  const tdk = document.getElementById('tdk').value.trim();
   if (uk) settings.apiKey = uk;
   if (us) settings.apiSecret = us;
   if (uc) settings.redirectUri = uc;
@@ -4229,6 +4279,7 @@ async function saveSettings() {
   if (gk) settings.geminiKey = gk;
   if (gk2) settings.geminiKey2 = gk2;
   if (gk3) settings.geminiKey3 = gk3;
+  if (tdk) settings.twelveDataKey = tdk;
   if (!Object.keys(settings).length) { toast('No settings to save'); return; }
   try {
     const r = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(settings)});
@@ -4312,6 +4363,27 @@ async function testVertex() {
   }
 }
 
+async function testTwelveData() {
+  const key = document.getElementById('tdk').value.trim();
+  const el = document.getElementById('twelvedata-test-result');
+  toast('Testing Twelve Data...');
+  try {
+    const body = key ? {key} : {};
+    const r = await fetch('/api/twelvedata-test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}).then(x=>x.json());
+    if (r.ok) {
+      if (el) el.innerHTML = `<span class="text-[#47e266]">Connected — USD/INR: ₹${r.price} · ${r.symbolsAvailable} symbols</span>`;
+      toast('Twelve Data connected ✅');
+    } else {
+      if (el) el.innerHTML = '<span class="text-[#ffb4ab]">' + (r.reason||'Failed') + '</span>';
+      toast(r.reason === 'No API key' ? 'Enter API key or set TWELVE_DATA_API_KEY env var' : 'Twelve Data: ' + (r.reason||'Failed'));
+    }
+    fetchStatus();
+  } catch(e) {
+    if (el) el.innerHTML = '<span class="text-[#ffb4ab]">Network error</span>';
+    toast('Error testing Twelve Data');
+  }
+}
+
 async function saveVertex(silent) {
   const raw = document.getElementById('vertex-sa-json').value.trim();
   const el = document.getElementById('vertex-test-result');
@@ -4385,6 +4457,7 @@ async function loadHealth() {
     if (d.zerodha) items.push({name:'Zerodha Auth Flow',detail:d.zerodha.connected?`Holdings: ${d.zerodha.holdingsCount}`:'Not connected',status:d.zerodha.connected?'ok':'err'});
     if (d.gemini) items.push({name:'Gemini Engine',detail:d.gemini.connected?`Connected · ${d.gemini.keysCount||1} key${(d.gemini.keysCount||1)>1?'s':''} (using #${d.gemini.activeKey||1})`:d.gemini.status,status:d.gemini.connected?'ok':'err'});
     if (d.vertexAI) items.push({name:'Vertex AI',detail:d.vertexAI.connected?`Connected · ${(d.vertexAI.clientEmail||'').split('@')[0]}`:d.vertexAI.configured?'Configured, not verified':'Not configured',status:d.vertexAI.connected?'ok':'err'});
+    if (d.twelveData) items.push({name:'Twelve Data',detail:d.twelveData.connected?`Connected · ${d.twelveData.symbolsLoaded}/${d.twelveData.symbols} symbols`:d.twelveData.disabled?'Disconnected by user':d.twelveData.configured?'Key set, awaiting data':'Not configured',status:d.twelveData.connected?'ok':d.twelveData.configured?'warn':'err'});
     if (d.server) items.push({name:'Main Server (Railway)',detail:`Uptime: ${Math.round(d.server.uptime/60)}min · ${d.server.memMB}MB`,status:'ok'});
     items.push({name:'Market',detail:d.marketOpen?'Open':'Closed',status:d.marketOpen?'ok':'warn'});
     el.innerHTML = items.map(i => {

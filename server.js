@@ -57,6 +57,7 @@ let testResults      = [];
 let globalMarkets    = {}; // Twelve Data global market prices
 let twelveDataInterval = null;
 let optionChainCache = { nifty: null, banknifty: null, stocks: {}, lastFetch: 0 }; // OI, IV, PCR, Max Pain
+let twelveDataDisabled = false; // User can disconnect Twelve Data
 let pickTracker      = []; // { id, type, symbol, direction, entryPrice, target, stopLoss, date, status, outcome }
 const PICK_TRACKER_FILE = path.join(__dirname, '.finr_picks.enc');
 
@@ -3350,7 +3351,7 @@ app.post('/api/trades/import-csv', (req, res) => {
 // SETTINGS & CONFIG APIs
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/api/settings', (req, res) => {
-  const { apiKey, apiSecret, pin, redirectUri, geminiKey, geminiKey2, geminiKey3, zApiKey, zApiSecret, zRedirectUri } = req.body;
+  const { apiKey, apiSecret, pin, redirectUri, geminiKey, geminiKey2, geminiKey3, zApiKey, zApiSecret, zRedirectUri, twelveDataKey } = req.body;
   // Allow partial saves — only update fields that are provided
   if (pin) {
     if (!/^\d{4}$/.test(pin)) return res.status(400).json({ error: 'PIN must be 4 digits' });
@@ -3365,6 +3366,12 @@ app.post('/api/settings', (req, res) => {
   if (zApiKey)      appConfig.zApiKey      = zApiKey.trim();
   if (zApiSecret)   appConfig.zApiSecret   = zApiSecret.trim();
   if (zRedirectUri) appConfig.zRedirectUri = zRedirectUri.trim();
+  if (twelveDataKey) {
+    appConfig.twelveDataKey = twelveDataKey.trim();
+    // Restart polling with new key
+    stopTwelveDataPolling();
+    startTwelveDataPolling();
+  }
   saveConfig();
   log('OK', 'Settings saved');
   res.json({ success: true });
@@ -3383,6 +3390,7 @@ app.get('/api/config-status', (req, res) => {
     hasZerodha:       !!zAccessToken,
     hasGemini:        !!appConfig.geminiKey,
     hasVertexAI:      !!gcpServiceAccount,
+    hasTwelveData:    !!appConfig.twelveDataKey,
     tokenExpiry:      appConfig.tokenExpiry || null,
     zTokenExpiry:     appConfig.zTokenExpiry || null,
     connectionStatus,
@@ -3409,6 +3417,7 @@ app.get('/api/system-health', (req, res) => {
     zerodha:   { connected: !!zAccessToken, tokenValid: !!zAccessToken && appConfig.zTokenExpiry > now, holdingsCount: zerodhaHoldings.length, positionsCount: zerodhaPositions.length },
     gemini:    { configured: !!appConfig.geminiKey, connected: geminiConnectionOk && !!appConfig.geminiKey && !geminiDisabled, disabled: geminiDisabled, status: geminiDisabled ? 'disconnected' : (geminiConnectionOk ? 'connected' : (appConfig.geminiKey ? 'configured_not_tested' : 'not_configured')), keysCount: getGeminiKeys().length, activeKey: geminiKeyIndex + 1 },
     vertexAI:  { configured: !!gcpServiceAccount, connected: vertexConnectionOk && !!gcpServiceAccount && !vertexDisabled, disabled: vertexDisabled, projectId: gcpServiceAccount?.project_id || null, clientEmail: gcpServiceAccount?.client_email || null, models: GEMINI_MODELS },
+    twelveData: { configured: !!appConfig.twelveDataKey, connected: !!appConfig.twelveDataKey && !twelveDataDisabled && Object.keys(globalMarkets).length > 0, disabled: twelveDataDisabled || false, symbolsLoaded: Object.keys(globalMarkets).length, symbols: TWELVE_DATA_SYMBOLS.length, polling: !!twelveDataInterval, lastUpdate: Object.values(globalMarkets).reduce((max, g) => Math.max(max, g.lastUpdate || 0), 0) || null },
     server:    { uptime: Math.round(process.uptime()), memMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024), stocksLoaded: stockUniverse.length, signalsCalc: Object.keys(signalCache).length },
     marketOpen: isMarketOpen(),
     lastUpdate: Object.values(liveStocks)[0]?.lastUpdate || null,
@@ -3428,6 +3437,33 @@ app.get('/api/zerodha-refresh', (req, res) => {
   if (!appConfig.zApiKey || !appConfig.zApiSecret) return res.json({ ok: false, reason: 'Zerodha keys not configured' });
   if (zAccessToken) return res.json({ ok: true, status: 'Token active', holdings: zerodhaHoldings.length });
   res.json({ ok: false, reason: 'Not authenticated. Use the login flow.' });
+});
+
+app.post('/api/twelvedata-test', async (req, res) => {
+  const key = req.body.key || appConfig.twelveDataKey;
+  if (!key) return res.json({ ok: false, reason: 'No API key' });
+  try {
+    // Test with a simple quote request
+    const url = `https://api.twelvedata.com/quote?symbol=USD/INR&apikey=${key}`;
+    const { data } = await axios.get(url, { timeout: 10000 });
+    if (data.status === 'error') {
+      return res.json({ ok: false, reason: data.message || 'Invalid API key' });
+    }
+    const price = parseFloat(data.close) || parseFloat(data.price) || 0;
+    if (price > 0) {
+      // Key works — save it, enable, and start polling
+      appConfig.twelveDataKey = key;
+      twelveDataDisabled = false;
+      saveConfig();
+      stopTwelveDataPolling();
+      startTwelveDataPolling();
+      log('OK', `Twelve Data API key verified — USD/INR: ${price}`);
+      return res.json({ ok: true, price, symbol: 'USD/INR', symbolsAvailable: TWELVE_DATA_SYMBOLS.length });
+    }
+    return res.json({ ok: false, reason: 'API returned no price data' });
+  } catch(e) {
+    return res.json({ ok: false, reason: e.message || 'Connection failed' });
+  }
 });
 
 app.post('/api/gemini-test', async (req, res) => {
@@ -3517,6 +3553,12 @@ app.post('/api/disconnect', (req, res) => {
       vertexTokenExpiry = 0;
       log('WARN', 'Vertex AI disconnected by user');
       return res.json({ ok: true, service: 'vertex' });
+    case 'twelvedata':
+      twelveDataDisabled = true;
+      stopTwelveDataPolling();
+      globalMarkets = {};
+      log('WARN', 'Twelve Data disconnected by user');
+      return res.json({ ok: true, service: 'twelvedata' });
     default:
       return res.status(400).json({ error: 'Unknown service: ' + service });
   }
