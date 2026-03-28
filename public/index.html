@@ -832,18 +832,22 @@ tailwind.config = {
         <!-- Verify Pick Content (inline) -->
         <div class="stab-content" id="stab-verify">
           <section class="space-y-3 mb-4">
-            <div>
-              <h3 class="text-base font-bold text-[#e5e2e1] flex items-center gap-2">
-                <span class="material-symbols-outlined text-sm">search</span> Check any stock
-              </h3>
-              <p class="text-xs text-[#d0c6ab]">Get unbiased AI analysis before you invest</p>
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-base font-bold text-[#e5e2e1] flex items-center gap-2">
+                  <span class="material-symbols-outlined text-sm">verified</span> Verify Any Stock
+                </h3>
+                <p class="text-xs text-[#d0c6ab]">Multi-layer AI + computed signal verification</p>
+              </div>
+              <span id="verify-ts-inline" class="text-[10px] text-[#636366] font-mono"></span>
             </div>
             <div class="flex gap-2 h-12">
-              <input type="text" id="verify-sym-inline" class="flex-1 bg-[#242426] border-none rounded-xl px-4 font-headline font-bold text-[#e5e2e1] focus:ring-1 focus:ring-[#ffd60a] outline-none" placeholder="RELIANCE" oninput="this.value=this.value.toUpperCase()">
+              <input type="text" id="verify-sym-inline" class="flex-1 bg-[#242426] border-none rounded-xl px-4 font-headline font-bold text-[#e5e2e1] focus:ring-1 focus:ring-[#ffd60a] outline-none" placeholder="RELIANCE" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')verifyPickInline()">
               <button class="bg-[#ffd60a] text-[#3b2f00] px-6 rounded-xl font-bold active:scale-95 transition-all" onclick="verifyPickInline()">Analyse</button>
             </div>
           </section>
           <div id="verify-result-inline"></div>
+          <div id="verify-history-inline" class="mt-3"></div>
         </div>
 
         <!-- Live Analysis Content (NEW) -->
@@ -1000,8 +1004,6 @@ tailwind.config = {
         <div style="display:none">
           <div id="opts-ts">--</div>
           <div id="opts-list"></div>
-          <div id="verify-sym-hidden"></div>
-          <div id="verify-result-hidden"></div>
         </div>
       </div>
     </div>
@@ -1066,7 +1068,7 @@ tailwind.config = {
             <p class="text-xs text-[#d0c6ab]">Get unbiased AI analysis before you invest</p>
           </div>
           <div class="flex gap-2 h-12">
-            <input type="text" id="verify-sym" class="flex-1 bg-[#242426] border-none rounded-xl px-4 font-headline font-bold text-[#e5e2e1] focus:ring-1 focus:ring-[#ffd60a] outline-none" placeholder="RELIANCE" oninput="this.value=this.value.toUpperCase()">
+            <input type="text" id="verify-sym" class="flex-1 bg-[#242426] border-none rounded-xl px-4 font-headline font-bold text-[#e5e2e1] focus:ring-1 focus:ring-[#ffd60a] outline-none" placeholder="RELIANCE" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')verifyPick()">
             <button class="bg-[#ffd60a] text-[#3b2f00] px-6 rounded-xl font-bold active:scale-95 transition-all" onclick="verifyPick()">Analyse</button>
           </div>
         </section>
@@ -2555,28 +2557,238 @@ function renderOptionsCards(d) {
   }).join('');
 }
 
+// ══════════════════════════════════════════════════════════
+// VERIFY PICK — Rich multi-layer verification display
+// ══════════════════════════════════════════════════════════
+function renderVerifyResult(containerId, d) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  if (d.error && !d.verdict) {
+    el.innerHTML = `<div class="text-center py-6 text-[#636366] font-mono text-xs">⚠️ ${d.error}</div>`;
+    return;
+  }
+
+  const verdictCol = d.verdict === 'BUY' ? 'bg-[#09bf49] text-[#004615]' : d.verdict === 'HOLD' ? 'bg-[#ffd60a] text-[#3b2f00]' : 'bg-[#93000a] text-[#ffdad6]';
+  const confPct = d.confidence || 0;
+  const confCol = confPct >= 70 ? '#09bf49' : confPct >= 45 ? '#ffd60a' : '#ff453a';
+  const riskCol = d.riskLevel === 'LOW' ? '#09bf49' : d.riskLevel === 'MEDIUM' ? '#ffd60a' : d.riskLevel === 'HIGH' ? '#ff453a' : '#93000a';
+  const upsideVal = parseFloat(d.upside) || 0;
+  const downsideVal = parseFloat(d.downside) || 0;
+  const cp = d._computed || {};
+
+  // Conflict warnings
+  let warningsHtml = '';
+  if (d._verdictConflict) {
+    warningsHtml += `<div class="bg-[#3b2f00] border border-[#ffd60a]/30 rounded-xl p-3 mb-3 flex items-start gap-2"><span class="material-symbols-outlined text-[#ffd60a] text-sm mt-0.5">warning</span><p class="text-xs text-[#ffd60a]">${d._verdictConflict}</p></div>`;
+  }
+  if (d._priceWarning) {
+    warningsHtml += `<div class="bg-[#1c1c1e] border border-[#ff9f0a]/20 rounded-xl p-2 mb-3"><p class="text-[10px] text-[#ff9f0a] font-mono">${d._priceWarning}</p></div>`;
+  }
+
+  // Positives chips
+  const posHtml = (d.positives || []).map(p => `<span class="inline-block bg-[#47e266]/10 text-[#47e266] text-[10px] px-2 py-1 rounded-lg mr-1 mb-1">${p}</span>`).join('');
+
+  // Red flags chips
+  const flagHtml = (d.redFlags || []).map(f => `<span class="inline-block bg-[#ff453a]/10 text-[#ffb4aa] text-[10px] px-2 py-1 rounded-lg mr-1 mb-1">${f}</span>`).join('');
+
+  // Catalysts chips
+  const catHtml = (d.catalysts || []).map(c => `<span class="inline-block bg-[#0a84ff]/10 text-[#64d2ff] text-[10px] px-2 py-1 rounded-lg mr-1 mb-1">${c}</span>`).join('');
+
+  // Tech signal dots from computed data
+  const techDots = (cp.techSignals || []).map(s => `<span class="text-[10px]">${s.icon} ${s.text}</span>`).join('<br>');
+
+  // Alternatives
+  const altHtml = (d.alternatives || []).map(a => `<div class="flex items-center gap-2 py-1"><span class="text-xs font-bold text-[#ffd60a]">${a.symbol}</span><span class="text-[10px] text-[#d0c6ab]">${a.reason}</span></div>`).join('');
+
+  el.innerHTML = `
+    ${warningsHtml}
+    <!-- Header: Symbol + Verdict -->
+    <div class="bg-[#242426] p-4 rounded-xl flex justify-between items-center mb-3">
+      <div>
+        <h3 class="text-xl font-headline font-extrabold text-white">${d.symbol || '?'}</h3>
+        <p class="text-xs text-[#d0c6ab]">${d.name || d.symbol} ${d.sector ? '· ' + d.sector : ''}</p>
+        ${d.currentPrice ? `<p class="text-sm font-bold text-white mt-1 tnum">₹${d.currentPrice} ${d.liveChange !== undefined ? '<span class="text-xs ' + (d.liveChange >= 0 ? 'text-[#47e266]' : 'text-[#ff453a]') + '">' + (d.liveChange >= 0 ? '+' : '') + d.liveChange + '%</span>' : ''}</p>` : ''}
+      </div>
+      <div class="text-right">
+        <div class="${verdictCol} px-4 py-1.5 rounded-full mb-1"><span class="font-black text-sm">${d.verdict || '?'}</span></div>
+        ${d.grounded ? '<p class="text-[9px] text-[#636366] font-mono">grounded ✓</p>' : ''}
+      </div>
+    </div>
+
+    <!-- Key Metrics Grid -->
+    <div class="grid grid-cols-2 gap-2 mb-3">
+      <div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2" style="border-color:${confCol}">
+        <p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Confidence</p>
+        <div class="flex items-end gap-2">
+          <p class="text-lg font-headline font-bold text-white tnum">${confPct}%</p>
+          <div class="flex-1 h-1.5 bg-[#2c2c2e] rounded-full mb-1.5"><div class="h-full rounded-full" style="width:${confPct}%;background:${confCol}"></div></div>
+        </div>
+        ${cp.compositeScore !== undefined ? `<p class="text-[9px] text-[#636366] font-mono">FINR:${cp.compositeScore} AI:${d._aiRawConfidence || '?'}</p>` : ''}
+      </div>
+      <div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2" style="border-color:${riskCol}">
+        <p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Risk Level</p>
+        <p class="text-lg font-headline font-bold" style="color:${riskCol}">${d.riskLevel || '?'}</p>
+        ${d.riskReward && d.riskReward !== '—' ? `<p class="text-[9px] text-[#636366] font-mono">R:R ${d.riskReward}:1</p>` : ''}
+      </div>
+      <div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#47e266]">
+        <p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Target</p>
+        <p class="text-lg font-headline font-bold text-[#47e266] tnum">${d.targetPrice ? '₹' + d.targetPrice : '—'}</p>
+        ${upsideVal ? `<p class="text-[9px] text-[#47e266] font-mono">+${upsideVal}% · ${d.timeframe || '?'}</p>` : ''}
+      </div>
+      <div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#ff453a]">
+        <p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Stop Loss</p>
+        <p class="text-lg font-headline font-bold text-[#ffb4aa] tnum">${d.stopLoss ? '₹' + d.stopLoss : '—'}</p>
+        ${downsideVal ? `<p class="text-[9px] text-[#ffb4aa] font-mono">-${downsideVal}%</p>` : ''}
+      </div>
+    </div>
+
+    <!-- FINR Computed Signals Section -->
+    ${cp.signalLabel && cp.signalLabel !== 'N/A' ? `
+    <div class="bg-[#1c1c1e] rounded-xl p-3 mb-3 border border-[#2c2c2e]">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono flex items-center gap-1"><span class="material-symbols-outlined text-xs">analytics</span> FINR Engine</p>
+        <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background:${cp.compositeScore >= 65 ? '#09bf49' : cp.compositeScore >= 40 ? '#ffd60a' : '#ff453a'}20;color:${cp.compositeScore >= 65 ? '#09bf49' : cp.compositeScore >= 40 ? '#ffd60a' : '#ff453a'}">${cp.signalLabel} · ${cp.compositeScore}/100</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center text-[10px] mb-2">
+        <div><p class="text-[#636366]">Fund Score</p><p class="text-white font-bold">${cp.signalScore}/100</p></div>
+        <div><p class="text-[#636366]">Tech Score</p><p class="text-white font-bold">${cp.techScore}/100</p></div>
+        <div><p class="text-[#636366]">Tech Bias</p><p class="font-bold" style="color:${cp.techBias === 'BULLISH' ? '#47e266' : cp.techBias === 'BEARISH' ? '#ff453a' : '#ffd60a'}">${cp.techBias}</p></div>
+      </div>
+      ${cp.rsi !== null ? `
+      <div class="grid grid-cols-4 gap-1 text-[9px] font-mono text-[#d0c6ab]">
+        <div>RSI:${cp.rsi}</div>
+        <div>EMA20:${cp.ema20 ? '₹' + cp.ema20 : '—'}</div>
+        <div>Sup:${cp.support ? '₹' + cp.support : '—'}</div>
+        <div>Res:${cp.resistance ? '₹' + cp.resistance : '—'}</div>
+      </div>` : ''}
+    </div>` : ''}
+
+    <!-- Fundamentals Row -->
+    ${d.pe || d.roe || d.debtToEquity ? `
+    <div class="bg-[#1c1c1e] rounded-xl p-3 mb-3">
+      <p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono mb-2">Fundamentals</p>
+      <div class="grid grid-cols-3 gap-2 text-center text-[10px]">
+        ${d.pe ? `<div><p class="text-[#636366]">P/E</p><p class="text-white font-bold">${d.pe}x ${d.sectorPe ? '<span class=text-[#636366]>vs ' + d.sectorPe + 'x</span>' : ''}</p></div>` : ''}
+        ${d.roe ? `<div><p class="text-[#636366]">ROE</p><p class="text-white font-bold">${d.roe}%</p></div>` : ''}
+        ${d.debtToEquity ? `<div><p class="text-[#636366]">D/E</p><p class="text-white font-bold">${d.debtToEquity}</p></div>` : ''}
+        ${d.dividendYield ? `<div><p class="text-[#636366]">Div Yield</p><p class="text-white font-bold">${d.dividendYield}%</p></div>` : ''}
+        ${d.promoterHolding ? `<div><p class="text-[#636366]">Promoter</p><p class="text-white font-bold">${d.promoterHolding}% ${d.promoterChange === 'increased' ? '<span class=text-[#47e266]>↑</span>' : d.promoterChange === 'decreased' ? '<span class=text-[#ff453a]>↓</span>' : ''}</p></div>` : ''}
+        ${d.revenueGrowth ? `<div><p class="text-[#636366]">Rev Growth</p><p class="text-white font-bold">${d.revenueGrowth}%</p></div>` : ''}
+      </div>
+    </div>` : ''}
+
+    <!-- Positives -->
+    ${posHtml ? `
+    <div class="bg-[#1c1c1e] border-l-4 border-[#47e266] rounded-xl p-4 mb-3 bg-gradient-to-r from-[#47e266]/5 to-transparent">
+      <p class="text-xs font-bold text-[#47e266] mb-2 flex items-center gap-1"><span class="material-symbols-outlined text-sm">check_circle</span> What's Working</p>
+      <div class="flex flex-wrap">${posHtml}</div>
+    </div>` : ''}
+
+    <!-- Red Flags -->
+    ${flagHtml ? `
+    <div class="bg-[#1c1c1e] border-l-4 border-[#ff453a] rounded-xl p-4 mb-3 bg-gradient-to-r from-[#ff453a]/5 to-transparent">
+      <p class="text-xs font-bold text-[#ffb4aa] mb-2 flex items-center gap-1"><span class="material-symbols-outlined text-sm">warning</span> Red Flags</p>
+      <div class="flex flex-wrap">${flagHtml}</div>
+    </div>` : ''}
+
+    <!-- Catalysts -->
+    ${catHtml ? `
+    <div class="bg-[#1c1c1e] border-l-4 border-[#64d2ff] rounded-xl p-4 mb-3 bg-gradient-to-r from-[#0a84ff]/5 to-transparent">
+      <p class="text-xs font-bold text-[#64d2ff] mb-2 flex items-center gap-1"><span class="material-symbols-outlined text-sm">rocket_launch</span> Catalysts</p>
+      <div class="flex flex-wrap">${catHtml}</div>
+    </div>` : ''}
+
+    <!-- Bull vs Bear Case -->
+    ${d.bullCase || d.bearCase ? `
+    <div class="grid grid-cols-2 gap-2 mb-3">
+      ${d.bullCase ? `<div class="bg-[#1c1c1e] rounded-xl p-3 border-t-2 border-[#47e266]"><p class="text-[10px] font-bold text-[#47e266] mb-1">Bull Case</p><p class="text-[10px] text-[#e5e2e1] leading-relaxed">${d.bullCase}</p></div>` : ''}
+      ${d.bearCase ? `<div class="bg-[#1c1c1e] rounded-xl p-3 border-t-2 border-[#ff453a]"><p class="text-[10px] font-bold text-[#ffb4aa] mb-1">Bear Case</p><p class="text-[10px] text-[#e5e2e1] leading-relaxed">${d.bearCase}</p></div>` : ''}
+    </div>` : ''}
+
+    <!-- Recent News -->
+    ${d.recentNews ? `
+    <div class="bg-[#1c1c1e] rounded-xl p-3 mb-3">
+      <p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono mb-1">Latest</p>
+      <p class="text-xs text-[#e5e2e1]">${d.recentNews}</p>
+      ${d.quarterlyTrend ? `<p class="text-[9px] text-[#636366] mt-1">Quarterly trend: <span class="font-bold ${d.quarterlyTrend === 'improving' ? 'text-[#47e266]' : d.quarterlyTrend === 'declining' ? 'text-[#ff453a]' : 'text-[#ffd60a]'}">${d.quarterlyTrend}</span></p>` : ''}
+    </div>` : ''}
+
+    <!-- Reasoning -->
+    ${d.reasoning ? `
+    <details class="bg-[#1c1c1e] rounded-xl mb-3">
+      <summary class="p-3 text-xs font-bold text-[#d0c6ab] cursor-pointer flex items-center gap-1"><span class="material-symbols-outlined text-sm">description</span> Full Analysis</summary>
+      <div class="px-3 pb-3 text-xs text-[#e5e2e1] leading-relaxed">${d.reasoning}</div>
+    </details>` : ''}
+
+    <!-- Alternatives -->
+    ${altHtml ? `
+    <details class="bg-[#1c1c1e] rounded-xl mb-3">
+      <summary class="p-3 text-xs font-bold text-[#d0c6ab] cursor-pointer flex items-center gap-1"><span class="material-symbols-outlined text-sm">swap_horiz</span> Better Alternatives</summary>
+      <div class="px-3 pb-3">${altHtml}</div>
+    </details>` : ''}
+
+    <!-- Tech Signal Details (collapsible) -->
+    ${techDots ? `
+    <details class="bg-[#1c1c1e] rounded-xl mb-3">
+      <summary class="p-3 text-xs font-bold text-[#d0c6ab] cursor-pointer flex items-center gap-1"><span class="material-symbols-outlined text-sm">candlestick_chart</span> Technical Signals</summary>
+      <div class="px-3 pb-3 space-y-1">${techDots}</div>
+    </details>` : ''}
+
+    <!-- Footer -->
+    <div class="flex items-center justify-between text-[9px] text-[#636366] font-mono px-1">
+      <span>${d.model || ''} ${d.grounded ? '· grounded' : ''}</span>
+      <span>${d.cached ? '(cached)' : ''} ${d.stale ? '⚠️ stale' : ''}</span>
+    </div>
+  `;
+}
+
+function renderVerifyHistory(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  fetch('/api/verify-history').then(r => r.json()).then(data => {
+    if (!data.history || !data.history.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <p class="text-[10px] uppercase tracking-wider text-[#636366] font-medium font-mono mb-2">Recent Verifications</p>
+      <div class="flex flex-wrap gap-2">
+        ${data.history.map(h => {
+          const vc = h.verdict === 'BUY' ? 'bg-[#09bf49]/15 text-[#47e266] border-[#09bf49]/30' : h.verdict === 'HOLD' ? 'bg-[#ffd60a]/15 text-[#ffd60a] border-[#ffd60a]/30' : 'bg-[#ff453a]/15 text-[#ffb4aa] border-[#ff453a]/30';
+          return `<button class="border rounded-lg px-2.5 py-1.5 text-[10px] font-bold ${vc} active:scale-95 transition-all" onclick="document.getElementById('verify-sym-inline').value='${h.symbol}';verifyPickInline()">
+            ${h.symbol} <span class="font-normal opacity-70">${h.verdict}</span>
+          </button>`;
+        }).join('')}
+      </div>`;
+  }).catch(() => {});
+}
+
 async function verifyPick() {
-  const sym = document.getElementById('verify-sym').value.toUpperCase();
+  const sym = document.getElementById('verify-sym')?.value?.toUpperCase();
   if (!sym) { toast('Enter a symbol'); return; }
   const el = document.getElementById('verify-result');
-  el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Analysing...</div>';
+  if (!el) return;
+  el.innerHTML = `<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Analysing ${sym}...</div>`;
   try {
     const d = await fetch('/api/verify-stock', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({symbol:sym})}).then(r=>r.json());
-    const verdictCol = d.verdict==='BUY' ? 'bg-[#09bf49] text-[#004615]' : d.verdict==='HOLD' ? 'bg-[#ffd60a] text-[#3b2f00]' : 'bg-[#93000a] text-[#ffdad6]';
-    el.innerHTML = `
-      <div class="bg-[#242426] p-5 rounded-xl flex justify-between items-center mb-3">
-        <div><h3 class="text-xl font-headline font-extrabold text-white">${sym}</h3><p class="text-xs text-[#d0c6ab]">${d.name||sym}</p></div>
-        <div class="${verdictCol} px-4 py-1.5 rounded-full"><span class="font-black text-sm">${d.verdict}</span></div>
-      </div>
-      <div class="grid grid-cols-2 gap-2 mb-3">
-        <div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#ffd60a]"><p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Confidence</p><p class="text-lg font-headline font-bold text-white tnum">${d.confidence}%</p></div>
-        <div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#ffd60a]"><p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Risk</p><p class="text-lg font-headline font-bold text-white">${d.riskLevel}</p></div>
-        ${d.target ? `<div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#47e266]"><p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Target</p><p class="text-lg font-headline font-bold text-white tnum">₹${d.target}</p></div>` : ''}
-        ${d.stopLoss ? `<div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#ffb4aa]"><p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Stop Loss</p><p class="text-lg font-headline font-bold text-white tnum">₹${d.stopLoss}</p></div>` : ''}
-      </div>
-      ${d.positives ? `<div class="bg-[#1c1c1e] border-l-4 border-[#47e266] rounded-xl p-4 mb-3 bg-gradient-to-r from-[#47e266]/5 to-transparent"><p class="text-xs font-bold text-[#47e266] mb-2 flex items-center gap-1"><span class="material-symbols-outlined text-sm">check_circle</span> What's working:</p><p class="text-xs text-[#e5e2e1] leading-relaxed">${d.positives}</p></div>` : ''}
-      ${d.risks ? `<div class="bg-[#1c1c1e] border-l-4 border-[#ffb4aa] rounded-xl p-4 mb-3 bg-gradient-to-r from-[#ffb4aa]/5 to-transparent"><p class="text-xs font-bold text-[#ffb4aa] mb-2 flex items-center gap-1"><span class="material-symbols-outlined text-sm">warning</span> Watch out for:</p><p class="text-xs text-[#e5e2e1] leading-relaxed">${d.risks}</p></div>` : ''}
-    `;
+    renderVerifyResult('verify-result', d);
+  } catch (err) {
+    el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⚠️ Error analysing stock</div>';
+  }
+}
+
+async function verifyPickInline() {
+  const sym = document.getElementById('verify-sym-inline')?.value?.toUpperCase();
+  if (!sym) { toast('Enter a symbol'); return; }
+  const el = document.getElementById('verify-result-inline');
+  if (!el) return;
+  el.innerHTML = `<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Analysing ${sym}...</div>`;
+  try {
+    const d = await fetch('/api/verify-stock', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({symbol:sym})}).then(r=>r.json());
+    renderVerifyResult('verify-result-inline', d);
+    // Update timestamp
+    const tsEl = document.getElementById('verify-ts-inline');
+    if (tsEl) tsEl.textContent = d.cached ? 'cached' : new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'});
+    // Load history
+    renderVerifyHistory('verify-history-inline');
   } catch (err) {
     el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⚠️ Error analysing stock</div>';
   }
@@ -2628,32 +2840,6 @@ async function loadOptionsLabInline(force = false) {
     }
   } catch(e) {
     el.innerHTML = '<div class="text-center py-4 text-[#636366] font-mono text-xs">Error loading options</div>';
-  }
-}
-
-async function verifyPickInline() {
-  const sym = document.getElementById('verify-sym-inline').value.toUpperCase();
-  if (!sym) { toast('Enter a symbol'); return; }
-  const el = document.getElementById('verify-result-inline');
-  el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⏳ Analysing...</div>';
-  try {
-    const d = await fetch('/api/verify-stock', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({symbol:sym})}).then(r=>r.json());
-    const verdictCol = d.verdict==='BUY' ? 'bg-[#09bf49] text-[#004615]' : d.verdict==='HOLD' ? 'bg-[#ffd60a] text-[#3b2f00]' : 'bg-[#93000a] text-[#ffdad6]';
-    el.innerHTML = `
-      <div class="bg-[#242426] p-5 rounded-xl flex justify-between items-center mb-3">
-        <div><h3 class="text-xl font-headline font-extrabold text-white">${sym}</h3><p class="text-xs text-[#d0c6ab]">${d.name||sym}</p></div>
-        <div class="${verdictCol} px-4 py-1.5 rounded-full"><span class="font-black text-sm">${d.verdict}</span></div>
-      </div>
-      <div class="grid grid-cols-2 gap-2 mb-3">
-        <div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#ffd60a]"><p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Confidence</p><p class="text-lg font-headline font-bold text-white tnum">${d.confidence}%</p></div>
-        <div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#ffd60a]"><p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Risk</p><p class="text-lg font-headline font-bold text-white">${d.riskLevel}</p></div>
-        ${d.target ? `<div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#47e266]"><p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Target</p><p class="text-lg font-headline font-bold text-white tnum">₹${d.target}</p></div>` : ''}
-        ${d.stopLoss ? `<div class="bg-[#1c1c1e] p-3 rounded-xl border-l-2 border-[#ffb4aa]"><p class="text-[10px] uppercase tracking-wider text-[#d0c6ab] font-medium font-mono">Stop Loss</p><p class="text-lg font-headline font-bold text-white tnum">₹${d.stopLoss}</p></div>` : ''}
-      </div>
-      ${d.positives ? `<div class="bg-[#1c1c1e] border-l-4 border-[#47e266] rounded-xl p-4 mb-3"><p class="text-xs font-bold text-[#47e266] mb-2 flex items-center gap-1"><span class="material-symbols-outlined text-sm">check_circle</span> What's working:</p><p class="text-xs text-[#e5e2e1] leading-relaxed">${d.positives}</p></div>` : ''}
-      ${d.risks ? `<div class="bg-[#1c1c1e] border-l-4 border-[#ffb4aa] rounded-xl p-4 mb-3"><p class="text-xs font-bold text-[#ffb4aa] mb-2 flex items-center gap-1"><span class="material-symbols-outlined text-sm">warning</span> Watch out for:</p><p class="text-xs text-[#e5e2e1] leading-relaxed">${d.risks}</p></div>` : ''}`;
-  } catch(e) {
-    el.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs">⚠️ Error analysing stock</div>';
   }
 }
 

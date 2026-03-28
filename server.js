@@ -16,7 +16,7 @@ const fs         = require('fs');
 const path       = require('path');
 const cron       = require('node-cron');
 const { getMarketContext }                                       = require('./lib/marketContext');
-const { calcRSI, calcEMA, calcMACD, calcBollinger, calcSupport, calcResistance } = require('./lib/technicals');
+const { calcRSI, calcEMA, calcMACD, calcBollinger, calcSupport, calcResistance, getTechnicalSignal } = require('./lib/technicals');
 
 const app    = express();
 const server = http.createServer(app);
@@ -478,6 +478,17 @@ function getNextMonthlyExpiry() {
   const fb = new Date(now); fb.setUTCDate(fb.getUTCDate() + 30);
   return fb.toISOString().slice(0, 10);
 }
+
+// ── NSE F&O Lot Sizes (official NSE lot sizes for margin/P&L calculations) ──
+const NSE_LOT_SIZES = {
+  'NIFTY': 75, 'BANKNIFTY': 30, 'FINNIFTY': 65, 'MIDCPNIFTY': 50, 'SENSEX': 20,
+  'RELIANCE': 250, 'TCS': 150, 'INFY': 300, 'HDFCBANK': 550, 'ICICIBANK': 700,
+  'SBIN': 750, 'TATAMOTORS': 575, 'TATASTEEL': 550, 'ITC': 1600, 'LT': 150,
+  'HINDUNILVR': 300, 'AXISBANK': 600, 'KOTAKBANK': 400, 'BAJFINANCE': 125,
+  'MARUTI': 100, 'ADANIENT': 250, 'WIPRO': 1500, 'HCLTECH': 350, 'SUNPHARMA': 350,
+  'ONGC': 3850, 'NTPC': 2800, 'POWERGRID': 2700, 'COALINDIA': 2100, 'BHARTIARTL': 475,
+  'ASIANPAINT': 300, 'ULTRACEMCO': 100, 'TITAN': 375, 'BAJAJFINSV': 500
+};
 
 // ── F&O eligible stocks (have lot sizes = have F&O options) ──
 const FNO_STOCKS = Object.keys(NSE_LOT_SIZES).filter(s => !['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'].includes(s));
@@ -1608,68 +1619,284 @@ IMPORTANT: "confidence" MUST be a NUMBER (0-100), "currentPrice"/"targetPrice"/"
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// VERIFY STOCK — Deep AI analysis of a single stock (for checking friend's tips)
+// VERIFY STOCK — Multi-layer verification: computed signals + grounded AI + post-processing
 // ══════════════════════════════════════════════════════════════════════════════
+let verifyCache = {}; // { SYMBOL: { data, lastFetch } }
+const VERIFY_CACHE_MS = 15 * 60 * 1000; // 15 min cache per symbol
+let verifyHistory = []; // Last 10 verified symbols
+
 app.post('/api/verify-stock', async (req, res) => {
-  const { symbol } = req.body;
+  const { symbol, force } = req.body;
   if (!symbol) return res.status(400).json({ error: 'Stock symbol required' });
   if (!appConfig.geminiKey) return res.json({ configured: false, error: 'Gemini API key not configured' });
+
+  const sym = symbol.toUpperCase().trim();
+
+  // ── Cache check ──
+  if (!force && verifyCache[sym] && (Date.now() - verifyCache[sym].lastFetch) < VERIFY_CACHE_MS) {
+    return res.json({ ...verifyCache[sym].data, cached: true });
+  }
+
   try {
-    const sym = symbol.toUpperCase().trim();
-    // Try to get live data
+    // ══════════════════════════════════════════════════════════════════════
+    // LAYER 1: Compute everything locally BEFORE asking AI
+    // ══════════════════════════════════════════════════════════════════════
     const live = liveStocks[sym];
     const sig = signalCache[sym];
     const fund = STOCK_UNIVERSE.find(s => s.symbol === sym);
     const f52 = fundamentals[sym];
+    const prices = priceHistory[sym] || [];
 
-    const liveInfo = live ? `Current Price: ₹${live.price} (${live.changePct>=0?'+':''}${live.changePct}%) Volume: ${live.volume||'?'}` : 'Price data not available — use your knowledge';
-    const sigInfo = sig ? `Signal: ${sig.signal} (${sig.score}/100)` : '';
-    const fundInfo = fund ? `PE:${fund.pe} ROE:${fund.roe} D/E:${fund.de} Div:${fund.div}% Target:₹${fund.target}` : '';
-    const w52Info = f52 ? `52W High:₹${f52.high52} 52W Low:₹${f52.low52}` : '';
+    // Technical analysis from our engine
+    let tech = null;
+    if (prices.length >= 20) {
+      tech = getTechnicalSignal(prices, prices, prices);
+    }
 
-    const nifty = liveIndices['Nifty 50'];
-    const prompt = `You are an expert Indian stock market research analyst. A retail investor's friend has suggested buying ${sym}. Do a COMPLETE, UNBIASED analysis.
+    // Market context — filter events relevant to this stock's sector
+    const mktCtx = getMarketContext();
+    const stockSector = fund?.sector || '';
+    const relevantEvents = mktCtx.filter(e => {
+      if (e.priority === 'HIGH') return true; // Always include high-impact
+      if (!stockSector) return false;
+      const allSectors = [...(e.sectors?.buy || []), ...(e.sectors?.avoid || []), ...(e.sectors?.watch || [])];
+      return allSectors.some(s => stockSector.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(stockSector.toLowerCase()));
+    }).slice(0, 5);
 
-MARKET CONTEXT:
-- Nifty 50: ${nifty?.price||'?'} (${nifty?.changePct>=0?'+':''}${nifty?.changePct||0}%)
-- VIX: ${vixData.value} | FII: ₹${fiiDiiData.fii}Cr | DII: ₹${fiiDiiData.dii}Cr
+    // Option chain sentiment (if stock is F&O)
+    const stockChain = optionChainCache.stocks?.[sym];
+    const niftyChain = optionChainCache.nifty;
+    let optionSentiment = '';
+    if (stockChain) {
+      optionSentiment = `PCR:${stockChain.pcr} MaxPain:₹${stockChain.maxPain} AvgIV:${stockChain.avgIV}%`;
+    }
+    if (niftyChain) {
+      optionSentiment += ` | Nifty PCR:${niftyChain.pcr} MaxPain:${niftyChain.maxPain}`;
+    }
 
-STOCK DATA WE HAVE:
+    // Composite FINR Score: 60% fundamental + 40% technical
+    const fundScore = sig?.score || 0;
+    const techScore = tech?.techScore || 50;
+    const compositeScore = Math.round(fundScore * 0.6 + techScore * 0.4);
+
+    // Global markets context
+    const globalStr = Object.values(globalMarkets).map(g => `${g.name}:${g.price}(${g.changePct >= 0 ? '+' : ''}${g.changePct}%)`).join(', ');
+
+    // ══════════════════════════════════════════════════════════════════════
+    // LAYER 2: Build enriched AI prompt (grounded + data-loaded)
+    // ══════════════════════════════════════════════════════════════════════
+    const nifty = liveIndices['Nifty 50'] || liveIndices['NIFTY50'] || {};
+    const bank = liveIndices['Nifty Bank'] || liveIndices['NIFTYBANK'] || {};
+
+    const liveInfo = live
+      ? `Current Price: ₹${live.price} (${live.changePct >= 0 ? '+' : ''}${live.changePct}%) | Day High: ₹${live.dayHigh || '?'} | Day Low: ₹${live.dayLow || '?'} | Volume: ${live.volume || '?'}`
+      : 'IMPORTANT: We do NOT have live price for this stock. You MUST use Google Search grounding to find the current price. Do NOT guess.';
+
+    const sigInfo = sig
+      ? `FINR Signal: ${sig.signal} (${sig.score}/100) | Reasons: ${(sig.allReasons || []).join('; ')} | Upside to target: ${sig.upside}% | Downside risk: ${sig.downside}%`
+      : '';
+
+    const fundInfo = fund
+      ? `PE:${fund.pe} | Sector PE:${fund.sectorPe || 'N/A'} | ROE:${fund.roe}% | D/E:${fund.de} | Div Yield:${fund.div}% | Analyst Target:₹${fund.target} | Sector:${fund.sector}`
+      : '';
+
+    const w52Info = f52
+      ? `52W High:₹${f52.high52} | 52W Low:₹${f52.low52} | Position: ${f52.high52 && f52.low52 && live ? ((live.price - f52.low52) / (f52.high52 - f52.low52) * 100).toFixed(0) + '% from bottom' : '?'}`
+      : '';
+
+    const techInfo = tech
+      ? `RSI(14):${tech.rsi} | EMA20:₹${tech.ema20} | EMA50:₹${tech.ema50} | EMA200:₹${tech.ema200} | MACD:${tech.macd}(signal:${tech.macdSignal}) | Support:₹${tech.support} | Resistance:₹${tech.resistance} | Bollinger Upper:₹${tech.bollingerUpper} Lower:₹${tech.bollingerLower} | Tech Bias:${tech.techBias} | Tech Score:${tech.techScore}/100 | Computed Best Entry:₹${tech.bestEntry} | Computed SL:₹${tech.stopLoss}`
+      : '';
+
+    const eventStr = relevantEvents.length
+      ? relevantEvents.map(e => `${e.icon} ${e.title} (${e.priority}): ${e.impact}`).join('\n')
+      : 'No major macro events currently affecting this sector';
+
+    const prompt = `You are an expert Indian stock market research analyst with CFA-level expertise. A retail investor's friend has suggested buying ${sym}. Do a COMPLETE, UNBIASED, BRUTALLY HONEST analysis.
+
+CRITICAL INSTRUCTION: Use Google Search to find the LATEST news, quarterly results, promoter holding changes, SEBI actions, corporate announcements, and management commentary for ${sym}. Our computed data below gives you the quantitative foundation — your job is to ADD qualitative context we cannot compute.
+
+═══ MARKET CONTEXT ═══
+Nifty 50: ${nifty?.price || '?'} (${nifty?.changePct >= 0 ? '+' : ''}${nifty?.changePct || 0}%) | Bank Nifty: ${bank?.price || '?'} (${bank?.changePct >= 0 ? '+' : ''}${bank?.changePct || 0}%)
+VIX: ${vixData.value} (${vixData.trend}) | FII: ₹${fiiDiiData.fii}Cr | DII: ₹${fiiDiiData.dii}Cr | USD/INR: ${fiiDiiData.usdInr} | Crude: $${fiiDiiData.crude}
+Global: ${globalStr || 'N/A'}
+
+═══ MACRO EVENTS AFFECTING THIS STOCK ═══
+${eventStr}
+
+═══ STOCK DATA (COMPUTED — TREAT AS GROUND TRUTH) ═══
 ${liveInfo}
 ${sigInfo}
 ${fundInfo}
 ${w52Info}
+${techInfo}
+${optionSentiment ? `F&O Sentiment: ${optionSentiment}` : ''}
+FINR Composite Score: ${compositeScore}/100 (60% fundamental + 40% technical)
 
-REQUIREMENTS — Be BRUTALLY HONEST:
-1. VERDICT: Is this a good buy right now? BUY / HOLD / AVOID — with confidence level
-2. FUNDAMENTALS: PE vs sector, ROE, debt, revenue/profit growth, promoter holding, any red flags
-3. TECHNICALS: Current trend, RSI zone, support/resistance, 52W position, volume pattern
-4. TARGET: Realistic target price and timeframe
-5. RISK ASSESSMENT: What could go wrong? Rate: LOW / MEDIUM / HIGH / VERY HIGH
-6. STOP LOSS: Where to place SL
-7. BULL CASE: Best scenario — why it could work
-8. BEAR CASE: Worst scenario — why it could fail
-9. BETTER ALTERNATIVES: If this stock is mediocre, suggest 2-3 better options in the same sector
+═══ YOUR ANALYSIS REQUIREMENTS ═══
+1. VERDICT: BUY / HOLD / AVOID — with numeric confidence (0-100)
+2. FUNDAMENTALS: PE vs sector avg, ROE quality, debt safety, revenue/profit growth trajectory, promoter holding trend, any red flags from recent filings
+3. TECHNICALS: Validate our RSI/EMA/MACD readings, add any chart patterns you see, confirm or dispute our support/resistance
+4. CATALYSTS: Upcoming earnings, product launches, regulatory changes, sector tailwinds/headwinds
+5. RISK: Rate LOW/MEDIUM/HIGH/VERY_HIGH with specific risk factors
+6. TARGET + TIMEFRAME: Based on both our computed target and your research
+7. STOP LOSS: Must be at a logical technical level (support, Bollinger, etc.)
+8. BULL vs BEAR CASE: 50 words each, specific scenarios
+9. ALTERNATIVES: If mediocre, suggest 2-3 better stocks in same sector with reasons
+10. If our FINR Score (${compositeScore}) conflicts with your verdict, EXPLAIN WHY you disagree
 
 Reply ONLY valid JSON, NO markdown fences:
-{"symbol":"${sym}","name":"Full Name","sector":"sector","verdict":"BUY/HOLD/AVOID","confidence":"VERY_HIGH/HIGH/MODERATE/LOW","riskLevel":"LOW/MEDIUM/HIGH/VERY_HIGH","currentPrice":"₹xxx","targetPrice":"₹xxx","timeframe":"x months","stopLoss":"₹xxx","upside":"xx%","downside":"xx%","pe":"xx","sectorPe":"xx","roe":"xx%","debtToEquity":"x.x","dividendYield":"x%","promoterHolding":"xx%","revenueGrowth":"xx%","profitGrowth":"xx%","week52High":"₹xxx","week52Low":"₹xxx","rsiZone":"Oversold/Neutral/Overbought","trend":"Uptrend/Downtrend/Sideways","support":"₹xxx","resistance":"₹xxx","bullCase":"50-word best case scenario","bearCase":"50-word worst case scenario","reasoning":"100-word detailed honest analysis","redFlags":["flag1","flag2"],"positives":["pos1","pos2"],"alternatives":[{"symbol":"ALT1","reason":"why better"},{"symbol":"ALT2","reason":"why better"}]}`;
+{"symbol":"${sym}","name":"Full Company Name","sector":"sector","verdict":"BUY/HOLD/AVOID","confidence":75,"riskLevel":"LOW/MEDIUM/HIGH/VERY_HIGH","currentPrice":0,"targetPrice":0,"timeframe":"x months","stopLoss":0,"upside":"xx","downside":"xx","pe":0,"sectorPe":0,"roe":"xx","debtToEquity":"x.x","dividendYield":"x","promoterHolding":"xx","promoterChange":"increased/decreased/stable","revenueGrowth":"xx","profitGrowth":"xx","week52High":0,"week52Low":0,"rsiValue":${tech?.rsi || 0},"rsiZone":"Oversold/Neutral/Overbought","trend":"Uptrend/Downtrend/Sideways","emaSignal":"Bullish/Bearish/Neutral","support":0,"resistance":0,"macdSignal":"Bullish/Bearish","bollingerPosition":"Upper/Middle/Lower","bullCase":"specific 50-word best scenario","bearCase":"specific 50-word worst scenario","reasoning":"detailed 100-word honest analysis","catalysts":["catalyst1","catalyst2"],"redFlags":["flag1","flag2"],"positives":["pos1","pos2"],"alternatives":[{"symbol":"ALT1","reason":"why better"},{"symbol":"ALT2","reason":"why better"}],"recentNews":"key recent development from your search","quarterlyTrend":"improving/stable/declining based on last 2-3 quarters"}`;
 
-    const g = await callAI(prompt, { temperature: 0.3, maxOutputTokens: 4000, timeout: 45000 });
+    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.3, maxOutputTokens: 5000, timeout: 60000 });
     const raw = g.text || '{}';
-    log('OK', `Verify Stock analysis for ${sym} (${g.source}/${g.model}), ${raw.length} chars`);
+    log('OK', `Verify Stock analysis for ${sym} (${g.source}/${g.model}, grounded:${g.grounded || false}), ${raw.length} chars`);
 
     let analysis = {};
-    const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
-    try { analysis = JSON.parse(cleaned); } catch(_) {
+    const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    try { analysis = JSON.parse(cleaned); } catch (_) {
       const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
-      if (s >= 0 && e > s) { try { analysis = JSON.parse(cleaned.slice(s, e+1)); } catch(_) {} }
+      if (s >= 0 && e > s) { try { analysis = JSON.parse(cleaned.slice(s, e + 1)); } catch (_) {} }
     }
 
-    res.json({ analysis, configured: true, model: g.model });
-  } catch(e) {
-    log('ERR', `Verify Stock failed for ${symbol}: ${e.message}`);
+    // ══════════════════════════════════════════════════════════════════════
+    // LAYER 3: Post-processing & validation
+    // ══════════════════════════════════════════════════════════════════════
+
+    // Normalize prices (strip ₹ and commas)
+    for (const k of ['currentPrice', 'targetPrice', 'stopLoss', 'support', 'resistance', 'week52High', 'week52Low']) {
+      if (typeof analysis[k] === 'string') analysis[k] = parseFloat(analysis[k].replace(/[₹,\s]/g, '')) || 0;
+    }
+
+    // Normalize percentage fields
+    for (const k of ['upside', 'downside', 'roe', 'debtToEquity', 'dividendYield', 'promoterHolding', 'revenueGrowth', 'profitGrowth']) {
+      if (typeof analysis[k] === 'string') analysis[k] = analysis[k].replace(/[%\s]/g, '');
+    }
+
+    // Normalize confidence to number (0-100)
+    if (typeof analysis.confidence === 'string') {
+      const confMap = { 'VERY_HIGH': 90, 'HIGH': 75, 'MODERATE': 55, 'LOW': 30 };
+      analysis.confidence = confMap[analysis.confidence.toUpperCase()] || parseFloat(analysis.confidence) || 60;
+    }
+    analysis.confidence = Math.max(0, Math.min(100, Math.round(analysis.confidence || 60)));
+
+    // Confidence anchoring: blend AI confidence with computed score
+    // 40% FINR computed + 60% AI assessment
+    const aiConf = analysis.confidence;
+    analysis.confidence = Math.round(compositeScore * 0.4 + aiConf * 0.6);
+    analysis._aiRawConfidence = aiConf;
+    analysis._finrScore = compositeScore;
+
+    // Price drift check: if AI price is >10% off from live, use live
+    if (live?.price && analysis.currentPrice) {
+      const drift = Math.abs(live.price - analysis.currentPrice) / live.price * 100;
+      if (drift > 10) {
+        analysis._priceWarning = `AI price ₹${analysis.currentPrice} vs live ₹${live.price} (${drift.toFixed(0)}% drift — using live)`;
+        analysis.currentPrice = live.price;
+        log('WARN', `Verify ${sym}: price drift ${drift.toFixed(0)}%, using live ₹${live.price}`);
+      }
+    }
+    // If we have live but AI didn't return a price, use live
+    if (live?.price && !analysis.currentPrice) analysis.currentPrice = live.price;
+
+    // Recalculate upside/downside from validated prices
+    const basePrice = analysis.currentPrice || live?.price || 0;
+    if (basePrice > 0 && analysis.targetPrice > 0) {
+      analysis.upside = ((analysis.targetPrice - basePrice) / basePrice * 100).toFixed(1);
+    }
+    if (basePrice > 0 && analysis.stopLoss > 0) {
+      analysis.downside = ((basePrice - analysis.stopLoss) / basePrice * 100).toFixed(1);
+    }
+
+    // Risk-reward ratio
+    const up = parseFloat(analysis.upside) || 0;
+    const dn = parseFloat(analysis.downside) || 0;
+    analysis.riskReward = dn > 0 ? (up / dn).toFixed(1) : '—';
+
+    // Target/SL sanity check
+    if (analysis.verdict === 'BUY' && basePrice > 0) {
+      if (analysis.targetPrice > 0 && analysis.targetPrice <= basePrice) {
+        analysis._targetWarning = 'Target below current price for BUY — AI may have erred';
+      }
+      if (analysis.stopLoss > 0 && analysis.stopLoss >= basePrice) {
+        analysis._slWarning = 'Stop loss above current price for BUY — using computed SL';
+        analysis.stopLoss = tech?.stopLoss || +(basePrice * 0.93).toFixed(2);
+      }
+    }
+
+    // Verdict cross-check against FINR score
+    if (compositeScore >= 75 && analysis.verdict === 'AVOID') {
+      analysis._verdictConflict = `FINR score ${compositeScore}/100 suggests BUY but AI says AVOID`;
+    } else if (compositeScore <= 30 && analysis.verdict === 'BUY') {
+      analysis._verdictConflict = `FINR score ${compositeScore}/100 suggests SELL but AI says BUY`;
+    }
+
+    // Ensure arrays are arrays
+    for (const k of ['redFlags', 'positives', 'catalysts']) {
+      if (typeof analysis[k] === 'string') analysis[k] = [analysis[k]];
+      if (!Array.isArray(analysis[k])) analysis[k] = [];
+    }
+    if (!Array.isArray(analysis.alternatives)) analysis.alternatives = [];
+
+    // Inject our computed technicals for the frontend
+    analysis._computed = {
+      signalScore: fundScore,
+      signalLabel: sig?.signal || 'N/A',
+      techScore: techScore,
+      techBias: tech?.techBias || 'N/A',
+      compositeScore,
+      rsi: tech?.rsi || null,
+      ema20: tech?.ema20 || null,
+      ema50: tech?.ema50 || null,
+      ema200: tech?.ema200 || null,
+      support: tech?.support || null,
+      resistance: tech?.resistance || null,
+      bestEntry: tech?.bestEntry || null,
+      computedSL: tech?.stopLoss || null,
+      macd: tech?.macd || null,
+      bollingerUpper: tech?.bollingerUpper || null,
+      bollingerLower: tech?.bollingerLower || null,
+      signalReasons: sig?.allReasons || [],
+      techSignals: tech?.signals || []
+    };
+
+    // Inject live data
+    if (live) {
+      analysis.livePrice = live.price;
+      analysis.liveChange = live.changePct;
+      analysis.liveVolume = live.volume;
+    }
+
+    // Add metadata
+    analysis.symbol = sym;
+    analysis.grounded = g.grounded || false;
+    analysis.model = g.model;
+    analysis.configured = true;
+    analysis.timestamp = new Date().toISOString();
+
+    // ── Cache & history ──
+    verifyCache[sym] = { data: analysis, lastFetch: Date.now() };
+    // Update history (last 10 unique symbols)
+    verifyHistory = verifyHistory.filter(h => h.symbol !== sym);
+    verifyHistory.unshift({ symbol: sym, name: analysis.name || sym, verdict: analysis.verdict, confidence: analysis.confidence, timestamp: analysis.timestamp });
+    if (verifyHistory.length > 10) verifyHistory.pop();
+
+    // Flatten — return at top level (no { analysis: {} } wrapper)
+    res.json({ ...analysis, cached: false });
+
+  } catch (e) {
+    log('ERR', `Verify Stock failed for ${sym}: ${e.message}`);
+    // Return stale cache on error
+    if (verifyCache[sym]) {
+      return res.json({ ...verifyCache[sym].data, cached: true, stale: true, error: e.message });
+    }
     res.status(500).json({ error: 'AI analysis failed: ' + e.message });
   }
+});
+
+// Verify history endpoint
+app.get('/api/verify-history', (req, res) => {
+  res.json({ history: verifyHistory });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
