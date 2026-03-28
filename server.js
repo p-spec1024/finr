@@ -1359,70 +1359,517 @@ Reply ONLY valid JSON (no markdown fences):
 // ══════════════════════════════════════════════════════════════════════════════
 // LIVE ANALYSIS — Real-time trade monitoring with AI exit suggestions
 // ══════════════════════════════════════════════════════════════════════════════
-let liveAnalysisState = {}; // { sessionId: { trade, lastAnalysis, history } }
+let marketPulseCache = { data: null, lastFetch: 0 };
+const MARKET_PULSE_CACHE_MS = 10 * 60 * 1000; // 10 min cache
 
-app.post('/api/live-analysis', async (req, res) => {
-  const { symbol, strike, optionType, entryPrice, qty, positionType, lotSize, sessionId } = req.body;
-  if (!symbol || !entryPrice) return res.status(400).json({ error: 'Symbol and entry price required' });
-  if (!appConfig.geminiKey && !gcpServiceAccount) return res.json({ error: 'AI not configured', configured: false });
+app.get('/api/market-pulse', async (req, res) => {
+  // ── Market hours gate ──
+  if (!isMarketOpen()) {
+    if (marketPulseCache.data) {
+      return res.json(marketClosedResponse({ ...marketPulseCache.data }, marketPulseCache.lastFetch));
+    }
+    return res.json(marketClosedResponse(null));
+  }
 
-  const sid = sessionId || `LA-${Date.now()}`;
-  const nifty = liveIndices['Nifty 50'] || liveIndices['NIFTY50'] || {};
-  const bank = liveIndices['NIFTYBANK'] || {};
-  const vix = vixData;
-  const fii = fiiDiiData;
-  const stockData = liveStocks[symbol] || {};
-  const signals = signalCache[symbol] || {};
+  // ── Cache check (support ?force=true to bypass) ──
+  if (!req.query.force && marketPulseCache.data && (Date.now() - marketPulseCache.lastFetch) < MARKET_PULSE_CACHE_MS) {
+    return res.json({ ...marketPulseCache.data, cached: true });
+  }
 
-  // Get current LTP for the option/stock
-  const currentPrice = stockData.price || stockData.ltp || 0;
-  const pnlPerUnit = positionType === 'SELL' ? (entryPrice - currentPrice) : (currentPrice - entryPrice);
-  const pnlTotal = pnlPerUnit * (qty || 1) * (lotSize || 1);
-  const pnlPct = entryPrice > 0 ? ((pnlPerUnit / entryPrice) * 100).toFixed(2) : 0;
-
-  const globalStr = Object.values(globalMarkets).map(g => `${g.name}:${g.price}(${g.changePct >= 0 ? '+' : ''}${g.changePct}%)`).join(', ');
-
-  // Build history context
-  const prevAnalysis = liveAnalysisState[sid]?.history?.slice(-3) || [];
-  const historyStr = prevAnalysis.length ? `\nPREVIOUS ANALYSIS HISTORY:\n${prevAnalysis.map(h => `[${h.time}] Action: ${h.action} | Price: ${h.price} | Reason: ${h.reason}`).join('\n')}` : '';
-
-  const prompt = `You are an expert options/equity trader providing LIVE trade monitoring for an Indian market position.
-
-POSITION DETAILS:
-- Instrument: ${symbol} ${strike ? strike + ' ' + (optionType || 'CE') : 'Equity'}
-- Position: ${positionType || 'BUY'} @ ₹${entryPrice}
-- Current Price: ₹${currentPrice || 'unknown'}
-- Qty: ${qty || 1} × ${lotSize || 1} = ${(qty || 1) * (lotSize || 1)} units
-- Current P&L: ₹${pnlTotal.toFixed(2)} (${pnlPct}%)
-
-MARKET CONTEXT:
-- Nifty: ${nifty.price || '?'} (${nifty.changePct >= 0 ? '+' : ''}${nifty.changePct || 0}%)
-- Bank Nifty: ${bank.price || '?'} (${bank.changePct >= 0 ? '+' : ''}${bank.changePct || 0}%)
-- VIX: ${vix.value} (${vix.trend}) | FII: ₹${fii.fii}Cr | USD/INR: ${fii.usdInr}
-- Signal Score: ${signals.score || 'N/A'}/100
-- Global: ${globalStr || 'N/A'}
-${historyStr}
-
-Analyze this position RIGHT NOW. Consider: price action, momentum, support/resistance levels, VIX impact on premiums, time decay (if option), market trend, and risk management.
-
-Reply ONLY valid JSON (no markdown fences):
-{
-  "action": "HOLD/EXIT_NOW/PARTIAL_EXIT/TRAIL_STOPLOSS/ADD_MORE",
-  "urgency": "LOW/MEDIUM/HIGH/CRITICAL",
-  "confidence": 75,
-  "reasoning": "50-word analysis of current position state",
-  "targetPrice": 0,
-  "stopLoss": 0,
-  "trailingStop": "Suggested trailing stop strategy if applicable",
-  "riskReward": "Current risk-reward assessment",
-  "timeDecayImpact": "For options: theta impact assessment",
-  "marketAlignment": "Is the broader market supporting this position?",
-  "exitStrategy": "Specific exit plan with price levels"
-}`;
+  if (!appConfig.geminiKey && !gcpServiceAccount) {
+    return res.json({ error: 'AI not configured', configured: false });
+  }
 
   try {
-    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.2, maxOutputTokens: 1500, timeout: 45000 });
+    const nifty = liveIndices['Nifty 50'] || liveIndices['NIFTY50'] || {};
+    const bank = liveIndices['NIFTYBANK'] || liveIndices['Nifty Bank'] || {};
+    const vix = vixData;
+    const fii = fiiDiiData;
+
+    // ── DATA SOURCE TRACKING ──
+    const dataSources = {};
+    dataSources.fiiDii = !fii.isDefault ? 'NSE API (live)' : 'Unavailable';
+    dataSources.optionChain = (optionChainCache.nifty || optionChainCache.banknifty) ? 'Upstox Option Chain API' : 'Unavailable';
+    dataSources.stocks = Object.keys(liveStocks).length > 0 ? 'Upstox WebSocket (live)' : 'Unavailable';
+    dataSources.signals = Object.keys(signalCache).length > 0 ? `FINR Engine (${Object.keys(signalCache).length} stocks)` : 'Unavailable';
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // 1. FII/DII FLOW ANALYSIS
+    // ═════════════════════════════════════════════════════════════════════════════
+    const fiiDiiAnalysis = {
+      fii: fii.fii || 0,
+      dii: fii.dii || 0,
+      fiiDirection: fii.isDefault ? 'UNAVAILABLE' : (fii.fii > 0 ? 'BUYING' : fii.fii < 0 ? 'SELLING' : 'NEUTRAL'),
+      diiDirection: fii.isDefault ? 'UNAVAILABLE' : (fii.dii > 0 ? 'BUYING' : fii.dii < 0 ? 'SELLING' : 'NEUTRAL'),
+      isDefault: fii.isDefault,
+      date: lastFiiDiiDate || null
+    };
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // 2. OI ANALYSIS (Nifty & Bank Nifty)
+    // ═════════════════════════════════════════════════════════════════════════════
+    const oiAnalysis = {};
+
+    if (optionChainCache.nifty) {
+      const nc = optionChainCache.nifty;
+      const ceStrikes = (nc.strikes || [])
+        .map(s => ({ strike: s.strike, oi: s.ce?.oi || 0 }))
+        .sort((a, b) => b.oi - a.oi)
+        .slice(0, 3);
+      const peStrikes = (nc.strikes || [])
+        .map(s => ({ strike: s.strike, oi: s.pe?.oi || 0 }))
+        .sort((a, b) => b.oi - a.oi)
+        .slice(0, 3);
+      const maxPainDistance = nc.spot > 0 && nc.maxPain > 0 ? (((nc.maxPain - nc.spot) / nc.spot) * 100).toFixed(2) : 0;
+
+      oiAnalysis.nifty = {
+        spot: nc.spot || 0,
+        pcr: nc.pcr || 0,
+        maxPain: nc.maxPain || 0,
+        maxPainDistance: parseFloat(maxPainDistance),
+        totalCallOI: nc.totalCallOI || 0,
+        totalPutOI: nc.totalPutOI || 0,
+        avgIV: nc.avgIV || 0,
+        topCeStrikes: ceStrikes,
+        topPeStrikes: peStrikes,
+        expiryDate: nc.expiry || null
+      };
+    }
+
+    if (optionChainCache.banknifty) {
+      const bc = optionChainCache.banknifty;
+      const ceStrikes = (bc.strikes || [])
+        .map(s => ({ strike: s.strike, oi: s.ce?.oi || 0 }))
+        .sort((a, b) => b.oi - a.oi)
+        .slice(0, 3);
+      const peStrikes = (bc.strikes || [])
+        .map(s => ({ strike: s.strike, oi: s.pe?.oi || 0 }))
+        .sort((a, b) => b.oi - a.oi)
+        .slice(0, 3);
+      const maxPainDistance = bc.spot > 0 && bc.maxPain > 0 ? (((bc.maxPain - bc.spot) / bc.spot) * 100).toFixed(2) : 0;
+
+      oiAnalysis.banknifty = {
+        spot: bc.spot || 0,
+        pcr: bc.pcr || 0,
+        maxPain: bc.maxPain || 0,
+        maxPainDistance: parseFloat(maxPainDistance),
+        totalCallOI: bc.totalCallOI || 0,
+        totalPutOI: bc.totalPutOI || 0,
+        avgIV: bc.avgIV || 0,
+        topCeStrikes: ceStrikes,
+        topPeStrikes: peStrikes,
+        expiryDate: bc.expiry || null
+      };
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // 3. VOLUME ANOMALY SCANNER
+    // ═════════════════════════════════════════════════════════════════════════════
+    const anomalies = { accumulation: [], distribution: [] };
+    for (const stock of STOCK_UNIVERSE) {
+      const live = liveStocks[stock.symbol];
+      if (!live || !live.volume || live.volume <= 0) continue;
+
+      const signal = signalCache[stock.symbol];
+      const changePct = live.changePct || 0;
+
+      // Flag unusual activity: notable price movement (>2%) with volume data
+      if (Math.abs(changePct) > 2) {
+        const item = {
+          symbol: stock.symbol,
+          price: live.price || 0,
+          changePct: parseFloat(changePct.toFixed(2)),
+          volume: live.volume || 0,
+          signal: signal?.signal || 'N/A',
+          score: signal?.score || 0
+        };
+
+        if (changePct > 2) {
+          anomalies.accumulation.push(item);
+        } else if (changePct < -2) {
+          anomalies.distribution.push(item);
+        }
+      }
+    }
+
+    // Sort and limit to top 5 each
+    anomalies.accumulation = anomalies.accumulation
+      .sort((a, b) => b.changePct - a.changePct)
+      .slice(0, 5);
+    anomalies.distribution = anomalies.distribution
+      .sort((a, b) => a.changePct - b.changePct)
+      .slice(0, 5);
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // 4. SECTOR HEATMAP
+    // ═════════════════════════════════════════════════════════════════════════════
+    const sectorMap = {};
+    for (const stock of STOCK_UNIVERSE) {
+      const sector = stock.sector || 'Unknown';
+      const live = liveStocks[stock.symbol];
+      const signal = signalCache[stock.symbol];
+
+      if (!sectorMap[sector]) {
+        sectorMap[sector] = {
+          changePcts: [],
+          scores: [],
+          stocks: [],
+          topStock: { symbol: '', changePct: -Infinity }
+        };
+      }
+
+      if (live?.changePct !== undefined) {
+        sectorMap[sector].changePcts.push(live.changePct);
+      }
+      if (signal?.score) {
+        sectorMap[sector].scores.push(signal.score);
+      }
+      if (live) {
+        sectorMap[sector].stocks.push(stock.symbol);
+        if (live.changePct > sectorMap[sector].topStock.changePct) {
+          sectorMap[sector].topStock = { symbol: stock.symbol, changePct: live.changePct };
+        }
+      }
+    }
+
+    const sectorHeatmap = Object.entries(sectorMap).map(([sector, data]) => ({
+      sector,
+      avgChange: data.changePcts.length ? parseFloat((data.changePcts.reduce((a, b) => a + b, 0) / data.changePcts.length).toFixed(2)) : 0,
+      avgScore: data.scores.length ? Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length) : 50,
+      stockCount: data.stocks.length,
+      topStock: data.topStock.symbol || 'N/A'
+    })).sort((a, b) => b.avgChange - a.avgChange);
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // 5. AI SYNTHESIS
+    // ═════════════════════════════════════════════════════════════════════════════
+    const mktCtx = getMarketContext();
+    let contextStr = '';
+    if (mktCtx.length > 0) {
+      contextStr = '\nACTIVE MACRO EVENTS:';
+      for (const evt of mktCtx.filter(e => e.priority === 'HIGH' || e.priority === 'MEDIUM')) {
+        contextStr += `\n- [${evt.priority}] ${evt.title}: ${evt.impact}`;
+      }
+    }
+
+    const oiStr = oiAnalysis.nifty
+      ? `\nNIFTY OI DATA:\n- PCR: ${oiAnalysis.nifty.pcr.toFixed(2)} | Max Pain: ${oiAnalysis.nifty.maxPain} (${oiAnalysis.nifty.maxPainDistance}% from spot)\n- Top CE OI: ${oiAnalysis.nifty.topCeStrikes.map(s => `${s.strike}(${s.oi})`).join(', ')}\n- Top PE OI: ${oiAnalysis.nifty.topPeStrikes.map(s => `${s.strike}(${s.oi})`).join(', ')}`
+      : '\nOI DATA: Not available';
+
+    const sectorStr = sectorHeatmap.length > 0
+      ? `\nSECTOR LEADERS (by avg change):\n${sectorHeatmap.slice(0, 5).map(s => `- ${s.sector}: ${s.avgChange >= 0 ? '+' : ''}${s.avgChange}% (avg score: ${s.avgScore}/100)`).join('\n')}`
+      : '\nSECTOR DATA: Not available';
+
+    const anomalyStr = (anomalies.accumulation.length > 0 || anomalies.distribution.length > 0)
+      ? `\nVOLUME ANOMALIES:\nAccumulation (price up): ${anomalies.accumulation.map(a => `${a.symbol}(+${a.changePct}%)`).join(', ') || 'None'}\nDistribution (price down): ${anomalies.distribution.map(a => `${a.symbol}(${a.changePct}%)`).join(', ') || 'None'}`
+      : '\nVOLUME ANOMALIES: None detected';
+
+    const prompt = `You are an elite market analyst tracking SMART MONEY (institutional/FII/DII flows, OI positions, sector rotations).
+
+INSTITUTIONAL FLOWS:
+- FII: ₹${fii.fii}Cr (${fiiDiiAnalysis.fiiDirection})
+- DII: ₹${fii.dii}Cr (${fiiDiiAnalysis.diiDirection})
+- USD/INR: ${fii.usdInr} | Crude: $${fii.crude}
+
+INDEX LEVELS:
+- Nifty: ${nifty.price || 'N/A'} (${nifty.changePct >= 0 ? '+' : ''}${nifty.changePct || 0}%)
+- Bank Nifty: ${bank.price || 'N/A'} (${bank.changePct >= 0 ? '+' : ''}${bank.changePct || 0}%)
+- VIX: ${vix.value}${oiStr}${sectorStr}${anomalyStr}${contextStr}
+
+TASK: Synthesize all signals. What is smart money doing? Identify support/resistance from OI. Which sectors attract institutional interest? Give an actionable verdict for traders.
+
+Search for breaking news that explains current flows (FII buying/selling spree, sector rotation stories, macro catalysts).
+
+Reply ONLY valid JSON (no markdown):
+{
+  "smartMoneyVerdict": "ACCUMULATION/DISTRIBUTION/NEUTRAL/MIXED",
+  "verdictConfidence": 75,
+  "summary": "100-word synthesis connecting all signals — explain institutional positioning, key price levels, sector interest",
+  "keyLevels": {"niftySupport": 0, "niftyResistance": 0, "bankNiftySupport": 0, "bankNiftyResistance": 0},
+  "sectorOutlook": [{"sector":"Banking","bias":"BULLISH/BEARISH/NEUTRAL","reason":"short reason"}],
+  "actionableInsight": "50-word specific actionable takeaway for traders — entry/exit signals, risk levels",
+  "risksToWatch": ["risk1", "risk2", "risk3"],
+  "breakingContext": "Any breaking news found via search explaining current flows or sector rotation"
+}`;
+
+    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.2, maxOutputTokens: 4000, timeout: 60000 });
     const raw = g.text || '{}';
+
+    let aiResult = {};
+    const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    try { aiResult = JSON.parse(cleaned); } catch (_) {
+      const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
+      if (s >= 0 && e > s) { try { aiResult = JSON.parse(cleaned.slice(s, e + 1)); } catch (_) {} }
+    }
+
+    // ── POST-PROCESSING VALIDATION ──
+    const VALID_VERDICTS = ['ACCUMULATION', 'DISTRIBUTION', 'NEUTRAL', 'MIXED'];
+    const VALID_BIASES = ['BULLISH', 'BEARISH', 'NEUTRAL'];
+
+    if (!VALID_VERDICTS.includes(aiResult.smartMoneyVerdict)) {
+      aiResult.smartMoneyVerdict = 'NEUTRAL';
+    }
+
+    aiResult.verdictConfidence = Math.max(40, Math.min(90, Number(aiResult.verdictConfidence) || 60));
+
+    if (!Array.isArray(aiResult.sectorOutlook)) {
+      aiResult.sectorOutlook = [];
+    } else {
+      aiResult.sectorOutlook = aiResult.sectorOutlook.map(s => ({
+        sector: s.sector || 'Unknown',
+        bias: VALID_BIASES.includes(s.bias) ? s.bias : 'NEUTRAL',
+        reason: s.reason || ''
+      }));
+    }
+
+    if (!Array.isArray(aiResult.risksToWatch)) {
+      aiResult.risksToWatch = [];
+    }
+
+    if (!aiResult.keyLevels || typeof aiResult.keyLevels !== 'object') {
+      aiResult.keyLevels = { niftySupport: 0, niftyResistance: 0, bankNiftySupport: 0, bankNiftyResistance: 0 };
+    } else {
+      aiResult.keyLevels.niftySupport = Number(aiResult.keyLevels.niftySupport) || 0;
+      aiResult.keyLevels.niftyResistance = Number(aiResult.keyLevels.niftyResistance) || 0;
+      aiResult.keyLevels.bankNiftySupport = Number(aiResult.keyLevels.bankNiftySupport) || 0;
+      aiResult.keyLevels.bankNiftyResistance = Number(aiResult.keyLevels.bankNiftyResistance) || 0;
+    }
+
+    // ── BUILD FINAL RESPONSE ──
+    const response = {
+      smartMoneyVerdict: aiResult.smartMoneyVerdict,
+      verdictConfidence: aiResult.verdictConfidence,
+      summary: aiResult.summary || '',
+      keyLevels: aiResult.keyLevels,
+      sectorOutlook: aiResult.sectorOutlook,
+      actionableInsight: aiResult.actionableInsight || '',
+      risksToWatch: aiResult.risksToWatch,
+      breakingContext: aiResult.breakingContext || '',
+      // ── Computed data (not from AI) ──
+      _fiiDii: fiiDiiAnalysis,
+      _oiAnalysis: oiAnalysis,
+      _volumeAnomalies: anomalies,
+      _sectorHeatmap: sectorHeatmap,
+      _vix: {
+        value: vix.value,
+        change: vix.change,
+        trend: vix.trend,
+        isDefault: vix.isDefault
+      },
+      _globalMarkets: globalMarkets,
+      _dataSources: dataSources,
+      _generatedAt: new Date().toISOString(),
+      grounded: g.grounded || false,
+      model: g.model,
+      cached: false
+    };
+
+    marketPulseCache = { data: response, lastFetch: Date.now() };
+    log('OK', `Market Pulse generated (${g.source}/${g.model}, grounded:${g.grounded || false})`);
+    res.json(response);
+
+  } catch (e) {
+    log('ERR', 'Market Pulse failed: ' + e.message);
+    // Stale fallback
+    if (marketPulseCache.data) {
+      return res.json({ ...marketPulseCache.data, cached: true, stale: true, error: e.message });
+    }
+    res.status(500).json({ error: 'Market Pulse analysis failed: ' + e.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TRADE PLAN — Complete execution plan with position sizing, entries, exits, risk-reward
+// ══════════════════════════════════════════════════════════════════════════════
+let tradePlanCache = {}; // { SYMBOL: { data, lastFetch } }
+const TRADE_PLAN_CACHE_MS = 15 * 60 * 1000; // 15 min cache per symbol
+
+app.post('/api/trade-plan', async (req, res) => {
+  const { symbol, force } = req.body;
+  if (!symbol) return res.status(400).json({ error: 'Stock symbol required' });
+  if (!appConfig.geminiKey && !gcpServiceAccount) return res.json({ configured: false, error: 'AI not configured' });
+
+  const sym = symbol.toUpperCase().trim();
+
+  // ── Market hours gate ──
+  if (!isMarketOpen()) {
+    if (tradePlanCache[sym]) {
+      return res.json(marketClosedResponse(tradePlanCache[sym].data, tradePlanCache[sym].lastFetch));
+    }
+    return res.json(marketClosedResponse(null));
+  }
+
+  // ── Cache check ──
+  if (!force && tradePlanCache[sym] && (Date.now() - tradePlanCache[sym].lastFetch) < TRADE_PLAN_CACHE_MS) {
+    return res.json({ ...tradePlanCache[sym].data, cached: true });
+  }
+
+  try {
+    // ══════════════════════════════════════════════════════════════════════
+    // LAYER 1: Compute everything locally BEFORE asking AI
+    // ══════════════════════════════════════════════════════════════════════
+    const live = liveStocks[sym];
+    const sig = signalCache[sym];
+    const fund = STOCK_UNIVERSE.find(s => s.symbol === sym);
+    const f52 = fundamentals[sym];
+    const prices = priceHistory[sym] || [];
+
+    if (!live) {
+      return res.status(404).json({ error: `No live price data for ${sym}. Stock may not be in watchlist.` });
+    }
+
+    const livePrice = live.price;
+    const dayHigh = live.dayHigh || livePrice * 1.02;
+    const dayLow = live.dayLow || livePrice * 0.98;
+
+    // Technical analysis from our engine
+    let tech = null;
+    if (prices.length >= 20) {
+      tech = getTechnicalSignal(prices, prices, prices);
+    }
+
+    // Compute ATR (Average True Range) approximation
+    let atr = Math.abs(dayHigh - dayLow);
+    if (prices.length >= 14) {
+      const recentRanges = [];
+      for (let i = Math.max(0, prices.length - 14); i < prices.length; i++) {
+        recentRanges.push(Math.abs(prices[i] - (prices[i-1] || prices[i])));
+      }
+      atr = recentRanges.reduce((a, b) => a + b, 0) / recentRanges.length;
+    }
+
+    // Check if F&O eligible
+    const lotSize = NSE_LOT_SIZES[sym] || null;
+    const isFnO = !!lotSize;
+
+    // Get option chain data if available
+    const stockChain = optionChainCache.stocks?.[sym];
+    let optionContext = '';
+    if (stockChain) {
+      optionContext = `PCR:${stockChain.pcr?.toFixed(2)||'?'} | MaxPain:₹${stockChain.maxPain||'?'} | AvgIV:${stockChain.avgIV?.toFixed(1)||'?'}%`;
+    }
+
+    // Market context
+    const mktCtx = getMarketContext();
+    const stockSector = fund?.sector || '';
+    const relevantEvents = mktCtx.filter(e => {
+      if (e.priority === 'HIGH') return true;
+      if (!stockSector) return false;
+      const allSectors = [...(e.sectors?.buy || []), ...(e.sectors?.avoid || []), ...(e.sectors?.watch || [])];
+      return allSectors.some(s => stockSector.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(stockSector.toLowerCase()));
+    }).slice(0, 3);
+
+    // Position sizing calculation (server-side)
+    const capital = 500000; // ₹5L default
+    const riskPct = 0.02; // 2% risk per trade
+    const computedSL = tech?.stopLoss || (livePrice * 0.95);
+    const riskPerShare = Math.abs(livePrice - computedSL);
+    const maxShares = riskPerShare > 0 ? Math.floor((capital * riskPct) / riskPerShare) : 100;
+    const suggestedQty = maxShares;
+    const suggestedLots = isFnO ? Math.max(1, Math.floor(maxShares / lotSize)) : null;
+    const investmentRequired = isFnO && suggestedLots ? (suggestedLots * lotSize * livePrice) : (maxShares * livePrice);
+    const maxLossPerShare = riskPerShare;
+
+    // Global markets context
+    const globalStr = Object.values(globalMarkets).map(g => `${g.name}:${g.price}(${g.changePct >= 0 ? '+' : ''}${g.changePct}%)`).join(', ');
+
+    // ══════════════════════════════════════════════════════════════════════
+    // LAYER 2: Build enriched AI prompt
+    // ══════════════════════════════════════════════════════════════════════
+    const nifty = liveIndices['Nifty 50'] || liveIndices['NIFTY50'] || {};
+    const bank = liveIndices['Nifty Bank'] || liveIndices['NIFTYBANK'] || {};
+
+    const techInfo = tech
+      ? `RSI(14):${tech.rsi} | EMA20:₹${tech.ema20} | EMA50:₹${tech.ema50} | Support:₹${tech.support} | Resistance:₹${tech.resistance} | Tech Bias:${tech.techBias} | Tech Score:${tech.techScore}/100`
+      : '';
+
+    const eventStr = relevantEvents.length
+      ? relevantEvents.map(e => `${e.icon} ${e.title} (${e.priority}): ${e.impact}`).join('\n')
+      : 'No major macro events affecting this sector';
+
+    const fnOContext = isFnO
+      ? `\nF&O ELIGIBLE: Yes | Lot Size: ${lotSize} | ${optionContext}`
+      : '\nF&O ELIGIBLE: No (cash equity only)';
+
+    const prompt = `You are a professional NSE/BSE equity trading strategist. Generate a COMPLETE, ACTIONABLE, PROFESSIONAL TRADE EXECUTION PLAN for ${sym}.
+
+═══ MARKET CONTEXT ═══
+Nifty 50: ${nifty?.price || '?'} (${nifty?.changePct >= 0 ? '+' : ''}${nifty?.changePct || 0}%) | Bank Nifty: ${bank?.price || '?'} (${bank?.changePct >= 0 ? '+' : ''}${bank?.changePct || 0}%)
+VIX: ${vixData.value} (${vixData.trend}) | FII: ₹${fiiDiiData.fii}Cr | DII: ₹${fiiDiiData.dii}Cr | USD/INR: ${fiiDiiData.usdInr} | Crude: $${fiiDiiData.crude}
+Global: ${globalStr || 'N/A'}
+
+═══ STOCK DATA ═══
+Symbol: ${sym} | Current Price: ₹${livePrice} (${live.changePct >= 0 ? '+' : ''}${live.changePct}%) | 52W High: ₹${f52?.high52 || '?'} | 52W Low: ₹${f52?.low52 || '?'}
+Day High: ₹${dayHigh} | Day Low: ₹${dayLow} | Volume: ${live.volume || '?'} | Sector: ${stockSector || 'Unknown'}
+Signal: ${sig?.signal || 'N/A'} (${sig?.score || 0}/100) | Upside: ${sig?.upside || '?'}% | Downside: ${sig?.downside || '?'}%
+ATR (20-period): ₹${atr.toFixed(2)}
+${techInfo}${fnOContext}
+
+═══ MACRO EVENTS ═══
+${eventStr}
+
+═══ YOUR ANALYSIS REQUIREMENTS ═══
+You MUST provide:
+1. ENTRY STRATEGY: Three entry levels (aggressive, ideal, conservative) with reasoning
+2. EXIT STRATEGY: Tiered partial exits (Target 1: 40%, Target 2: 30%, Target 3: exit remainder) with prices and logic
+3. STOP LOSS: Single stop loss level with technical/ATR reasoning
+4. RISK ASSESSMENT: Risk level (LOW/MEDIUM/HIGH/VERY_HIGH), risk-reward ratio, max loss per lot, what-if scenarios
+5. TIMING: Urgency (IMMEDIATE/WAIT_FOR_DIP/WAIT_FOR_BREAKOUT), best timeframe (Intraday/Swing/Positional), holding period
+6. OPTIONS ALTERNATIVE: If F&O eligible, suggest a specific options strategy with strike, premium, and reasoning
+7. CONFIDENCE: 40-90 range (0-100 scale)
+8. SUMMARY: Clear 50-word actionable summary a retail trader can immediately follow
+
+Respond ONLY valid JSON (no markdown, no explanation outside JSON):
+{
+  "entryStrategy": {
+    "idealEntry": 0,
+    "aggressiveEntry": 0,
+    "conservativeEntry": 0,
+    "reasoning": "Why these three levels based on technicals/ATR"
+  },
+  "exitStrategy": {
+    "target1": {"price": 0, "action": "Book 40% profits", "reasoning": "specific reason"},
+    "target2": {"price": 0, "action": "Book 30% profits", "reasoning": "specific reason"},
+    "target3": {"price": 0, "action": "Exit remaining", "reasoning": "specific reason"},
+    "trailingStop": "Trailing stop strategy description (e.g., Trail by 1.5x ATR after each level)"
+  },
+  "stopLoss": {
+    "level": 0,
+    "type": "TECHNICAL|ATR_BASED|PERCENTAGE",
+    "reasoning": "Specific technical reason for this SL level"
+  },
+  "riskAssessment": {
+    "riskLevel": "LOW|MEDIUM|HIGH|VERY_HIGH",
+    "riskReward": "x.x",
+    "maxLossPerLot": 0,
+    "maxGainPerLot": 0,
+    "scenarioAnalysis": {
+      "bullCase": {"niftyMove": "+2%", "stockImpact": "description of how stock moves", "positionPnl": "estimated outcome"},
+      "bearCase": {"niftyMove": "-3%", "stockImpact": "description", "positionPnl": "estimated outcome"},
+      "worstCase": {"scenario": "description of worst case", "positionPnl": "max loss"}
+    }
+  },
+  "optionsAlternative": {
+    "available": ${isFnO},
+    "suggestion": "If available: specific options strategy (e.g., bull call spread, long call, covered call)",
+    "strike": 0,
+    "type": "CE|PE",
+    "premium": 0,
+    "reasoning": "Why this options play is better or worse than cash"
+  },
+  "timing": {
+    "urgency": "IMMEDIATE|WAIT_FOR_DIP|WAIT_FOR_BREAKOUT",
+    "bestTimeframe": "Intraday|Swing|Positional",
+    "holdingPeriod": "x days/weeks"
+  },
+  "confidence": 75,
+  "tradeSummary": "50-word clear summary: entry trigger, ideal position size, target, stop loss, and expected holding period"
+}`;
+
+    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.3, maxOutputTokens: 4000, timeout: 60000 });
+    const raw = g.text || '{}';
+    log('OK', `Trade Plan analysis for ${sym} (${g.source}/${g.model}, grounded:${g.grounded || false}), ${raw.length} chars`);
+
     let analysis = {};
     const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
     try { analysis = JSON.parse(cleaned); } catch (_) {
@@ -1430,42 +1877,206 @@ Reply ONLY valid JSON (no markdown fences):
       if (s >= 0 && e > s) { try { analysis = JSON.parse(cleaned.slice(s, e + 1)); } catch (_) {} }
     }
 
-    analysis.sessionId = sid;
-    analysis.currentPrice = currentPrice;
-    analysis.pnl = pnlTotal;
-    analysis.pnlPct = +pnlPct;
-    analysis.timestamp = new Date().toISOString();
+    // ══════════════════════════════════════════════════════════════════════
+    // LAYER 3: Post-processing & validation
+    // ══════════════════════════════════════════════════════════════════════
+
+    // Normalize price fields (strip ₹ and commas)
+    const priceFields = ['idealEntry', 'aggressiveEntry', 'conservativeEntry', 'level', 'maxLossPerLot', 'maxGainPerLot', 'strike', 'premium'];
+    const nestedPriceFields = [
+      ['entryStrategy', ['idealEntry', 'aggressiveEntry', 'conservativeEntry']],
+      ['exitStrategy.target1', ['price']],
+      ['exitStrategy.target2', ['price']],
+      ['exitStrategy.target3', ['price']],
+      ['stopLoss', ['level']],
+      ['riskAssessment', ['maxLossPerLot', 'maxGainPerLot']],
+      ['optionsAlternative', ['strike', 'premium']]
+    ];
+
+    // Helper to safely set nested values
+    function setNestedValue(obj, path, value) {
+      const keys = path.split('.');
+      let current = obj;
+      for (let i = 0; i < keys.length - 1; i++) {
+        if (!current[keys[i]]) current[keys[i]] = {};
+        current = current[keys[i]];
+      }
+      current[keys[keys.length - 1]] = value;
+    }
+
+    function getNestedValue(obj, path) {
+      return path.split('.').reduce((v, k) => v?.[k], obj);
+    }
+
+    // Normalize prices
+    const normalizePrice = (val) => {
+      if (typeof val === 'string') return parseFloat(val.replace(/[₹,\s]/g, '')) || 0;
+      return Number(val) || 0;
+    };
+
+    // Normalize entry strategy prices
+    if (analysis.entryStrategy) {
+      analysis.entryStrategy.idealEntry = normalizePrice(analysis.entryStrategy.idealEntry);
+      analysis.entryStrategy.aggressiveEntry = normalizePrice(analysis.entryStrategy.aggressiveEntry);
+      analysis.entryStrategy.conservativeEntry = normalizePrice(analysis.entryStrategy.conservativeEntry);
+    }
+
+    // Normalize exit strategy prices
+    if (analysis.exitStrategy) {
+      if (analysis.exitStrategy.target1) analysis.exitStrategy.target1.price = normalizePrice(analysis.exitStrategy.target1.price);
+      if (analysis.exitStrategy.target2) analysis.exitStrategy.target2.price = normalizePrice(analysis.exitStrategy.target2.price);
+      if (analysis.exitStrategy.target3) analysis.exitStrategy.target3.price = normalizePrice(analysis.exitStrategy.target3.price);
+    }
+
+    // Normalize stop loss
+    if (analysis.stopLoss) {
+      analysis.stopLoss.level = normalizePrice(analysis.stopLoss.level);
+    }
+
+    // Normalize risk/reward prices
+    if (analysis.riskAssessment) {
+      analysis.riskAssessment.maxLossPerLot = normalizePrice(analysis.riskAssessment.maxLossPerLot);
+      analysis.riskAssessment.maxGainPerLot = normalizePrice(analysis.riskAssessment.maxGainPerLot);
+      if (typeof analysis.riskAssessment.riskReward === 'string') {
+        analysis.riskAssessment.riskReward = parseFloat(analysis.riskAssessment.riskReward.replace(/x/gi, '')) || 1;
+      }
+      analysis.riskAssessment.riskReward = Math.max(0.1, Number(analysis.riskAssessment.riskReward) || 1);
+    }
+
+    // Normalize options alternative
+    if (analysis.optionsAlternative) {
+      analysis.optionsAlternative.strike = normalizePrice(analysis.optionsAlternative.strike);
+      analysis.optionsAlternative.premium = normalizePrice(analysis.optionsAlternative.premium);
+    }
+
+    // Validate enums
+    const VALID_RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH'];
+    const VALID_SL_TYPES = ['TECHNICAL', 'ATR_BASED', 'PERCENTAGE'];
+    const VALID_URGENCIES = ['IMMEDIATE', 'WAIT_FOR_DIP', 'WAIT_FOR_BREAKOUT'];
+    const VALID_TIMEFRAMES = ['Intraday', 'Swing', 'Positional'];
+    const VALID_OPTION_TYPES = ['CE', 'PE'];
+
+    if (analysis.riskAssessment && !VALID_RISK_LEVELS.includes(analysis.riskAssessment.riskLevel)) {
+      analysis.riskAssessment.riskLevel = 'MEDIUM';
+    }
+    if (analysis.stopLoss && !VALID_SL_TYPES.includes(analysis.stopLoss.type)) {
+      analysis.stopLoss.type = 'TECHNICAL';
+    }
+    if (analysis.timing && !VALID_URGENCIES.includes(analysis.timing.urgency)) {
+      analysis.timing.urgency = 'IMMEDIATE';
+    }
+    if (analysis.timing && !VALID_TIMEFRAMES.includes(analysis.timing.bestTimeframe)) {
+      analysis.timing.bestTimeframe = 'Swing';
+    }
+    if (analysis.optionsAlternative && !VALID_OPTION_TYPES.includes(analysis.optionsAlternative.type)) {
+      analysis.optionsAlternative.type = 'CE';
+    }
+
+    // Clamp confidence to 40-90
+    analysis.confidence = Math.max(40, Math.min(90, Number(analysis.confidence) || 60));
+
+    // Ensure arrays/objects exist
+    if (!analysis.entryStrategy) analysis.entryStrategy = { idealEntry: livePrice, aggressiveEntry: livePrice * 0.98, conservativeEntry: livePrice * 1.02, reasoning: 'Current price levels' };
+    if (!analysis.exitStrategy) analysis.exitStrategy = { target1: { price: livePrice * 1.05, action: 'Book 40%', reasoning: 'Quick profit' }, target2: { price: livePrice * 1.10, action: 'Book 30%', reasoning: 'Continue' }, target3: { price: livePrice * 1.15, action: 'Exit', reasoning: 'Close position' }, trailingStop: '1.5x ATR trailing' };
+    if (!analysis.stopLoss) analysis.stopLoss = { level: computedSL, type: 'TECHNICAL', reasoning: 'Technical support level' };
+    if (!analysis.riskAssessment) analysis.riskAssessment = { riskLevel: 'MEDIUM', riskReward: 1.5, maxLossPerLot: 0, maxGainPerLot: 0, scenarioAnalysis: {} };
+    if (!analysis.timing) analysis.timing = { urgency: 'IMMEDIATE', bestTimeframe: 'Swing', holdingPeriod: '5-10 days' };
+    if (!analysis.optionsAlternative) analysis.optionsAlternative = { available: isFnO, suggestion: 'Not analyzed', strike: 0, type: 'CE', premium: 0, reasoning: 'No options alternative' };
+
+    // Compute max loss/gain per lot if not provided
+    const entry = analysis.entryStrategy?.idealEntry || livePrice;
+    const target = analysis.exitStrategy?.target1?.price || (livePrice * 1.05);
+    const sl = analysis.stopLoss?.level || computedSL;
+
+    if (isFnO && lotSize) {
+      if (!analysis.riskAssessment.maxLossPerLot || analysis.riskAssessment.maxLossPerLot === 0) {
+        analysis.riskAssessment.maxLossPerLot = Math.abs(entry - sl) * lotSize;
+      }
+      if (!analysis.riskAssessment.maxGainPerLot || analysis.riskAssessment.maxGainPerLot === 0) {
+        analysis.riskAssessment.maxGainPerLot = Math.abs(target - entry) * lotSize;
+      }
+    } else {
+      if (!analysis.riskAssessment.maxLossPerLot || analysis.riskAssessment.maxLossPerLot === 0) {
+        analysis.riskAssessment.maxLossPerLot = Math.abs(entry - sl);
+      }
+      if (!analysis.riskAssessment.maxGainPerLot || analysis.riskAssessment.maxGainPerLot === 0) {
+        analysis.riskAssessment.maxGainPerLot = Math.abs(target - entry);
+      }
+    }
+
+    // Inject computed technicals & positioning
+    analysis._computed = {
+      livePrice,
+      dayHigh,
+      dayLow,
+      atr: parseFloat(atr.toFixed(2)),
+      signalScore: sig?.score || 0,
+      signalLabel: sig?.signal || 'N/A',
+      techScore: tech?.techScore || null,
+      techBias: tech?.techBias || 'N/A',
+      rsi: tech?.rsi || null,
+      ema20: tech?.ema20 || null,
+      ema50: tech?.ema50 || null,
+      ema200: tech?.ema200 || null,
+      support: tech?.support || null,
+      resistance: tech?.resistance || null,
+      macd: tech?.macd || null,
+      bollingerUpper: tech?.bollingerUpper || null,
+      bollingerLower: tech?.bollingerLower || null,
+      techSignals: tech?.signals || [],
+      signalReasons: sig?.allReasons || []
+    };
+
+    analysis._positionSizing = {
+      capital,
+      riskPerTrade: capital * riskPct,
+      riskPerShare: parseFloat(riskPerShare.toFixed(2)),
+      suggestedQty,
+      lotSize: isFnO ? lotSize : null,
+      suggestedLots: isFnO ? suggestedLots : null,
+      investmentRequired: Math.round(investmentRequired),
+      maxLossOnPosition: Math.round(maxLossPerShare * (isFnO ? suggestedLots * lotSize : suggestedQty))
+    };
+
+    analysis._optionChain = null;
+    if (stockChain) {
+      analysis._optionChain = {
+        pcr: stockChain.pcr || 0,
+        maxPain: stockChain.maxPain || 0,
+        avgIV: stockChain.avgIV || 0
+      };
+    }
+
+    // Data source transparency
+    analysis._dataSources = {
+      price: 'LIVE (Upstox)',
+      technicals: tech ? 'COMPUTED (from ' + prices.length + ' live price readings)' : 'UNAVAILABLE (insufficient price history)',
+      atr: 'COMPUTED (from day high/low + recent price history)',
+      optionChain: stockChain ? 'LIVE (Upstox option chain)' : 'UNAVAILABLE',
+      marketContext: 'LIVE (dynamic events engine)',
+      aiGrounding: g.grounded ? 'GROUNDED (Google Search)' : 'UNGROUNDED (AI knowledge only)'
+    };
+
+    // Metadata
+    analysis.symbol = sym;
+    analysis.isFnO = isFnO;
     analysis.grounded = g.grounded || false;
     analysis.model = g.model;
+    analysis.configured = true;
+    analysis.timestamp = new Date().toISOString();
 
-    // Store in state for history tracking
-    if (!liveAnalysisState[sid]) liveAnalysisState[sid] = { trade: req.body, history: [] };
-    liveAnalysisState[sid].lastAnalysis = analysis;
-    liveAnalysisState[sid].history.push({
-      time: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }),
-      action: analysis.action,
-      price: currentPrice,
-      reason: (analysis.reasoning || '').substring(0, 80)
-    });
-    if (liveAnalysisState[sid].history.length > 20) liveAnalysisState[sid].history.shift();
+    // ── Cache & return ──
+    tradePlanCache[sym] = { data: analysis, lastFetch: Date.now() };
+    res.json({ ...analysis, cached: false });
 
-    log('OK', `Live analysis for ${symbol}: ${analysis.action} (${g.model}, grounded:${g.grounded || false})`);
-    res.json(analysis);
   } catch (e) {
-    log('ERR', 'Live analysis failed: ' + e.message);
-    res.status(500).json({ error: 'Live analysis failed: ' + e.message });
+    log('ERR', `Trade Plan failed for ${sym}: ${e.message}`);
+    // Return stale cache on error
+    if (tradePlanCache[sym]) {
+      return res.json({ ...tradePlanCache[sym].data, cached: true, stale: true, error: e.message });
+    }
+    res.status(500).json({ error: 'Trade Plan generation failed: ' + e.message });
   }
-});
-
-app.get('/api/live-analysis/:sessionId', (req, res) => {
-  const state = liveAnalysisState[req.params.sessionId];
-  if (!state) return res.json({ error: 'Session not found' });
-  res.json(state);
-});
-
-app.delete('/api/live-analysis/:sessionId', (req, res) => {
-  delete liveAnalysisState[req.params.sessionId];
-  res.json({ ok: true });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
