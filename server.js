@@ -3999,12 +3999,40 @@ Return ONLY the JSON array, no markdown or explanation.`;
 });
 
 // ── Live Market News via Gemini ─────────────────────────────────────────────
-let newsCache = { items: [], lastFetch: 0 };
+let newsCache = { items: [], lastFetch: 0, dateIST: '' };
+let warNewsCache = { items: [], lastFetch: 0, dateIST: '' };
 const NEWS_CACHE_MS = 10 * 60 * 1000; // Cache 10 minutes
+const WAR_NEWS_CACHE_MS = 15 * 60 * 1000; // Cache 15 minutes
+
+function parseNewsItems(raw) {
+  let items = [];
+  const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+  try { items = JSON.parse(cleaned); } catch(_) {}
+  if (!items.length) {
+    const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
+    if (s >= 0 && e > s) { try { items = JSON.parse(cleaned.slice(s, e+1)); } catch(_) {} }
+  }
+  if (!items.length) {
+    const m = cleaned.match(/\{[^{}]*"title"\s*:\s*"[^"]+"[^{}]*\}/g);
+    if (m) { for (const x of m) { try { items.push(JSON.parse(x)); } catch(_) {} } }
+  }
+  return items;
+}
+
+function getNewsTodayStr() {
+  const ist = getIST();
+  const day = ist.getUTCDate(), mon = ist.toLocaleString('en-IN', { month:'long', timeZone:'Asia/Kolkata' }), yr = ist.getUTCFullYear();
+  const weekday = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][ist.getUTCDay()];
+  return { full: `${weekday}, ${day} ${mon} ${yr}`, short: ist.toISOString().slice(0,10), dayMon: `${day} ${mon.slice(0,3)} ${yr}` };
+}
 
 app.get('/api/news', async (req, res) => {
+  const force = req.query.force === 'true';
+  const todayDate = getISTDateStr();
+  // Invalidate cache on date roll
+  if (newsCache.dateIST && newsCache.dateIST !== todayDate) { newsCache = { items: [], lastFetch: 0, dateIST: '' }; }
   // Return cache if fresh
-  if (newsCache.items.length && (Date.now() - newsCache.lastFetch) < NEWS_CACHE_MS) {
+  if (!force && newsCache.items.length && (Date.now() - newsCache.lastFetch) < NEWS_CACHE_MS) {
     return res.json({ news: newsCache.items, cached: true, generated: new Date(newsCache.lastFetch).toISOString() });
   }
   if (!appConfig.geminiKey) return res.json({ news: [], configured: false, error: 'Gemini API key not configured' });
@@ -4014,9 +4042,16 @@ app.get('/api/news', async (req, res) => {
     const topG = Object.values(liveStocks).filter(s=>s.price).sort((a,b)=>b.changePct-a.changePct).slice(0,5).map(s=>`${s.symbol}(${s.changePct>=0?'+':''}${s.changePct.toFixed(1)}%)`).join(',');
     const topL = Object.values(liveStocks).filter(s=>s.price).sort((a,b)=>a.changePct-b.changePct).slice(0,5).map(s=>`${s.symbol}(${s.changePct.toFixed(1)}%)`).join(',');
 
-    const todayIST = getIST();
-    const todayStr = todayIST.toISOString().slice(0, 10);
-    const prompt = `You are a senior Indian stock market analyst. TODAY'S DATE IS ${todayStr}. Generate exactly 8 of the most important NEWS events happening RIGHT NOW (today/this week) that can impact the Indian stock market (NSE/BSE). These should be REAL current events, not generic advice. All dates in your response MUST be from ${todayStr.slice(0,7)} (current month) or very recent.
+    const td = getNewsTodayStr();
+    const prompt = `You are a senior Indian stock market analyst with access to real-time news via Google Search.
+
+CRITICAL DATE RULES:
+- TODAY IS: ${td.full} (${td.short})
+- Every "date" field in your response MUST be "${td.dayMon}" (today) unless the event literally happened yesterday
+- DO NOT use old dates. Search for the LATEST news from the last 24 hours
+- If you find news from yesterday or earlier, update the headline to reflect TODAY's status/development
+
+Generate exactly 8 of the most important market-moving NEWS events as of RIGHT NOW that impact Indian stock markets (NSE/BSE).
 
 CURRENT MARKET: Nifty=${nifty?.price||'?'}(${nifty?.changePct>=0?'+':''}${nifty?.changePct||0}%) VIX=${vix} FII=₹${fiiDiiData.fii}Cr DII=₹${fiiDiiData.dii}Cr
 TOP GAINERS: ${topG}
@@ -4026,45 +4061,89 @@ MANDATORY COVERAGE — always include if active:
 - Active wars, military conflicts, sanctions (Russia-Ukraine, Middle East, etc.) — they impact crude oil, shipping, commodity prices, defense stocks, and EM risk sentiment
 - Trade wars, tariffs, and economic sanctions — direct impact on IT, Pharma, export-heavy sectors
 - Central bank decisions (Fed, RBI, ECB) and rate actions
-These geopolitical events MUST be included even if they seem remote — they affect crude, gold, DXY, FII flows, and Indian market sentiment.
+These MUST be included — they affect crude, gold, DXY, FII flows, and Indian market sentiment.
 
-For each news item, provide:
-1. A specific, factual headline (not vague)
+For each news item provide:
+1. A specific, factual headline reflecting TODAY's latest development
 2. Priority: HIGH (market-moving), MEDIUM (sector impact), LOW (watch)
-3. Market impact analysis: how it affects Indian stocks specifically
+3. Market impact: how it affects Indian stocks specifically (30 words)
 4. Affected sectors (buy/avoid)
 5. Sentiment: BULLISH, BEARISH, or NEUTRAL
 6. Source type: RBI, GOVT, GLOBAL, CORPORATE, ECONOMIC, GEOPOLITICAL, WAR_CONFLICT
-7. Scope: NATIONAL (India-specific: RBI, SEBI, Indian corporate earnings, budget, elections, monsoon, policy) or INTERNATIONAL (US Fed, global markets, crude oil, China, geopolitical, wars, foreign trade)
+7. Scope: NATIONAL or INTERNATIONAL
 
-Include a balanced mix — at least 3 NATIONAL and 3 INTERNATIONAL news items. At least 1 item MUST cover active geopolitical conflicts or wars if any are ongoing.
+Include a balanced mix — at least 3 NATIONAL and 3 INTERNATIONAL items. At least 1 MUST cover active geopolitical conflicts or wars.
 
-Reply ONLY valid JSON array, NO markdown fences:
-[{"title":"Specific headline here","date":"27 Mar 2026","priority":"HIGH/MEDIUM/LOW","impact":"How this affects Indian market in 30 words","sentiment":"BULLISH/BEARISH/NEUTRAL","source":"RBI/GOVT/GLOBAL/CORPORATE/ECONOMIC/GEOPOLITICAL/WAR_CONFLICT","scope":"NATIONAL/INTERNATIONAL","icon":"relevant emoji","sectors":{"buy":["sector1"],"avoid":["sector2"]},"detail":"50-word deeper analysis with specific stocks/indices affected and expected price action"}]
+Reply ONLY valid JSON array:
+[{"title":"Headline","date":"${td.dayMon}","priority":"HIGH","impact":"30-word impact","sentiment":"BEARISH","source":"WAR_CONFLICT","scope":"INTERNATIONAL","icon":"emoji","sectors":{"buy":["sector"],"avoid":["sector"]},"detail":"50-word analysis"}]`;
 
-Be specific, factual, and relevant to current Indian market conditions. Include both Indian domestic events AND global events that impact India.`;
-
-    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.5, maxOutputTokens: 4000, timeout: 45000 });
+    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.4, maxOutputTokens: 4000, timeout: 45000 });
     const raw = g.text || '[]';
     log('OK', `AI news generated (${g.source}/${g.model}, grounded:${g.grounded || false}), ${raw.length} chars`);
 
-    let items = [];
-    const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
-    try { items = JSON.parse(cleaned); } catch(_) {}
-    if (!items.length) {
-      const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
-      if (s >= 0 && e > s) { try { items = JSON.parse(cleaned.slice(s, e+1)); } catch(_) {} }
-    }
-    if (!items.length) {
-      const m = cleaned.match(/\{[^{}]*"title"\s*:\s*"[^"]+"[^{}]*\}/g);
-      if (m) { for (const x of m) { try { items.push(JSON.parse(x)); } catch(_) {} } }
-    }
-
-    newsCache = { items, lastFetch: Date.now() };
+    const items = parseNewsItems(raw);
+    newsCache = { items, lastFetch: Date.now(), dateIST: todayDate };
     res.json({ news: items, cached: false, generated: new Date().toISOString() });
   } catch(e) {
     log('ERR', 'Gemini news failed: ' + e.message);
+    if (newsCache.items.length) return res.json({ news: newsCache.items, cached: true, stale: true, generated: new Date(newsCache.lastFetch).toISOString() });
     res.status(500).json({ error: 'News fetch failed: ' + e.message });
+  }
+});
+
+// ── War & Geopolitical News — Dedicated endpoint ───────────────────────────
+app.get('/api/war-news', async (req, res) => {
+  const force = req.query.force === 'true';
+  const todayDate = getISTDateStr();
+  if (warNewsCache.dateIST && warNewsCache.dateIST !== todayDate) { warNewsCache = { items: [], lastFetch: 0, dateIST: '' }; }
+  if (!force && warNewsCache.items.length && (Date.now() - warNewsCache.lastFetch) < WAR_NEWS_CACHE_MS) {
+    return res.json({ news: warNewsCache.items, cached: true, generated: new Date(warNewsCache.lastFetch).toISOString() });
+  }
+  if (!appConfig.geminiKey) return res.json({ news: [], configured: false, error: 'Gemini API key not configured' });
+  try {
+    const td = getNewsTodayStr();
+    const globalStr = Object.values(globalMarkets).map(g =>
+      `${g.name}: ${g.price} (${g.changePct >= 0 ? '+' : ''}${g.changePct}%)`
+    ).join(', ');
+
+    const prompt = `You are a geopolitical and defense analyst specializing in how wars, conflicts, and sanctions affect the Indian stock market.
+
+CRITICAL: TODAY IS ${td.full} (${td.short}). Every "date" field MUST be "${td.dayMon}" unless the event literally happened yesterday. Search for the ABSOLUTE LATEST developments from the last 24 hours.
+
+Generate exactly 10 news items about ACTIVE wars, military conflicts, geopolitical tensions, trade wars, and sanctions that affect global/Indian markets. Cover ALL of these if active:
+- Russia-Ukraine war: latest battlefield developments, energy/gas impacts, sanctions updates
+- Middle East tensions: Israel-Palestine, Iran, Houthi/Red Sea shipping, Strait of Hormuz
+- US-China tensions: trade war, Taiwan, tech sanctions, tariffs
+- India-specific: border tensions, defense deals, diplomatic moves
+- Trade wars: US reciprocal tariffs, EU tariffs, WTO disputes
+- Sanctions: Russia, Iran, North Korea — impact on oil, shipping, commodities
+- Cyber warfare, space militarization if market-relevant
+- Any NEW emerging conflicts or escalations
+
+GLOBAL MARKETS NOW: ${globalStr || 'Use Google Search for latest'}
+Crude: ${globalMarkets.CRUDE?.price || 'search'} | Gold: ${globalMarkets.GOLD?.price || 'search'} | USD/INR: ${globalMarkets.USDINR?.price || 'search'}
+
+For each item:
+- Priority: HIGH (directly moves crude/gold/INR/indices), MEDIUM (sector-level impact), LOW (background risk — STILL INCLUDE IT)
+- Show impact on Indian market specifically (crude imports, defense stocks, IT/pharma exports, FII flows, shipping costs)
+- INCLUDE items even with LOW impact — traders need awareness of all active conflicts
+
+Reply ONLY valid JSON array:
+[{"title":"Specific headline","date":"${td.dayMon}","priority":"HIGH/MEDIUM/LOW","impact":"How this affects Indian markets in 30 words","sentiment":"BULLISH/BEARISH/NEUTRAL","source":"WAR_CONFLICT","scope":"INTERNATIONAL","icon":"emoji","sectors":{"buy":["Defense","Gold"],"avoid":["Aviation","Shipping"]},"detail":"50-word analysis with specific Indian stocks/indices affected"}]`;
+
+    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.4, maxOutputTokens: 6000, timeout: 60000 });
+    const raw = g.text || '[]';
+    log('OK', `War news generated (${g.source}/${g.model}, grounded:${g.grounded || false}), ${raw.length} chars`);
+
+    let items = parseNewsItems(raw);
+    // Tag all as WAR_CONFLICT source if AI missed it
+    items = items.map(n => ({ ...n, source: n.source || 'WAR_CONFLICT', scope: n.scope || 'INTERNATIONAL' }));
+    warNewsCache = { items, lastFetch: Date.now(), dateIST: todayDate };
+    res.json({ news: items, cached: false, generated: new Date().toISOString() });
+  } catch(e) {
+    log('ERR', 'War news failed: ' + e.message);
+    if (warNewsCache.items.length) return res.json({ news: warNewsCache.items, cached: true, stale: true, generated: new Date(warNewsCache.lastFetch).toISOString() });
+    res.status(500).json({ error: 'War news fetch failed: ' + e.message });
   }
 });
 

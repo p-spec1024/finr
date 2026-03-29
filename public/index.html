@@ -738,10 +738,10 @@ tailwind.config = {
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">newspaper</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Live Market News</h3>
                 </div>
-                <div class="flex items-center gap-2">
-                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="right:0"><div class="tip-title">Live Market News</div><div class="tip-desc">AI-curated news affecting Indian markets. 8 items covering national, international &amp; geopolitical/war events — FII flows, policy changes, global macro, conflicts, and sector moves. Refreshes every 10 min.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Grounded web search</div></span>
+                <div class="flex items-center gap-1.5">
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="right:0"><div class="tip-title">Live Market News</div><div class="tip-desc">AI-curated news affecting Indian markets — national, international &amp; war/geopolitical events. FII flows, policy changes, global macro, conflicts, sector moves. Wars tab shows dedicated conflict coverage. Refreshes every 10 min via Google Search.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Grounded web search</div></span>
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="news-ts"></span>
-                  <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="event.stopPropagation();fetchNews()" title="Refresh News">
+                  <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="event.stopPropagation();if(newsFilterMode==='wars'){fetchWarNews(true)}else{fetchNews(true)}" title="Refresh News">
                     <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
                   </button>
                   <span class="material-symbols-outlined dash-card-chevron text-[#d0c6ab]" style="font-size:18px">expand_more</span>
@@ -757,7 +757,7 @@ tailwind.config = {
                   <button class="news-filter-btn px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all flex-shrink-0" data-filter="international" onclick="filterNews('international',this)">International</button>
                   <button class="news-filter-btn px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all flex-shrink-0" data-filter="wars" onclick="filterNews('wars',this)" style="border:1px solid rgba(255,69,58,0.3)">Wars</button>
                 </div>
-                <div id="news-list" class="space-y-3 max-h-[200px] overflow-y-auto px-4 pb-4"></div>
+                <div id="news-list" class="space-y-3 max-h-[300px] overflow-y-auto px-4 pb-4"></div>
                 <div id="news-loading" class="text-center py-5 text-[#636366] text-sm">Loading news...</div>
               </div>
             </section>
@@ -1788,7 +1788,8 @@ function refreshAll() {
   if (btn) { btn.style.transform='rotate(360deg)'; setTimeout(()=>btn.style.transform='',600); }
   toast('Refreshing all data...');
   fetchStatus();
-  fetchNews();
+  fetchNews(true);
+  warNewsFetched = false; // Force re-fetch war news on next Wars tab click
   loadEventCalendar();
   renderHeroIdx();
   renderGauge();
@@ -2273,23 +2274,43 @@ function renderBreadth() {
 // ══════════════════════════════════════════════════════════
 // NEWS
 // ══════════════════════════════════════════════════════════
-async function fetchNews() {
+let WAR_NEWS_ITEMS = [];
+let warNewsFetched = false;
+
+async function fetchNews(force) {
   try {
-    const d = await fetch('/api/news').then(r=>r.json());
+    const url = force ? '/api/news?force=true' : '/api/news';
+    const d = await fetch(url).then(r=>r.json());
     if (d.news && d.news.length) {
-      // Stamp each item with the fetch time so we can show real timestamps
       const genTime = d.generated || new Date().toISOString();
       NEWS_ITEMS = d.news.map(n => ({ ...n, fetchedAt: n.fetchedAt || genTime }));
       const tsEl = document.getElementById('news-ts');
       if (tsEl) {
         const t = new Date(genTime);
-        tsEl.textContent = `${d.news.length} items · ${t.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true})}`;
+        tsEl.textContent = t.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:true});
       }
     }
   } catch(e) { console.error('fetchNews error:', e); }
   renderNews();
-  filterNews(newsFilterMode); // reapply current filter
+  filterNews(newsFilterMode);
   updateNewsPeek();
+}
+
+async function fetchWarNews(force) {
+  const list = document.getElementById('news-list');
+  const loading = document.getElementById('news-loading');
+  if (loading) { loading.style.display = 'block'; loading.textContent = 'Fetching war & geopolitical news...'; }
+  try {
+    const url = force ? '/api/war-news?force=true' : '/api/war-news';
+    const d = await fetch(url).then(r=>r.json());
+    if (d.news && d.news.length) {
+      const genTime = d.generated || new Date().toISOString();
+      WAR_NEWS_ITEMS = d.news.map(n => ({ ...n, fetchedAt: n.fetchedAt || genTime, source: n.source || 'WAR_CONFLICT' }));
+      warNewsFetched = true;
+    }
+  } catch(e) { console.error('fetchWarNews error:', e); }
+  if (loading) loading.style.display = 'none';
+  renderWarNews();
 }
 
 function renderNews() {
@@ -2324,8 +2345,37 @@ function renderNews() {
   }).join('');
 }
 
-function openNewsModal(i) {
-  const n = NEWS_ITEMS[i];
+function renderWarNews() {
+  const list = document.getElementById('news-list');
+  const loading = document.getElementById('news-loading');
+  if (!list) return;
+  if (!WAR_NEWS_ITEMS.length) { list.innerHTML = '<div class="text-center py-4 text-[#636366] text-[10px] font-mono">No war/conflict news available</div>'; return; }
+  if (loading) loading.style.display = 'none';
+  list.innerHTML = WAR_NEWS_ITEMS.map((n, i) => {
+    const priClass = (n.priority||'low').toLowerCase() === 'high' ? 'bg-[#ffb4ab]/20 text-[#ffb4ab]' :
+                     (n.priority||'low').toLowerCase() === 'medium' ? 'bg-[#ffd60a]/20 text-[#ffd60a]' :
+                     'bg-[#47e266]/12 text-[#47e266]';
+    const sentLower = (n.sentiment||'').toLowerCase();
+    const sentColor = (sentLower.includes('bullish') || sentLower.includes('positive')) ? 'text-[#47e266]' :
+                      (sentLower.includes('bearish') || sentLower.includes('negative')) ? 'text-[#ffb4ab]' : 'text-[#d0c6ab]';
+    const timeStr = n.date || 'Just now';
+    return `<div class="news-item flex gap-3 cursor-pointer hover:bg-[#353534]/30 rounded-lg p-2 -mx-2 transition-colors border-l-2 border-[#ff453a]" data-scope="international" data-source="WAR_CONFLICT" onclick="openNewsModal(${i}, true)">
+      <div class="flex-shrink-0 w-10 h-10 bg-[#ff453a]/15 rounded flex items-center justify-center text-lg">${n.icon||'⚔️'}</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-[8px] ${priClass} px-1.5 py-0.5 rounded font-black uppercase">${(n.priority||'Low').toUpperCase()}</span>
+          <span class="text-[8px] ${sentColor} font-bold uppercase tracking-tighter">${n.sentiment||'Neutral'}</span>
+          <span class="text-[8px] text-[#ff453a]/60 font-mono ml-auto">WAR</span>
+        </div>
+        <p class="text-[11px] font-bold leading-tight text-[#e5e2e1] line-clamp-2">${n.title}</p>
+        <span class="text-[9px] text-[#d0c6ab] mt-1 block font-mono">${timeStr}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openNewsModal(i, isWar) {
+  const n = isWar ? WAR_NEWS_ITEMS[i] : NEWS_ITEMS[i];
   if (!n) return;
   const priClass = (n.priority||'low').toLowerCase() === 'high' ? 'bg-[#93000a]/20 text-[#ffb4ab] border-[#ffb4ab]/20' : 'bg-[#ffd60a]/20 text-[#ffd60a] border-[#ffd60a]/20';
   const sentModalLower = (n.sentiment||'').toLowerCase();
@@ -4649,14 +4699,20 @@ function filterNews(mode, btn) {
     document.querySelectorAll('.news-filter-btn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
   }
+  // Wars tab: fetch dedicated war news from /api/war-news
+  if (mode === 'wars') {
+    if (!warNewsFetched) {
+      fetchWarNews();
+    } else {
+      renderWarNews();
+    }
+    return;
+  }
+  // Other tabs: re-render regular news then filter by scope
+  renderNews();
   document.querySelectorAll('.news-item').forEach(el => {
     const scope = (el.dataset.scope || 'national').toLowerCase();
-    const source = (el.dataset.source || '').toUpperCase();
-    if (mode === 'wars') {
-      el.style.display = (source === 'WAR_CONFLICT' || source === 'GEOPOLITICAL') ? '' : 'none';
-    } else {
-      el.style.display = (mode === 'all' || scope === mode) ? '' : 'none';
-    }
+    el.style.display = (mode === 'all' || scope === mode) ? '' : 'none';
   });
 }
 
