@@ -1446,6 +1446,18 @@ tailwind.config = {
           </div>
         </section>
 
+        <!-- Settings Sub-tabs -->
+        <nav class="flex gap-2 mb-4" id="settings-nav">
+          <button class="settings-pill flex items-center gap-2 px-4 py-2.5 rounded-lg text-[#ffd60a] bg-[#353534] font-bold font-headline uppercase tracking-[0.05em] text-[0.6875rem] whitespace-nowrap border-b-2 border-[#ffd60a]" id="nav-settings-config" onclick="switchSettingsTab('config')">
+            <span class="material-symbols-outlined text-sm">settings</span> Configuration
+          </button>
+          <button class="settings-pill flex items-center gap-2 px-4 py-2.5 rounded-lg text-[#d0c6ab] font-headline uppercase tracking-[0.05em] text-[0.6875rem] whitespace-nowrap hover:text-white transition-all" id="nav-settings-accuracy" onclick="switchSettingsTab('accuracy')">
+            <span class="material-symbols-outlined text-sm">speed</span> AI Accuracy
+          </button>
+        </nav>
+
+        <!-- Settings Config Content -->
+        <div class="stab-content on" id="stab-settings-config">
         <!-- 3-Column Grid -->
         <div class="cc-grid grid grid-cols-1 md:grid-cols-3 gap-4">
 
@@ -1684,6 +1696,131 @@ tailwind.config = {
           </section>
 
         </div>
+        </div><!-- end stab-settings-config -->
+
+        <!-- AI Accuracy Dashboard Content -->
+        <div class="stab-content" id="stab-settings-accuracy">
+
+          <!-- Overall Score Gauge -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5 md:col-span-1">
+              <div class="px-4 py-4 flex flex-col items-center">
+                <p class="text-[10px] font-mono font-bold tracking-[0.2em] uppercase text-[#d0c6ab] mb-3">Overall Accuracy</p>
+                <div class="relative w-36 h-36 mb-3">
+                  <canvas id="acc-gauge" width="144" height="144"></canvas>
+                  <div class="absolute inset-0 flex flex-col items-center justify-center">
+                    <span id="acc-gauge-pct" class="text-3xl font-extrabold font-mono text-[#e5e2e1]">—</span>
+                    <span class="text-[10px] text-[#636366] font-mono uppercase">Score</span>
+                  </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3 w-full">
+                  <div class="text-center">
+                    <p class="text-[10px] text-[#d0c6ab] uppercase tracking-tight">Total</p>
+                    <p id="acc-total" class="text-base font-bold text-[#e5e2e1] font-mono">—</p>
+                  </div>
+                  <div class="text-center">
+                    <p class="text-[10px] text-[#d0c6ab] uppercase tracking-tight">Verified</p>
+                    <p id="acc-verified" class="text-base font-bold text-[#47e266] font-mono">—</p>
+                  </div>
+                  <div class="text-center">
+                    <p class="text-[10px] text-[#d0c6ab] uppercase tracking-tight">Pending</p>
+                    <p id="acc-pending" class="text-base font-bold text-[#ffd60a] font-mono">—</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Per-Feature Breakdown -->
+            <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5">
+              <div class="px-4 py-4">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="material-symbols-outlined text-[#ffd60a] text-base">nights_stay</span>
+                  <p class="text-[13px] font-extrabold text-[#e5e2e1]">Next Session</p>
+                  <span id="acc-ns-trend" class="material-symbols-outlined text-sm ml-auto"></span>
+                  <span id="acc-ns-avg" class="text-sm font-bold font-mono text-[#e5e2e1]">—</span>
+                </div>
+                <p id="acc-ns-samples" class="text-[10px] text-[#636366] mb-3 font-mono"></p>
+                <div class="space-y-2" id="acc-ns-bars">
+                  <div class="flex items-center gap-2"><span class="text-[10px] text-[#d0c6ab] w-20 shrink-0">Outlook</span><div class="flex-1 h-2 bg-[#242426] rounded-full overflow-hidden"><div id="bar-outlook" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-outlook" class="text-[10px] font-mono text-[#e5e2e1] w-10 text-right">—</span></div>
+                  <div class="flex items-center gap-2"><span class="text-[10px] text-[#d0c6ab] w-20 shrink-0">Opening</span><div class="flex-1 h-2 bg-[#242426] rounded-full overflow-hidden"><div id="bar-opening" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-opening" class="text-[10px] font-mono text-[#e5e2e1] w-10 text-right">—</span></div>
+                  <div class="flex items-center gap-2"><span class="text-[10px] text-[#d0c6ab] w-20 shrink-0">Nifty Range</span><div class="flex-1 h-2 bg-[#242426] rounded-full overflow-hidden"><div id="bar-niftyRange" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-niftyRange" class="text-[10px] font-mono text-[#e5e2e1] w-10 text-right">—</span></div>
+                  <div class="flex items-center gap-2"><span class="text-[10px] text-[#d0c6ab] w-20 shrink-0">BNF Range</span><div class="flex-1 h-2 bg-[#242426] rounded-full overflow-hidden"><div id="bar-bankNiftyRange" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-bankNiftyRange" class="text-[10px] font-mono text-[#e5e2e1] w-10 text-right">—</span></div>
+                  <div class="flex items-center gap-2"><span class="text-[10px] text-[#d0c6ab] w-20 shrink-0">Risk</span><div class="flex-1 h-2 bg-[#242426] rounded-full overflow-hidden"><div id="bar-risk" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-risk" class="text-[10px] font-mono text-[#e5e2e1] w-10 text-right">—</span></div>
+                  <div class="flex items-center gap-2"><span class="text-[10px] text-[#d0c6ab] w-20 shrink-0">Calibration</span><div class="flex-1 h-2 bg-[#242426] rounded-full overflow-hidden"><div id="bar-calibration" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-calibration" class="text-[10px] font-mono text-[#e5e2e1] w-10 text-right">—</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5">
+              <div class="px-4 py-4">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="material-symbols-outlined text-[#ffd60a] text-base">wb_sunny</span>
+                  <p class="text-[13px] font-extrabold text-[#e5e2e1]">Today's Behavior</p>
+                  <span id="acc-tb-trend" class="material-symbols-outlined text-sm ml-auto"></span>
+                  <span id="acc-tb-avg" class="text-sm font-bold font-mono text-[#e5e2e1]">—</span>
+                </div>
+                <p id="acc-tb-samples" class="text-[10px] text-[#636366] mb-3 font-mono"></p>
+                <div class="space-y-2" id="acc-tb-bars">
+                  <div class="flex items-center gap-2"><span class="text-[10px] text-[#d0c6ab] w-20 shrink-0">Behavior</span><div class="flex-1 h-2 bg-[#242426] rounded-full overflow-hidden"><div id="bar-behavior" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-behavior" class="text-[10px] font-mono text-[#e5e2e1] w-10 text-right">—</span></div>
+                  <div class="flex items-center gap-2"><span class="text-[10px] text-[#d0c6ab] w-20 shrink-0">S/R Levels</span><div class="flex-1 h-2 bg-[#242426] rounded-full overflow-hidden"><div id="bar-levels" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-levels" class="text-[10px] font-mono text-[#e5e2e1] w-10 text-right">—</span></div>
+                </div>
+                <div class="mt-4 pt-3 border-t border-white/5">
+                  <div class="flex justify-between">
+                    <div class="text-center flex-1"><p class="text-[10px] text-[#d0c6ab] uppercase">Best</p><p id="acc-best" class="text-base font-bold text-[#47e266] font-mono">—</p></div>
+                    <div class="text-center flex-1"><p class="text-[10px] text-[#d0c6ab] uppercase">Worst</p><p id="acc-worst" class="text-base font-bold text-[#ff453a] font-mono">—</p></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Weekly Trend Chart -->
+          <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5 mb-4">
+            <div class="px-4 py-3 flex items-center justify-between border-b border-white/5">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#ffd60a] text-base">show_chart</span>
+                <p class="text-[13px] font-extrabold text-[#e5e2e1]">Weekly Trend</p>
+              </div>
+              <span class="text-[10px] text-[#636366] font-mono">Last 12 weeks</span>
+            </div>
+            <div class="px-4 py-3">
+              <canvas id="acc-trend-chart" width="800" height="200" class="w-full" style="max-height:200px"></canvas>
+            </div>
+          </div>
+
+          <!-- Recent Predictions Table -->
+          <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5 mb-4">
+            <div class="px-4 py-3 flex items-center justify-between border-b border-white/5">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#ffd60a] text-base">fact_check</span>
+                <p class="text-[13px] font-extrabold text-[#e5e2e1]">Recent Verified</p>
+              </div>
+              <button class="px-2.5 py-1 rounded-lg bg-[#353534] text-[#d0c6ab] text-[10px] font-bold active:scale-95" onclick="fetchAccuracyDashboard()">
+                <span class="material-symbols-outlined text-xs align-middle">refresh</span> Refresh
+              </button>
+            </div>
+            <div class="overflow-x-auto">
+              <div id="acc-recent-table" class="px-4 py-3 space-y-2">
+                <p class="text-[11px] text-[#636366] text-center py-4">Loading predictions...</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pending Predictions -->
+          <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5 mb-4">
+            <div class="px-4 py-3 flex items-center justify-between border-b border-white/5">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#ffd60a] text-base">pending_actions</span>
+                <p class="text-[13px] font-extrabold text-[#e5e2e1]">Pending Verification</p>
+              </div>
+              <span id="acc-pending-badge" class="px-2 py-0.5 rounded-full bg-[#ffd60a]/20 text-[#ffd60a] text-[10px] font-bold font-mono">0</span>
+            </div>
+            <div id="acc-pending-list" class="px-4 py-3 space-y-2">
+              <p class="text-[11px] text-[#636366] text-center py-4">No pending predictions</p>
+            </div>
+          </div>
+
+        </div><!-- end stab-settings-accuracy -->
 
         <!-- Footer -->
         <footer class="pt-3 text-center opacity-40">
@@ -1745,7 +1882,7 @@ let S={}, SIG={}, IDX={}, VIX={value:0,trend:'stable'}, FIIDII={fii:0,dii:0,usdI
 let PF=[], NT=[], OPTS=[], TRADES=[];
 let srt='score', sasc=false, flt='all';
 let pp={}, ei=-1, pb='';
-let curTab='home', curInsTab='picks', curPnlTab='dashboard';
+let curTab='home', curInsTab='picks', curPnlTab='dashboard', curSettingsTab='config';
 let NEWS_ITEMS = [];
 let eventFilter = 'all';
 
@@ -5861,6 +5998,342 @@ async function initApp() {
 
 let appInited = false;
 window.addEventListener('DOMContentLoaded', () => { initPin(); });
+
+// ══════════════════════════════════════════════════════════
+// SETTINGS SUB-TAB SWITCHER
+// ══════════════════════════════════════════════════════════
+function switchSettingsTab(tab) {
+  document.querySelectorAll('#pg-more .stab-content').forEach(s => s.classList.remove('on'));
+  const panel = document.getElementById('stab-settings-' + tab);
+  if (panel) panel.classList.add('on');
+  document.querySelectorAll('.settings-pill').forEach(p => {
+    p.classList.remove('text-[#ffd60a]', 'bg-[#353534]', 'border-b-2', 'border-[#ffd60a]');
+    p.classList.add('text-[#d0c6ab]');
+  });
+  const activeBtn = document.getElementById('nav-settings-' + tab);
+  if (activeBtn) {
+    activeBtn.classList.add('text-[#ffd60a]', 'bg-[#353534]', 'border-b-2', 'border-[#ffd60a]');
+    activeBtn.classList.remove('text-[#d0c6ab]');
+  }
+  curSettingsTab = tab;
+  if (tab === 'accuracy') fetchAccuracyDashboard();
+}
+
+// ══════════════════════════════════════════════════════════
+// AI ACCURACY DASHBOARD
+// ══════════════════════════════════════════════════════════
+let _accData = null;
+
+async function fetchAccuracyDashboard() {
+  try {
+    const r = await fetch('/api/accuracy?days=90');
+    const data = await r.json();
+    _accData = data;
+    renderAccGauge(data.avgScore || 0);
+    renderAccStats(data);
+    renderAccBreakdown(data);
+    renderAccTrendChart(data.weekly || []);
+    renderAccRecentTable(data.trend || []);
+    renderAccPending(data);
+  } catch(e) {
+    console.error('Accuracy fetch error:', e);
+  }
+}
+
+function renderAccGauge(score) {
+  const canvas = document.getElementById('acc-gauge');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const cx = w/2, cy = h/2, r = 58;
+  ctx.clearRect(0, 0, w, h);
+  // Background arc
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0.75 * Math.PI, 2.25 * Math.PI);
+  ctx.strokeStyle = '#242426';
+  ctx.lineWidth = 10;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  // Score arc
+  if (score > 0) {
+    const pct = Math.min(score, 100) / 100;
+    const startAngle = 0.75 * Math.PI;
+    const endAngle = startAngle + pct * 1.5 * Math.PI;
+    let color = '#ff453a';
+    if (score >= 70) color = '#34c759';
+    else if (score >= 50) color = '#ffd60a';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startAngle, endAngle);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+  const el = document.getElementById('acc-gauge-pct');
+  if (el) {
+    el.textContent = score > 0 ? Math.round(score) + '%' : '—';
+    if (score >= 70) el.style.color = '#34c759';
+    else if (score >= 50) el.style.color = '#ffd60a';
+    else if (score > 0) el.style.color = '#ff453a';
+    else el.style.color = '#e5e2e1';
+  }
+}
+
+function renderAccStats(data) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('acc-total', data.total ?? '—');
+  set('acc-verified', data.verified ?? '—');
+  set('acc-pending', data.pending ?? '—');
+  set('acc-best', data.highestScore != null ? data.highestScore + '%' : '—');
+  set('acc-worst', data.lowestScore != null ? data.lowestScore + '%' : '—');
+}
+
+function renderAccBreakdown(data) {
+  const bt = data.byType || {};
+  // Next Session
+  const ns = bt.next_session || {};
+  const nsEl = document.getElementById('acc-ns-avg');
+  if (nsEl) nsEl.textContent = ns.avgScore != null ? ns.avgScore + '%' : '—';
+  const nsSamp = document.getElementById('acc-ns-samples');
+  if (nsSamp) nsSamp.textContent = ns.count ? ns.count + ' predictions scored' : 'No data yet';
+  if (ns.categories) {
+    ['outlook','opening','niftyRange','bankNiftyRange','risk','calibration'].forEach(cat => {
+      const c = ns.categories[cat];
+      if (c) {
+        const bar = document.getElementById('bar-' + cat);
+        const pct = document.getElementById('pct-' + cat);
+        if (bar) bar.style.width = (c.avgPct || 0) + '%';
+        if (pct) pct.textContent = (c.avgPct || 0) + '%';
+        if (bar) {
+          if (c.avgPct >= 70) bar.style.backgroundColor = '#34c759';
+          else if (c.avgPct >= 50) bar.style.backgroundColor = '#ffd60a';
+          else bar.style.backgroundColor = '#ff453a';
+        }
+      }
+    });
+  }
+  // Trend arrow for NS
+  const nsTrend = document.getElementById('acc-ns-trend');
+  if (nsTrend && data.weekly && data.weekly.length >= 2) {
+    const recent = data.weekly[data.weekly.length - 1];
+    const prev = data.weekly[data.weekly.length - 2];
+    if (recent && prev && recent.avg > prev.avg) {
+      nsTrend.textContent = 'trending_up';
+      nsTrend.style.color = '#34c759';
+    } else if (recent && prev && recent.avg < prev.avg) {
+      nsTrend.textContent = 'trending_down';
+      nsTrend.style.color = '#ff453a';
+    } else {
+      nsTrend.textContent = 'trending_flat';
+      nsTrend.style.color = '#636366';
+    }
+  }
+
+  // Today Behavior
+  const tb = bt.today_behavior || {};
+  const tbEl = document.getElementById('acc-tb-avg');
+  if (tbEl) tbEl.textContent = tb.avgScore != null ? tb.avgScore + '%' : '—';
+  const tbSamp = document.getElementById('acc-tb-samples');
+  if (tbSamp) tbSamp.textContent = tb.count ? tb.count + ' predictions scored' : 'No data yet';
+  if (tb.categories) {
+    ['behavior','levels'].forEach(cat => {
+      const c = tb.categories[cat];
+      if (c) {
+        const bar = document.getElementById('bar-' + cat);
+        const pct = document.getElementById('pct-' + cat);
+        if (bar) bar.style.width = (c.avgPct || 0) + '%';
+        if (pct) pct.textContent = (c.avgPct || 0) + '%';
+        if (bar) {
+          if (c.avgPct >= 70) bar.style.backgroundColor = '#34c759';
+          else if (c.avgPct >= 50) bar.style.backgroundColor = '#ffd60a';
+          else bar.style.backgroundColor = '#ff453a';
+        }
+      }
+    });
+  }
+  // Trend arrow for TB
+  const tbTrend = document.getElementById('acc-tb-trend');
+  if (tbTrend) {
+    tbTrend.textContent = 'trending_flat';
+    tbTrend.style.color = '#636366';
+  }
+}
+
+function renderAccTrendChart(weekly) {
+  const canvas = document.getElementById('acc-trend-chart');
+  if (!canvas || !weekly.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 200 * dpr;
+  ctx.scale(dpr, dpr);
+  const w = rect.width, h = 200;
+  const pad = { top: 20, right: 15, bottom: 30, left: 40 };
+  const pw = w - pad.left - pad.right;
+  const ph = h - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Y-axis grid
+  ctx.font = '10px monospace';
+  ctx.fillStyle = '#636366';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const val = i * 25;
+    const y = pad.top + ph - (val / 100) * ph;
+    ctx.fillText(val + '%', pad.left - 5, y + 3);
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+  }
+
+  if (weekly.length < 2) {
+    ctx.fillStyle = '#636366';
+    ctx.textAlign = 'center';
+    ctx.font = '11px sans-serif';
+    ctx.fillText('Not enough data for trend', w/2, h/2);
+    return;
+  }
+
+  // Plot line
+  const points = weekly.map((wk, i) => ({
+    x: pad.left + (i / (weekly.length - 1)) * pw,
+    y: pad.top + ph - ((wk.avg || 0) / 100) * ph
+  }));
+
+  // Area fill
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, pad.top + ph);
+  points.forEach(p => ctx.lineTo(p.x, p.y));
+  ctx.lineTo(points[points.length-1].x, pad.top + ph);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ph);
+  grad.addColorStop(0, 'rgba(255,214,10,0.15)');
+  grad.addColorStop(1, 'rgba(255,214,10,0)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+  ctx.strokeStyle = '#ffd60a';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Dots
+  points.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffd60a';
+    ctx.fill();
+    ctx.strokeStyle = '#1c1b1b';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+
+  // X-axis labels
+  ctx.fillStyle = '#636366';
+  ctx.textAlign = 'center';
+  ctx.font = '9px monospace';
+  weekly.forEach((wk, i) => {
+    const x = pad.left + (i / (weekly.length - 1)) * pw;
+    ctx.fillText(wk.week || ('W' + (i+1)), x, h - 8);
+  });
+}
+
+function renderAccRecentTable(trend) {
+  const el = document.getElementById('acc-recent-table');
+  if (!el) return;
+  if (!trend || !trend.length) {
+    el.innerHTML = '<p class="text-[11px] text-[#636366] text-center py-4">No verified predictions yet. Predictions are scored after market opens.</p>';
+    return;
+  }
+  const verified = trend.filter(t => t.status === 'VERIFIED').slice(0, 20);
+  if (!verified.length) {
+    el.innerHTML = '<p class="text-[11px] text-[#636366] text-center py-4">No verified predictions yet.</p>';
+    return;
+  }
+  let html = '';
+  verified.forEach((p, idx) => {
+    const score = p.scores?.pct ?? p.scores?.total ?? 0;
+    let scoreColor = '#ff453a';
+    if (score >= 70) scoreColor = '#34c759';
+    else if (score >= 50) scoreColor = '#ffd60a';
+    const typeLabel = p.type === 'next_session' ? 'Next Session' : 'Today Behavior';
+    const typeIcon = p.type === 'next_session' ? 'nights_stay' : 'wb_sunny';
+    const breakdown = p.scores?.breakdown || {};
+    const breakdownHtml = Object.entries(breakdown).map(([k, v]) =>
+      `<div class="flex justify-between"><span class="text-[10px] text-[#d0c6ab]">${k}</span><span class="text-[10px] font-mono text-[#e5e2e1]">${v.score}/${v.max}</span></div>`
+    ).join('');
+
+    html += `
+      <div class="bg-[#242426] rounded-lg overflow-hidden">
+        <div class="px-3 py-2.5 flex items-center gap-3 cursor-pointer" onclick="this.nextElementSibling.classList.toggle('hidden')">
+          <span class="material-symbols-outlined text-[#ffd60a] text-sm">${typeIcon}</span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] font-bold text-[#e5e2e1]">${typeLabel}</span>
+              <span class="text-[10px] text-[#636366] font-mono">${p.predictedDate || p.date || ''}</span>
+            </div>
+          </div>
+          <span class="text-sm font-bold font-mono" style="color:${scoreColor}">${Math.round(score)}%</span>
+          <span class="material-symbols-outlined text-[#636366] text-sm">expand_more</span>
+        </div>
+        <div class="hidden px-3 pb-2.5 border-t border-white/5 pt-2 space-y-1">
+          ${breakdownHtml || '<p class="text-[10px] text-[#636366]">No detailed breakdown available</p>'}
+        </div>
+      </div>`;
+  });
+  el.innerHTML = html;
+}
+
+function renderAccPending(data) {
+  const el = document.getElementById('acc-pending-list');
+  const badge = document.getElementById('acc-pending-badge');
+  if (!el) return;
+  const pendingCount = data.pending || 0;
+  if (badge) badge.textContent = pendingCount;
+  if (!data.trend) {
+    el.innerHTML = '<p class="text-[11px] text-[#636366] text-center py-4">No pending predictions</p>';
+    return;
+  }
+  const pendingItems = data.trend.filter(t => t.status === 'PENDING');
+  if (!pendingItems.length) {
+    el.innerHTML = '<p class="text-[11px] text-[#636366] text-center py-4">All predictions verified</p>';
+    return;
+  }
+  let html = '';
+  pendingItems.forEach(p => {
+    const typeLabel = p.type === 'next_session' ? 'Next Session' : 'Today Behavior';
+    const typeIcon = p.type === 'next_session' ? 'nights_stay' : 'wb_sunny';
+    let details = '';
+    if (p.prediction) {
+      if (p.type === 'next_session') {
+        details = [p.prediction.outlook, p.prediction.openingExpectation, p.prediction.confidence ? p.prediction.confidence + '% conf' : ''].filter(Boolean).join(' · ');
+      } else {
+        details = [p.prediction.behavior, p.prediction.confidence ? p.prediction.confidence + '% conf' : ''].filter(Boolean).join(' · ');
+      }
+    }
+    html += `
+      <div class="bg-[#242426] rounded-lg px-3 py-2.5 flex items-center gap-3">
+        <span class="material-symbols-outlined text-[#ffd60a] text-sm">${typeIcon}</span>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-bold text-[#e5e2e1]">${typeLabel}</span>
+            <span class="text-[10px] text-[#636366] font-mono">for ${p.predictedDate || '—'}</span>
+          </div>
+          ${details ? `<p class="text-[10px] text-[#d0c6ab] mt-0.5 truncate">${details}</p>` : ''}
+        </div>
+        <span class="px-2 py-0.5 rounded-full bg-[#ffd60a]/10 text-[#ffd60a] text-[9px] font-bold uppercase">Pending</span>
+      </div>`;
+  });
+  el.innerHTML = html;
+}
 </script>
 
 <!-- Trade Planner Overlay -->
