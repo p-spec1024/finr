@@ -706,8 +706,8 @@ function verifyPredictions() {
     if (pred.status !== 'PENDING') continue;
     if (pred.predictedDate !== todayIST) continue; // Only verify today's predictions
 
-    // Need intraday data — only verify after 10 AM IST (enough price action)
-    if (getISTMins() < 600) continue;
+    // Only verify after market close (3:30 PM IST = 930 mins) for full-day accuracy
+    if (getISTMins() < 930) continue;
 
     const niftyOpen = liveIndices._todayOpen?.nifty || nifty.price;
     const niftyPrevClose = liveIndices._prevClose?.nifty || null;
@@ -851,7 +851,7 @@ app.get('/api/accuracy', (req, res) => {
 
   let filtered = predictionHistory.filter(p => {
     if (type && p.type !== type) return false;
-    return new Date(p.createdAt) >= cutoff;
+    return new Date(p.generatedAt || p.date) >= cutoff;
   });
 
   const verified = filtered.filter(p => p.status === 'VERIFIED' && p.scores);
@@ -891,16 +891,21 @@ app.get('/api/accuracy', (req, res) => {
     stats.byType[t] = { count: typeVer.length, avgScore: avg, categories };
   }
 
-  // Trend: last 7 verified scores (newest first)
-  stats.trend = verified.slice(0, 30).map(p => ({
-    date: p.predictedDate, type: p.type, score: p.scores.pct,
-    breakdown: p.scores.breakdown, verifiedAt: p.verifiedAt
-  }));
+  // Trend: last 30 verified + all pending (newest first)
+  stats.trend = [
+    ...verified.slice(0, 30).map(p => ({
+      date: p.predictedDate, type: p.type, status: 'VERIFIED', scores: p.scores,
+      score: p.scores.pct, breakdown: p.scores.breakdown, verifiedAt: p.verifiedAt
+    })),
+    ...pending.map(p => ({
+      date: p.predictedDate, type: p.type, status: 'PENDING', prediction: p.prediction
+    }))
+  ];
 
   // Weekly averages for chart data
   const weekMap = {};
   for (const p of verified) {
-    const d = new Date(p.verifiedAt || p.createdAt);
+    const d = new Date(p.verifiedAt || p.generatedAt || p.date);
     const weekStart = new Date(d); weekStart.setDate(d.getDate() - d.getDay());
     const wk = weekStart.toISOString().slice(0, 10);
     if (!weekMap[wk]) weekMap[wk] = { scores: [], count: 0 };
