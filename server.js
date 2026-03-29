@@ -60,6 +60,8 @@ let optionChainCache = { nifty: null, banknifty: null, stocks: {}, lastFetch: 0 
 let twelveDataDisabled = false; // User can disconnect Twelve Data
 let pickTracker      = []; // { id, type, symbol, direction, entryPrice, target, stopLoss, date, status, outcome }
 const PICK_TRACKER_FILE = path.join(__dirname, '.finr_picks.enc');
+let predictionHistory = []; // Full prediction accuracy tracking
+const PREDICTIONS_FILE = path.join(__dirname, '.finr_predictions.enc');
 
 // ── Twelve Data config — commodities, forex & global indices (runs 24/7) ─────
 // Free tier: 800 calls/day (8/min). Set TWELVE_DATA_API_KEY in Railway env vars.
@@ -362,6 +364,8 @@ function startNsePolling() {
     fiiDiiInterval = setTimeout(async () => {
       await fetchNseIndices();
       await fetchNseFiiDii();
+      // Verify pending predictions against actual market data (after 10 AM IST)
+      if (isMarketOpen() && getISTMins() >= 600) { try { verifyPredictions(); } catch(e) { log('WARN', 'Prediction verification error: ' + e.message); } }
       scheduleNextPoll(); // re-evaluate market hours for next interval
     }, pollMs);
     log('INFO', `NSE next poll in ${pollMs / 60000} min (market ${isMarketOpen() ? 'open' : 'closed'})`);
@@ -630,6 +634,286 @@ function evaluatePicksNextDay() {
   }
   if (evaluated > 0) { savePicks(); log('OK', `Evaluated ${evaluated} picks from previous days`); }
 }
+
+// ── Prediction History — persistence ─────────────────────────────────────────
+function loadPredictions() {
+  try { if (fs.existsSync(PREDICTIONS_FILE)) { const d = dec(fs.readFileSync(PREDICTIONS_FILE, 'utf8')); if (d) predictionHistory = d; } }
+  catch(e) { log('WARN', 'Failed to load prediction history: ' + e.message); predictionHistory = []; }
+}
+function savePredictions() {
+  try { fs.writeFileSync(PREDICTIONS_FILE, enc(predictionHistory)); }
+  catch(e) { log('ERR', 'Failed to save predictions: ' + e.message); }
+}
+
+// Store a prediction snapshot for later verification
+function storePrediction(type, data) {
+  const entry = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    type,           // 'next_session' | 'today_behavior' | 'ai_pick' | 'options_insight'
+    date: getISTDateStr(),
+    generatedAt: new Date().toISOString(),
+    status: 'PENDING', // PENDING → VERIFIED
+    prediction: {},
+    actual: null,
+    scores: null
+  };
+
+  if (type === 'next_session' && data) {
+    entry.predictedDate = data.predictedDate || getNextTradingDate(getISTDateStr());
+    entry.prediction = {
+      outlook: data.outlook,
+      confidence: data.confidence,
+      openingExpectation: data.openingExpectation,
+      niftyRange: data.niftyRange || {},
+      bankNiftyRange: data.bankNiftyRange || {},
+      riskLevel: data.riskLevel,
+      globalSentiment: data.globalSentiment,
+      giftNifty: data.giftNifty || {},
+      keyDrivers: data.keyDrivers || [],
+      sectorOutlook: data.sectorOutlook || {}
+    };
+  } else if (type === 'today_behavior' && data) {
+    entry.predictedDate = data._dateIST || getISTDateStr();
+    entry.prediction = {
+      behavior: data.todayBehavior,
+      confidence: data.todayConfidence,
+      explanation: data.todayExplanation,
+      niftySupport: data.niftySupport,
+      niftyResistance: data.niftyResistance
+    };
+  }
+
+  // Deduplicate: only keep latest prediction per type+predictedDate
+  const dupIdx = predictionHistory.findIndex(p => p.type === type && p.predictedDate === entry.predictedDate && p.status === 'PENDING');
+  if (dupIdx >= 0) predictionHistory[dupIdx] = entry;
+  else predictionHistory.unshift(entry);
+
+  // Keep last 365 entries max
+  if (predictionHistory.length > 365) predictionHistory = predictionHistory.slice(0, 365);
+  savePredictions();
+  return entry;
+}
+
+// Verify predictions against actual market data — runs during market hours
+function verifyPredictions() {
+  const todayIST = getISTDateStr();
+  const nifty = liveIndices['Nifty 50'] || liveIndices['NIFTY50'] || {};
+  const bank = liveIndices['NIFTYBANK'] || liveIndices['Nifty Bank'] || {};
+  if (!nifty.price) return; // No live data yet
+
+  let verified = 0;
+  for (const pred of predictionHistory) {
+    if (pred.status !== 'PENDING') continue;
+    if (pred.predictedDate !== todayIST) continue; // Only verify today's predictions
+
+    // Need intraday data — only verify after 10 AM IST (enough price action)
+    if (getISTMins() < 600) continue;
+
+    const niftyOpen = liveIndices._todayOpen?.nifty || nifty.price;
+    const niftyPrevClose = liveIndices._prevClose?.nifty || null;
+    const bankOpen = liveIndices._todayOpen?.bank || bank.price;
+
+    // Capture actual data
+    pred.actual = {
+      niftyOpen: niftyOpen,
+      niftyClose: nifty.price,
+      niftyHigh: nifty.high || nifty.price,
+      niftyLow: nifty.low || nifty.price,
+      niftyChangePct: nifty.changePct || 0,
+      niftyPrevClose: niftyPrevClose,
+      bankNiftyClose: bank.price || null,
+      bankNiftyHigh: bank.high || bank.price,
+      bankNiftyLow: bank.low || bank.price,
+      bankNiftyChangePct: bank.changePct || 0,
+      vix: !vixData.isDefault ? vixData.value : null,
+      fii: !fiiDiiData.isDefault ? fiiDiiData.fii : null,
+      dii: !fiiDiiData.isDefault ? fiiDiiData.dii : null,
+      breadthAdv: Object.values(liveStocks).filter(s => s.changePct >= 0).length,
+      breadthDec: Object.values(liveStocks).filter(s => s.changePct < 0).length,
+      verifiedAt: new Date().toISOString()
+    };
+
+    // Score the prediction
+    pred.scores = scorePrediction(pred);
+    pred.status = 'VERIFIED';
+    verified++;
+  }
+  if (verified > 0) { savePredictions(); log('OK', `Verified ${verified} predictions against actual data`); }
+}
+
+function scorePrediction(pred) {
+  const p = pred.prediction;
+  const a = pred.actual;
+  const scores = { total: 0, max: 0, breakdown: {} };
+
+  if (pred.type === 'next_session') {
+    // 1. Outlook direction (25 pts) — did BULLISH/BEARISH match actual direction?
+    scores.max += 25;
+    const actualDir = a.niftyChangePct > 0.3 ? 'BULLISH' : a.niftyChangePct < -0.3 ? 'BEARISH' : 'NEUTRAL';
+    const predDir = (p.outlook || '').replace('CAUTIOUSLY_', '');
+    if (predDir === actualDir) { scores.total += 25; scores.breakdown.outlook = { score: 25, max: 25, predicted: p.outlook, actual: actualDir }; }
+    else if ((predDir === 'BULLISH' && actualDir === 'NEUTRAL') || (predDir === 'BEARISH' && actualDir === 'NEUTRAL') || (predDir === 'NEUTRAL' && actualDir !== 'NEUTRAL')) {
+      scores.total += 12; scores.breakdown.outlook = { score: 12, max: 25, predicted: p.outlook, actual: actualDir };
+    } else { scores.breakdown.outlook = { score: 0, max: 25, predicted: p.outlook, actual: actualDir }; }
+
+    // 2. Opening expectation (15 pts) — GAP_UP/GAP_DOWN/FLAT_OPEN vs actual gap
+    scores.max += 15;
+    const actualGap = a.niftyPrevClose ? ((a.niftyOpen - a.niftyPrevClose) / a.niftyPrevClose * 100) : a.niftyChangePct;
+    const actualOpen = actualGap > 0.25 ? 'GAP_UP' : actualGap < -0.25 ? 'GAP_DOWN' : 'FLAT_OPEN';
+    if (p.openingExpectation === actualOpen) { scores.total += 15; scores.breakdown.opening = { score: 15, max: 15, predicted: p.openingExpectation, actual: actualOpen, gap: +actualGap.toFixed(2) }; }
+    else if ((p.openingExpectation === 'FLAT_OPEN' && Math.abs(actualGap) < 0.5) || (p.openingExpectation !== 'FLAT_OPEN' && actualOpen === 'FLAT_OPEN')) {
+      scores.total += 7; scores.breakdown.opening = { score: 7, max: 15, predicted: p.openingExpectation, actual: actualOpen, gap: +actualGap.toFixed(2) };
+    } else { scores.breakdown.opening = { score: 0, max: 15, predicted: p.openingExpectation, actual: actualOpen, gap: +actualGap.toFixed(2) }; }
+
+    // 3. Nifty range accuracy (25 pts) — did actual H/L fall within predicted range?
+    scores.max += 25;
+    if (p.niftyRange && p.niftyRange.low && p.niftyRange.high && a.niftyLow && a.niftyHigh) {
+      const pLow = Number(p.niftyRange.low), pHigh = Number(p.niftyRange.high);
+      const aLow = Number(a.niftyLow), aHigh = Number(a.niftyHigh);
+      const lowInRange = aLow >= pLow * 0.995; // 0.5% tolerance
+      const highInRange = aHigh <= pHigh * 1.005;
+      const rangeContained = lowInRange && highInRange;
+      const lowErr = Math.abs(aLow - pLow) / aLow * 100;
+      const highErr = Math.abs(aHigh - pHigh) / aHigh * 100;
+      const avgErr = (lowErr + highErr) / 2;
+      let rangeScore = 0;
+      if (rangeContained) rangeScore = 25;
+      else if (avgErr < 0.5) rangeScore = 22;
+      else if (avgErr < 1.0) rangeScore = 18;
+      else if (avgErr < 1.5) rangeScore = 12;
+      else if (avgErr < 2.5) rangeScore = 6;
+      scores.total += rangeScore;
+      scores.breakdown.niftyRange = { score: rangeScore, max: 25, predicted: { low: pLow, high: pHigh }, actual: { low: aLow, high: aHigh }, error: +avgErr.toFixed(2) };
+    } else { scores.breakdown.niftyRange = { score: 0, max: 25, note: 'Missing data' }; }
+
+    // 4. Bank Nifty range accuracy (15 pts)
+    scores.max += 15;
+    if (p.bankNiftyRange && p.bankNiftyRange.low && p.bankNiftyRange.high && a.bankNiftyLow && a.bankNiftyHigh) {
+      const pLow = Number(p.bankNiftyRange.low), pHigh = Number(p.bankNiftyRange.high);
+      const aLow = Number(a.bankNiftyLow), aHigh = Number(a.bankNiftyHigh);
+      const avgErr = (Math.abs(aLow - pLow) / aLow * 100 + Math.abs(aHigh - pHigh) / aHigh * 100) / 2;
+      let bnScore = avgErr < 0.5 ? 15 : avgErr < 1.0 ? 12 : avgErr < 1.5 ? 9 : avgErr < 2.5 ? 5 : 0;
+      scores.total += bnScore;
+      scores.breakdown.bankNiftyRange = { score: bnScore, max: 15, error: +avgErr.toFixed(2) };
+    } else { scores.breakdown.bankNiftyRange = { score: 0, max: 15, note: 'Missing data' }; }
+
+    // 5. Risk level assessment (10 pts) — HIGH/VERY_HIGH when VIX>20 or FII selling
+    scores.max += 10;
+    const actualRisk = (a.vix && a.vix > 25) || (a.fii && a.fii < -2000) ? 'HIGH' : (a.vix && a.vix > 18) || (a.fii && a.fii < -500) ? 'MODERATE' : 'LOW';
+    const predRisk = (p.riskLevel === 'VERY_HIGH' || p.riskLevel === 'HIGH') ? 'HIGH' : p.riskLevel === 'MODERATE' ? 'MODERATE' : 'LOW';
+    if (predRisk === actualRisk) { scores.total += 10; scores.breakdown.risk = { score: 10, max: 10, predicted: p.riskLevel, actual: actualRisk }; }
+    else if (Math.abs(['LOW','MODERATE','HIGH'].indexOf(predRisk) - ['LOW','MODERATE','HIGH'].indexOf(actualRisk)) === 1) {
+      scores.total += 5; scores.breakdown.risk = { score: 5, max: 10, predicted: p.riskLevel, actual: actualRisk };
+    } else { scores.breakdown.risk = { score: 0, max: 10, predicted: p.riskLevel, actual: actualRisk }; }
+
+    // 6. Confidence calibration (10 pts) — is confidence correlated with accuracy?
+    scores.max += 10;
+    const accuracyPct = scores.max > 10 ? ((scores.total - (scores.breakdown.risk?.score || 0)) / (scores.max - 10)) * 100 : 50;
+    const confDiff = Math.abs((p.confidence || 50) - accuracyPct);
+    let calScore = confDiff < 10 ? 10 : confDiff < 20 ? 7 : confDiff < 30 ? 4 : 0;
+    scores.total += calScore;
+    scores.breakdown.calibration = { score: calScore, max: 10, confidence: p.confidence, actualAccuracy: +accuracyPct.toFixed(0) };
+
+  } else if (pred.type === 'today_behavior') {
+    // Behavior direction match (50 pts)
+    scores.max += 50;
+    const actualBehavior = a.niftyChangePct > 1 ? 'STRONG_UPTREND' : a.niftyChangePct > 0.3 ? 'UPTREND' :
+      a.niftyChangePct < -1 ? 'STRONG_DOWNTREND' : a.niftyChangePct < -0.3 ? 'DOWNTREND' : 'SIDEWAYS';
+    const predB = p.behavior || 'SIDEWAYS';
+    const isUp = b => b.includes('UP');
+    const isDown = b => b.includes('DOWN');
+    if (predB === actualBehavior) { scores.total += 50; }
+    else if ((isUp(predB) && isUp(actualBehavior)) || (isDown(predB) && isDown(actualBehavior))) { scores.total += 35; }
+    else if (predB === 'SIDEWAYS' || actualBehavior === 'SIDEWAYS') { scores.total += 15; }
+    scores.breakdown.behavior = { score: scores.total, max: 50, predicted: predB, actual: actualBehavior };
+
+    // Support/Resistance accuracy (50 pts)
+    scores.max += 50;
+    if (p.niftySupport && p.niftyResistance && a.niftyLow && a.niftyHigh) {
+      const supErr = Math.abs(a.niftyLow - Number(p.niftySupport)) / a.niftyLow * 100;
+      const resErr = Math.abs(a.niftyHigh - Number(p.niftyResistance)) / a.niftyHigh * 100;
+      const avgErr = (supErr + resErr) / 2;
+      const srScore = avgErr < 0.5 ? 50 : avgErr < 1 ? 40 : avgErr < 2 ? 25 : avgErr < 3 ? 10 : 0;
+      scores.total += srScore;
+      scores.breakdown.levels = { score: srScore, max: 50, error: +avgErr.toFixed(2) };
+    } else { scores.breakdown.levels = { score: 0, max: 50, note: 'No levels predicted' }; }
+  }
+
+  scores.pct = scores.max > 0 ? Math.round((scores.total / scores.max) * 100) : 0;
+  return scores;
+}
+
+// ── Accuracy API Endpoint ─────────────────────────────────────────────────────
+app.get('/api/accuracy', (req, res) => {
+  const { type, days } = req.query;
+  const maxDays = days ? parseInt(days) : 90;
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - maxDays);
+
+  let filtered = predictionHistory.filter(p => {
+    if (type && p.type !== type) return false;
+    return new Date(p.createdAt) >= cutoff;
+  });
+
+  const verified = filtered.filter(p => p.status === 'VERIFIED' && p.scores);
+  const pending = filtered.filter(p => p.status === 'PENDING');
+
+  // Aggregate stats
+  const stats = { total: filtered.length, verified: verified.length, pending: pending.length };
+
+  // Overall accuracy
+  if (verified.length > 0) {
+    stats.avgScore = Math.round(verified.reduce((s, p) => s + p.scores.pct, 0) / verified.length);
+    stats.highestScore = Math.max(...verified.map(p => p.scores.pct));
+    stats.lowestScore = Math.min(...verified.map(p => p.scores.pct));
+  }
+
+  // Per-type breakdown
+  stats.byType = {};
+  for (const t of ['next_session', 'today_behavior']) {
+    const typeVer = verified.filter(p => p.type === t);
+    if (typeVer.length === 0) { stats.byType[t] = { count: 0 }; continue; }
+    const avg = Math.round(typeVer.reduce((s, p) => s + p.scores.pct, 0) / typeVer.length);
+    // Category-level breakdown
+    const categoryStats = {};
+    for (const v of typeVer) {
+      if (!v.scores.breakdown) continue;
+      for (const [cat, d] of Object.entries(v.scores.breakdown)) {
+        if (!categoryStats[cat]) categoryStats[cat] = { totalScore: 0, totalMax: 0, count: 0 };
+        categoryStats[cat].totalScore += d.score || 0;
+        categoryStats[cat].totalMax += d.max || 0;
+        categoryStats[cat].count++;
+      }
+    }
+    const categories = {};
+    for (const [cat, d] of Object.entries(categoryStats)) {
+      categories[cat] = { avgPct: d.totalMax > 0 ? Math.round((d.totalScore / d.totalMax) * 100) : 0, samples: d.count };
+    }
+    stats.byType[t] = { count: typeVer.length, avgScore: avg, categories };
+  }
+
+  // Trend: last 7 verified scores (newest first)
+  stats.trend = verified.slice(0, 30).map(p => ({
+    date: p.predictedDate, type: p.type, score: p.scores.pct,
+    breakdown: p.scores.breakdown, verifiedAt: p.verifiedAt
+  }));
+
+  // Weekly averages for chart data
+  const weekMap = {};
+  for (const p of verified) {
+    const d = new Date(p.verifiedAt || p.createdAt);
+    const weekStart = new Date(d); weekStart.setDate(d.getDate() - d.getDay());
+    const wk = weekStart.toISOString().slice(0, 10);
+    if (!weekMap[wk]) weekMap[wk] = { scores: [], count: 0 };
+    weekMap[wk].scores.push(p.scores.pct);
+    weekMap[wk].count++;
+  }
+  stats.weekly = Object.entries(weekMap).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 12).map(([week, d]) => ({
+    week, avg: Math.round(d.scores.reduce((s, v) => s + v, 0) / d.scores.length), count: d.count,
+    high: Math.max(...d.scores), low: Math.min(...d.scores)
+  }));
+
+  res.json(stats);
+});
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 const LOGS = [];
@@ -1324,6 +1608,7 @@ Reply ONLY valid JSON:
       p._generatedAt = new Date().toISOString();
 
       todayCache = { data: p, lastFetch: Date.now(), dateIST: todayIST };
+      storePrediction('today_behavior', p);
       return res.json({ ...p, cached: false });
     } catch (e) {
       log('ERR', 'Today\'s behaviour (live) failed: ' + e.message);
@@ -1519,6 +1804,7 @@ Reply ONLY valid JSON:
     o._generatedAt = new Date().toISOString();
 
     nextSessionCache = { data: o, lastFetch: Date.now(), predictedDate: nextTradingDay };
+    storePrediction('next_session', o);
     return res.json({ ...o, cached: false, _refreshMs: NEXT_SESSION_CACHE_MS });
   } catch (e) {
     log('ERR', 'Next session failed: ' + e.message);
@@ -5333,6 +5619,7 @@ server.listen(PORT, async () => {
   loadAlerts();
   loadTrades();
   loadPicks();
+  loadPredictions();
   loadGcpServiceAccount();
   log('INFO', `Upstox:${!!appConfig.apiKey} Zerodha:${!!appConfig.zApiKey} Gemini:${!!appConfig.geminiKey} VertexAI:${!!gcpServiceAccount} TwelveData:${!!appConfig.twelveDataKey} Trades:${tradeHistory.length} Picks:${pickTracker.length}`);
   await initLiveData();
