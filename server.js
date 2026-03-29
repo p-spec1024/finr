@@ -4022,18 +4022,25 @@ CURRENT MARKET: Nifty=${nifty?.price||'?'}(${nifty?.changePct>=0?'+':''}${nifty?
 TOP GAINERS: ${topG}
 TOP LOSERS: ${topL}
 
-For each news item, provi A specific, factual headline (not vague)
+MANDATORY COVERAGE — always include if active:
+- Active wars, military conflicts, sanctions (Russia-Ukraine, Middle East, etc.) — they impact crude oil, shipping, commodity prices, defense stocks, and EM risk sentiment
+- Trade wars, tariffs, and economic sanctions — direct impact on IT, Pharma, export-heavy sectors
+- Central bank decisions (Fed, RBI, ECB) and rate actions
+These geopolitical events MUST be included even if they seem remote — they affect crude, gold, DXY, FII flows, and Indian market sentiment.
+
+For each news item, provide:
+1. A specific, factual headline (not vague)
 2. Priority: HIGH (market-moving), MEDIUM (sector impact), LOW (watch)
 3. Market impact analysis: how it affects Indian stocks specifically
 4. Affected sectors (buy/avoid)
 5. Sentiment: BULLISH, BEARISH, or NEUTRAL
-6. Source type: RBI, GOVT, GLOBAL, CORPORATE, ECONOMIC, GEOPOLITICAL
-7. Scope: NATIONAL (India-specific: RBI, SEBI, Indian corporate earnings, budget, elections, monsoon, policy) or INTERNATIONAL (US Fed, global markets, crude oil, China, geopolitical, foreign trade)
+6. Source type: RBI, GOVT, GLOBAL, CORPORATE, ECONOMIC, GEOPOLITICAL, WAR_CONFLICT
+7. Scope: NATIONAL (India-specific: RBI, SEBI, Indian corporate earnings, budget, elections, monsoon, policy) or INTERNATIONAL (US Fed, global markets, crude oil, China, geopolitical, wars, foreign trade)
 
-Include a balanced mix — at least 3 NATIONAL and 3 INTERNATIONAL news items.
+Include a balanced mix — at least 3 NATIONAL and 3 INTERNATIONAL news items. At least 1 item MUST cover active geopolitical conflicts or wars if any are ongoing.
 
 Reply ONLY valid JSON array, NO markdown fences:
-[{"title":"Specific headline here","date":"27 Mar 2026","priority":"HIGH/MEDIUM/LOW","impact":"How this affects Indian market in 30 words","sentiment":"BULLISH/BEARISH/NEUTRAL","source":"RBI/GOVT/GLOBAL/CORPORATE/ECONOMIC/GEOPOLITICAL","scope":"NATIONAL/INTERNATIONAL","icon":"relevant emoji","sectors":{"buy":["sector1"],"avoid":["sector2"]},"detail":"50-word deeper analysis with specific stocks/indices affected and expected price action"}]
+[{"title":"Specific headline here","date":"27 Mar 2026","priority":"HIGH/MEDIUM/LOW","impact":"How this affects Indian market in 30 words","sentiment":"BULLISH/BEARISH/NEUTRAL","source":"RBI/GOVT/GLOBAL/CORPORATE/ECONOMIC/GEOPOLITICAL/WAR_CONFLICT","scope":"NATIONAL/INTERNATIONAL","icon":"relevant emoji","sectors":{"buy":["sector1"],"avoid":["sector2"]},"detail":"50-word deeper analysis with specific stocks/indices affected and expected price action"}]
 
 Be specific, factual, and relevant to current Indian market conditions. Include both Indian domestic events AND global events that impact India.`;
 

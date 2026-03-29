@@ -143,6 +143,19 @@ tailwind.config = {
   /* Calendar date picker indicator */
   input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);}
 
+  /* Card info tooltip */
+  .card-info-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid #4d4632;color:#636366;font-size:9px;font-family:'DM Mono',monospace;font-weight:700;cursor:pointer;transition:all 0.15s;flex-shrink:0;}
+  .card-info-btn:hover{color:#ffd60a;border-color:#ffd60a;background:rgba(255,214,10,0.08);}
+  .card-info-tip{display:none;position:absolute;top:calc(100% + 8px);right:-8px;width:260px;background:#1c1b1b;border:1px solid #4d4632;border-radius:10px;padding:12px;z-index:100;box-shadow:0 8px 32px rgba(0,0,0,.6);font-family:'DM Mono',monospace;}
+  .card-info-tip::before{content:'';position:absolute;top:-5px;right:12px;width:8px;height:8px;background:#1c1b1b;border-left:1px solid #4d4632;border-top:1px solid #4d4632;transform:rotate(45deg);}
+  .card-info-btn:hover .card-info-tip,.card-info-btn:focus .card-info-tip,.card-info-btn.active .card-info-tip{display:block;}
+  .card-info-tip .tip-title{font-size:9px;font-weight:700;color:#ffd60a;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;}
+  .card-info-tip .tip-desc{font-size:9px;color:#d0c6ab;line-height:1.5;margin-bottom:6px;}
+  .card-info-tip .tip-tag{display:inline-block;font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;margin-right:3px;margin-bottom:2px;}
+  .tip-live{background:rgba(71,226,102,0.1);color:#47e266;}
+  .tip-ai{background:rgba(10,132,255,0.1);color:#0a84ff;}
+  .tip-cached{background:rgba(255,214,10,0.1);color:#ffd60a;}
+
   /* Dashboard card collapse */
   .dash-card{align-self:start;}
   .dash-card-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;transition:background 0.15s;}
@@ -479,12 +492,15 @@ tailwind.config = {
         </div>
 
         <!-- Two-column: Index (left) + Market Prediction (right) -->
-        <div class="md:grid md:grid-cols-2 md:gap-6">
+        <div class="md:grid md:grid-cols-2 md:gap-6 md:items-start">
           <!-- Left: Index Card -->
-          <section class="flex flex-col items-center md:items-start py-3 bg-[#1c1b1b] rounded-xl md:p-6 relative">
-            <button class="absolute top-3 right-3 p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="refreshIndices()" title="Refresh Index">
-              <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
-            </button>
+          <section class="flex flex-col items-center md:items-start py-3 bg-[#1c1b1b] rounded-xl md:p-6 relative" style="align-self:start">
+            <div class="absolute top-3 right-3 flex items-center gap-1.5">
+              <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Index Price Card</div><div class="tip-desc">Shows the current or last-known price for the selected index/commodity. Switch between Nifty, Bank Nifty, VIX, Gold, Crude, S&P 500, etc. using chips above.</div><span class="tip-tag tip-live">LIVE</span> Upstox API (market hrs)<br><span class="tip-tag tip-live">LIVE</span> Twelve Data (24/5 globals)<br><span class="tip-tag tip-cached">CACHED</span> Last close when market off</div></span>
+              <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="refreshIndices()" title="Refresh Index">
+                <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
+              </button>
+            </div>
             <span class="text-[#d0c6ab] font-mono text-[10px] uppercase tracking-[0.2em] mb-2 font-bold" id="h-index-label">Nifty 50</span>
             <h2 class="font-headline font-extrabold text-[3.2rem] tracking-tighter tnum leading-none" id="h-nifty">--<span class="text-[1.6rem] font-semibold text-[#d0c6ab]">.--</span></h2>
             <div class="flex items-center gap-2 mt-3">
@@ -510,10 +526,14 @@ tailwind.config = {
               <div class="flex items-center gap-2">
                 <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">trending_up</span>
                 <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Intelligence</h3>
+                <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="left:-8px;right:auto"><div class="tip-title">Market Intelligence</div><div class="tip-desc"><b style="color:#e5e2e1">Today's Behavior:</b> AI analysis of current market trend using live data. Pre-market (12AM-9:15AM) shows outlook from Google Search grounding. Live (9:15AM-3:30PM) uses full Upstox/NSE data + AI.<br><br><b style="color:#e5e2e1">Next Session Outlook:</b> Predicts next trading day. Active post-market (3:30PM+) and all weekend. Gift Nifty, Risk, Sentiment, and ranges are AI-predicted using web search + Twelve Data.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Twelve Data 24/5<br><span class="tip-tag tip-cached">CACHED</span> NSE close data<br><div style="margin-top:6px;font-size:8px;color:#636366"><b>Nifty/BN Ranges:</b> AI predicted (not live)<br><b>Gift Nifty:</b> Web search (real-time)<br><b>Risk/Sentiment:</b> AI assessed</div></div></span>
               </div>
-              <button class="text-[9px] font-mono text-[#d0c6ab] px-2 py-1 rounded border border-[#4d4632] hover:text-[#ffd60a] hover:border-[#ffd60a] transition-colors active:scale-95" onclick="loadMarketPrediction(); loadNextSession()" id="pred-refresh">
-                <span class="material-symbols-outlined text-xs align-middle">refresh</span> Refresh
-              </button>
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="mi-ts"></span>
+                <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="loadMarketPrediction(); loadNextSession()" id="pred-refresh" title="Refresh Intelligence">
+                  <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
+                </button>
+              </div>
             </div>
             <!-- Today's behavior (clickable to expand detail) -->
             <div class="cursor-pointer rounded-lg hover:bg-[#353534]/20 transition-colors -mx-1 px-1" onclick="togglePredDetail()">
@@ -524,6 +544,7 @@ tailwind.config = {
                 <div class="flex-1">
                   <div class="flex items-center gap-1.5">
                     <span class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider" id="pred-today-title">Today's Behavior</span>
+                    <span class="text-[8px] text-[#636366] font-mono" id="pred-today-ts"></span>
                     <span class="material-symbols-outlined text-[#636366] transition-transform" style="font-size:12px" id="pred-detail-chevron">expand_more</span>
                   </div>
                   <div class="text-sm font-bold text-[#e5e2e1] font-headline" id="pred-today-label">Analysing...</div>
@@ -549,9 +570,12 @@ tailwind.config = {
             <div class="h-px bg-[#353534] mb-3"></div>
             <div class="flex items-center justify-between mb-2">
               <span class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider">Next Session Outlook</span>
-              <button class="text-[9px] font-mono text-[#d0c6ab] px-2 py-0.5 rounded border border-[#4d4632] hover:text-[#47e266] hover:border-[#47e266] transition-colors active:scale-95" onclick="loadNextSession(true)" id="next-refresh">
-                <span class="material-symbols-outlined text-xs align-middle">refresh</span>
-              </button>
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="pred-next-ts"></span>
+                <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="loadNextSession(true)" id="next-refresh" title="Refresh Next Session">
+                  <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
+                </button>
+              </div>
             </div>
             <div id="pred-next-wrapper">
               <div class="cursor-pointer rounded-lg hover:bg-[#353534]/20 transition-colors -mx-1 px-1" onclick="toggleNextDetail()">
@@ -712,6 +736,7 @@ tailwind.config = {
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">newspaper</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Live Market News</h3>
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Live Market News</div><div class="tip-desc">AI-curated news affecting Indian markets. 8 items covering national &amp; international events — FII flows, policy changes, global macro, geopolitics, and sector moves. Refreshes every 10 min.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Grounded web search</div></span>
                 </div>
                 <div class="flex items-center gap-2">
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="news-ts"></span>
@@ -741,6 +766,7 @@ tailwind.config = {
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">equalizer</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Breadth</h3>
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Market Breadth</div><div class="tip-desc">Advance/decline ratio across your stock universe. Green = advancing, Red = declining. Helps gauge whether the market move is broad-based or narrow.</div><span class="tip-tag tip-live">LIVE</span> Upstox stock prices<br><span class="tip-tag tip-cached">CACHED</span> Last close after hours</div></span>
                 </div>
                 <div class="flex items-center gap-2">
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="breadth-ts"></span>
@@ -761,6 +787,7 @@ tailwind.config = {
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">swap_vert</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Flows & Macros</h3>
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Flows & Macros</div><div class="tip-desc">FII/DII cash flow data, USD/INR exchange rate, and crude oil price. FII selling = bearish pressure, DII buying = support. Key macro indicators for market direction.</div><span class="tip-tag tip-live">LIVE</span> NSE India (FII/DII)<br><span class="tip-tag tip-live">LIVE</span> Twelve Data (USD, Crude)</div></span>
                 </div>
                 <div class="flex items-center gap-2">
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="fii-ts"></span>
@@ -787,6 +814,7 @@ tailwind.config = {
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">health_and_safety</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Health</h3>
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Market Health Score</div><div class="tip-desc">Composite 0-100 score based on: trend (Nifty direction), momentum, breadth (advance/decline), VIX level, FII flows, and volatility. Higher = healthier market conditions.</div><span class="tip-tag tip-live">LIVE</span> All data feeds combined<br><span class="tip-tag tip-cached">CACHED</span> Last known after hours</div></span>
                 </div>
                 <div class="flex items-center gap-2">
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="health-ts"></span>
@@ -816,6 +844,7 @@ tailwind.config = {
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">event</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Economic Calendar</h3>
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Economic Calendar</div><div class="tip-desc">Upcoming and ongoing macro events — RBI policy, US Fed, earnings, tariff wars, elections. Shows event status (upcoming/ongoing/concluded) and expected market impact.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Grounded web search</div></span>
                 </div>
                 <div class="flex items-center gap-2">
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="events-ts"></span>
@@ -839,6 +868,7 @@ tailwind.config = {
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">monitoring</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Pulse</h3>
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Market Pulse Charts</div><div class="tip-desc">Visual charts for: FII vs DII flows (donut), Health Radar (multi-axis), VIX Meter (gauge), Sector Flow (heatmap). Switch views using the dropdown.</div><span class="tip-tag tip-live">LIVE</span> All data feeds<br><span class="tip-tag tip-cached">CACHED</span> Last known after hours</div></span>
                 </div>
                 <div class="flex items-center gap-2">
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="pulse-ts"></span>
@@ -2274,8 +2304,11 @@ function renderNews() {
     const sentColor = (sentLower.includes('bullish') || sentLower.includes('positive')) ? 'text-[#47e266]' :
                       (sentLower.includes('bearish') || sentLower.includes('negative')) ? 'text-[#ffb4ab]' : 'text-[#d0c6ab]';
     const timeStr = n.date || (n.fetchedAt ? new Date(n.fetchedAt).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}) : (n.time||'Just now'));
-    return `<div class="news-item flex gap-3 cursor-pointer hover:bg-[#353534]/30 rounded-lg p-2 -mx-2 transition-colors" data-scope="${(n.scope||'national').toLowerCase()}" onclick="openNewsModal(${i})">
-      <div class="flex-shrink-0 w-10 h-10 bg-[#353534] rounded flex items-center justify-center text-lg">${n.icon||'📰'}</div>
+    const srcUp = (n.source||'').toUpperCase();
+    const isConflict = srcUp === 'WAR_CONFLICT' || srcUp === 'GEOPOLITICAL';
+    const conflictBorder = isConflict ? ' border-l-2 border-[#ff453a]' : '';
+    return `<div class="news-item flex gap-3 cursor-pointer hover:bg-[#353534]/30 rounded-lg p-2 -mx-2 transition-colors${conflictBorder}" data-scope="${(n.scope||'national').toLowerCase()}" onclick="openNewsModal(${i})">
+      <div class="flex-shrink-0 w-10 h-10 ${isConflict ? 'bg-[#ff453a]/15' : 'bg-[#353534]'} rounded flex items-center justify-center text-lg">${n.icon||'📰'}</div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 mb-1">
           <span class="text-[8px] ${priClass} px-1.5 py-0.5 rounded font-black uppercase">${(n.priority||'Low').toUpperCase()}</span>
@@ -5009,6 +5042,12 @@ async function loadMarketPrediction() {
       }
       if (d.grounded) { const gb = document.getElementById('pred-grounded-badge'); gb.classList.remove('hidden'); gb.style.display = 'flex'; }
       window._lastPrediction = d;
+      // Update timestamps for promoted state
+      const promoTs = formatIST('short');
+      const todayTsP = document.getElementById('pred-today-ts');
+      if (todayTsP) todayTsP.textContent = promoTs;
+      const miTsP = document.getElementById('mi-ts');
+      if (miTsP) miTsP.textContent = promoTs;
       return;
     }
 
@@ -5064,6 +5103,13 @@ async function loadMarketPrediction() {
     if (d._breadthConflict) document.getElementById('pred-conflict').classList.remove('hidden');
 
     window._lastPrediction = d;
+
+    // Update timestamps
+    const tsStr = formatIST('short');
+    const todayTs = document.getElementById('pred-today-ts');
+    if (todayTs) todayTs.textContent = tsStr;
+    const miTs = document.getElementById('mi-ts');
+    if (miTs) miTs.textContent = tsStr;
   } catch(e) {
     setTodayEmpty('Error', 'Could not load market analysis', 'error');
     console.error('Market prediction error:', e);
@@ -5167,6 +5213,17 @@ async function loadNextSession(force) {
     }
 
     window._lastNextSession = d;
+
+    // Update timestamp
+    const nextTs = document.getElementById('pred-next-ts');
+    if (nextTs) {
+      if (d._generatedAt) {
+        const gt = new Date(d._generatedAt);
+        nextTs.textContent = gt.toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', hour12:true});
+      } else {
+        nextTs.textContent = formatIST('short');
+      }
+    }
 
     // Schedule next auto-refresh using backend-provided interval
     // _refreshMs is null when next-session is inactive (12AM-3:30PM) — don't override existing timer
@@ -5691,6 +5748,13 @@ function autoShowNextSession() {
 // ══════════════════════════════════════════════════════════
 // INIT APP
 // ══════════════════════════════════════════════════════════
+// Close info tooltips on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.card-info-btn')) {
+    document.querySelectorAll('.card-info-btn.active').forEach(b => b.classList.remove('active'));
+  }
+});
+
 async function initApp() {
   if (appInited) return;
   appInited = true;
