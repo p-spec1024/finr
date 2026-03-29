@@ -159,7 +159,7 @@ tailwind.config = {
 
   /* Dashboard card collapse */
   .dash-card{align-self:start;}
-  .dash-card-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;transition:background 0.15s;}
+  .dash-card-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;transition:background 0.15s;position:relative;z-index:2;}
   .dash-card-header:hover{background:rgba(53,53,52,0.3);}
   .dash-card-chevron{transition:transform 0.2s ease;}
   .dash-card.expanded .dash-card-chevron{transform:rotate(180deg);}
@@ -249,7 +249,7 @@ tailwind.config = {
     .bottom-sheet-overlay.on{align-items:center;}
 
     /* ═══════ DASHBOARD CARDS ═══════ */
-    .dash-card-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;transition:background 0.15s;}
+    .dash-card-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;transition:background 0.15s;position:relative;z-index:2;}
     .dash-card-header:hover{background:rgba(53,53,52,0.3);}
     .dash-card-chevron{transition:transform 0.2s ease;}
     .dash-card.expanded .dash-card-chevron{transform:rotate(180deg);}
@@ -527,7 +527,7 @@ tailwind.config = {
               <div class="flex items-center gap-2">
                 <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">trending_up</span>
                 <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Intelligence</h3>
-                <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="left:-8px;right:auto"><div class="tip-title">Market Intelligence</div><div class="tip-desc"><b style="color:#e5e2e1">Today's Behavior:</b> AI analysis of current market trend using live data. Pre-market (12AM-9:15AM) shows outlook from Google Search grounding. Live (9:15AM-3:30PM) uses full Upstox/NSE data + AI.<br><br><b style="color:#e5e2e1">Next Session Outlook:</b> Predicts next trading day. Active post-market (3:30PM+) and all weekend. Gift Nifty, Risk, Sentiment, and ranges are AI-predicted using web search + Twelve Data.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Twelve Data 24/5<br><span class="tip-tag tip-cached">CACHED</span> NSE close data<br><div style="margin-top:6px;font-size:8px;color:#636366"><b>Nifty/BN Ranges:</b> AI predicted (not live)<br><b>Gift Nifty:</b> Web search (real-time)<br><b>Risk/Sentiment:</b> AI assessed</div></div></span>
+                <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="left:-8px;right:auto"><div class="tip-title">Market Intelligence</div><div class="tip-desc"><b style="color:#e5e2e1">Today's Behavior:</b> AI analysis of current market trend using live data. Pre-market (12AM-9:15AM) shows outlook from Google Search grounding. Live (9:15AM-3:30PM) uses full Upstox/NSE data + AI.<br><br><b style="color:#e5e2e1">Next Session Outlook:</b> Predicts next trading day. Active post-market (3:30PM+) and all weekend. Gift Nifty, Risk, Sentiment, and ranges are AI-predicted using web search + Twelve Data.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Twelve Data 24/5<br><span class="tip-tag tip-cached">CACHED</span> NSE close data<br><div style="margin-top:6px;font-size:8px;color:#636366"><b>Nifty/BN Ranges:</b> AI predicted (not live)<br><b>Gift Nifty:</b> Web search (real-time)<br><b>Risk/Sentiment:</b> AI assessed</div><div style="margin-top:6px;font-size:8px;color:#636366;border-top:1px solid #353534;padding-top:5px"><b style="color:#d0c6ab">Risk Levels:</b><br><span style="color:#47e266">LOW</span> — Calm market, low VIX, stable flows<br><span style="color:#ffd60a">MODERATE</span> — Normal volatility, mixed signals<br><span style="color:#ff9f0a">HIGH</span> — Elevated VIX, FII selling, uncertainty<br><span style="color:#ffb4ab">VERY HIGH</span> — Extreme fear, VIX &gt;25, heavy FII outflows</div><div style="margin-top:4px;font-size:8px;color:#636366"><b style="color:#d0c6ab">Sentiment:</b><br><span style="color:#47e266">Risk On</span> — Appetite for equities/EM, bullish<br><span style="color:#ffb4ab">Risk Off</span> — Flight to safe havens (gold/bonds/USD)<br><span style="color:#ffd60a">Mixed</span> — Conflicting global signals</div></div></span>
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="mi-ts"></span>
@@ -732,7 +732,7 @@ tailwind.config = {
           <!-- ═══ COLUMN 1: News + Breadth ═══ -->
           <div class="space-y-4">
             <!-- CARD 1: Live Market News (collapsible) -->
-            <section class="dash-card bg-[#1c1b1b] rounded-xl overflow-hidden" id="news-card">
+            <section class="dash-card bg-[#1c1b1b] rounded-xl" id="news-card">
               <div class="dash-card-header" onclick="toggleDashCard(this)">
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">newspaper</span>
@@ -784,7 +784,7 @@ tailwind.config = {
           <!-- ═══ COLUMN 2: Flows & Macros + Health ═══ -->
           <div class="space-y-4">
             <!-- CARD 2: Flows & Macros (collapsible) -->
-            <section class="dash-card bg-[#1c1b1b] rounded-xl overflow-hidden">
+            <section class="dash-card bg-[#1c1b1b] rounded-xl">
               <div class="dash-card-header" onclick="toggleDashCard(this)">
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">swap_vert</span>
@@ -841,7 +841,7 @@ tailwind.config = {
           <!-- ═══ COLUMN 3: Economic Calendar + Pulse ═══ -->
           <div class="space-y-4">
             <!-- CARD 3: Economic Calendar (collapsible) -->
-            <section class="dash-card bg-[#1c1b1b] rounded-xl overflow-hidden">
+            <section class="dash-card bg-[#1c1b1b] rounded-xl">
               <div class="dash-card-header" onclick="toggleDashCard(this)">
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">event</span>
