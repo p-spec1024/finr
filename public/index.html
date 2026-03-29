@@ -511,7 +511,7 @@ tailwind.config = {
                 <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">trending_up</span>
                 <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Intelligence</h3>
               </div>
-              <button class="text-[9px] font-mono text-[#d0c6ab] px-2 py-1 rounded border border-[#4d4632] hover:text-[#ffd60a] hover:border-[#ffd60a] transition-colors active:scale-95" onclick="loadMarketPrediction()" id="pred-refresh">
+              <button class="text-[9px] font-mono text-[#d0c6ab] px-2 py-1 rounded border border-[#4d4632] hover:text-[#ffd60a] hover:border-[#ffd60a] transition-colors active:scale-95" onclick="loadMarketPrediction(); loadNextSession()" id="pred-refresh">
                 <span class="material-symbols-outlined text-xs align-middle">refresh</span> Refresh
               </button>
             </div>
@@ -523,7 +523,7 @@ tailwind.config = {
                 </div>
                 <div class="flex-1">
                   <div class="flex items-center gap-1.5">
-                    <span class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider">Today's Behavior</span>
+                    <span class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider" id="pred-today-title">Today's Behavior</span>
                     <span class="material-symbols-outlined text-[#636366] transition-transform" style="font-size:12px" id="pred-detail-chevron">expand_more</span>
                   </div>
                   <div class="text-sm font-bold text-[#e5e2e1] font-headline" id="pred-today-label">Analysing...</div>
@@ -545,8 +545,14 @@ tailwind.config = {
               <div class="text-[9px] font-bold text-[#ffd60a] uppercase font-mono tracking-wider mb-1">AI Reasoning</div>
               <p class="text-[10px] text-[#d0c6ab] leading-relaxed" id="pred-detail-reasoning">Analysis loading...</p>
             </div>
-            <!-- Divider + Next Session Outlook (clickable to expand like Today's Behavior) -->
+            <!-- Divider + Next Session Outlook (independent section) -->
             <div class="h-px bg-[#353534] mb-3"></div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider">Next Session Outlook</span>
+              <button class="text-[9px] font-mono text-[#d0c6ab] px-2 py-0.5 rounded border border-[#4d4632] hover:text-[#47e266] hover:border-[#47e266] transition-colors active:scale-95" onclick="loadNextSession(true)" id="next-refresh">
+                <span class="material-symbols-outlined text-xs align-middle">refresh</span>
+              </button>
+            </div>
             <div id="pred-next-wrapper">
               <div class="cursor-pointer rounded-lg hover:bg-[#353534]/20 transition-colors -mx-1 px-1" onclick="toggleNextDetail()">
                 <div class="flex items-center gap-3 mb-1" id="pred-next">
@@ -555,11 +561,11 @@ tailwind.config = {
                   </div>
                   <div class="flex-1">
                     <div class="flex items-center gap-1.5">
-                      <span class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider">Next Session Outlook</span>
+                      <span class="text-[10px] font-bold text-[#e5e2e1]" id="pred-next-opening">--</span>
                       <span class="material-symbols-outlined text-[#636366] transition-transform" style="font-size:12px" id="pred-next-chevron">expand_more</span>
                     </div>
-                    <div class="text-sm font-bold text-[#e5e2e1] font-headline" id="pred-next-label">Waiting...</div>
-                    <div class="text-[10px] text-[#d0c6ab] line-clamp-2 leading-tight mt-0.5" id="pred-next-detail">Available after market analysis</div>
+                    <div class="text-sm font-bold text-[#e5e2e1] font-headline" id="pred-next-label">Loading...</div>
+                    <div class="text-[10px] text-[#d0c6ab] line-clamp-2 leading-tight mt-0.5" id="pred-next-detail">Fetching next session outlook...</div>
                   </div>
                   <div class="text-right">
                     <div class="text-lg font-bold font-headline tnum" id="pred-next-conf" style="color:#47e266">--%</div>
@@ -567,15 +573,70 @@ tailwind.config = {
                   </div>
                 </div>
               </div>
+              <!-- Gift Nifty + Risk + Sentiment row -->
+              <div class="flex items-center gap-2 flex-wrap mt-2 mb-2" id="pred-next-badges" style="display:none">
+                <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono" id="pred-next-gift-badge">Gift Nifty: --</span>
+                <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono" id="pred-next-risk-badge">Risk: --</span>
+                <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono" id="pred-next-sentiment-badge">--</span>
+              </div>
+              <!-- Nifty Range bar -->
+              <div class="hidden bg-[#0e0e0e] rounded-lg p-2.5 mb-2" id="pred-next-ranges">
+                <div class="flex justify-between items-center">
+                  <div class="text-center flex-1">
+                    <div class="text-[8px] text-[#636366] font-mono uppercase">Nifty Low</div>
+                    <div class="text-xs font-bold font-mono text-[#47e266]" id="pred-next-nifty-low">--</div>
+                  </div>
+                  <div class="text-[#636366] text-[8px]">→</div>
+                  <div class="text-center flex-1">
+                    <div class="text-[8px] text-[#636366] font-mono uppercase">Nifty High</div>
+                    <div class="text-xs font-bold font-mono text-[#ffb4ab]" id="pred-next-nifty-high">--</div>
+                  </div>
+                  <div class="text-[#636366] text-[8px]">|</div>
+                  <div class="text-center flex-1">
+                    <div class="text-[8px] text-[#636366] font-mono uppercase">BN Low</div>
+                    <div class="text-xs font-bold font-mono text-[#47e266]" id="pred-next-bn-low">--</div>
+                  </div>
+                  <div class="text-[#636366] text-[8px]">→</div>
+                  <div class="text-center flex-1">
+                    <div class="text-[8px] text-[#636366] font-mono uppercase">BN High</div>
+                    <div class="text-xs font-bold font-mono text-[#ffb4ab]" id="pred-next-bn-high">--</div>
+                  </div>
+                </div>
+              </div>
               <!-- Expandable detail card for next session -->
               <div id="pred-next-detail-card" class="hidden mb-3 bg-[#0e0e0e] rounded-lg p-3 mt-2 space-y-2" style="animation:fu .2s ease">
-                <div class="text-[9px] font-bold text-[#ffd60a] uppercase font-mono tracking-wider mb-1">Key Catalysts</div>
-                <div id="pred-next-catalysts" class="flex flex-wrap gap-1.5">
-                  <span class="text-[9px] text-[#636366] font-mono">Loading factors...</span>
+                <!-- Key Drivers -->
+                <div class="text-[9px] font-bold text-[#ffd60a] uppercase font-mono tracking-wider mb-1">Key Drivers</div>
+                <div id="pred-next-drivers" class="space-y-1">
+                  <span class="text-[9px] text-[#636366] font-mono">Loading...</span>
                 </div>
                 <div class="h-px bg-[#353534] my-2"></div>
-                <div class="text-[9px] font-bold text-[#ffd60a] uppercase font-mono tracking-wider mb-1">AI Reasoning</div>
-                <p class="text-[10px] text-[#d0c6ab] leading-relaxed" id="pred-next-reasoning">Analysis loading...</p>
+                <!-- Overnight Developments -->
+                <div class="text-[9px] font-bold text-[#ffd60a] uppercase font-mono tracking-wider mb-1">Overnight Developments</div>
+                <div id="pred-next-overnight" class="space-y-1">
+                  <span class="text-[9px] text-[#636366] font-mono">Loading...</span>
+                </div>
+                <div class="h-px bg-[#353534] my-2"></div>
+                <!-- Sector Outlook -->
+                <div class="text-[9px] font-bold text-[#ffd60a] uppercase font-mono tracking-wider mb-1">Sector Outlook</div>
+                <div id="pred-next-sectors" class="flex flex-wrap gap-1.5">
+                  <span class="text-[9px] text-[#636366] font-mono">Loading...</span>
+                </div>
+                <div class="h-px bg-[#353534] my-2"></div>
+                <!-- Trading Strategy -->
+                <div class="text-[9px] font-bold text-[#ffd60a] uppercase font-mono tracking-wider mb-1">Trading Strategy</div>
+                <p class="text-[10px] text-[#d0c6ab] leading-relaxed" id="pred-next-strategy">Loading...</p>
+                <div class="h-px bg-[#353534] my-2"></div>
+                <!-- Global Snapshot -->
+                <div class="text-[9px] font-bold text-[#ffd60a] uppercase font-mono tracking-wider mb-1">Global Markets</div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1" id="pred-next-globals">
+                  <span class="text-[9px] text-[#636366] font-mono">Loading...</span>
+                </div>
+                <!-- Grounded badge -->
+                <div class="flex items-center gap-1 mt-2 hidden" id="pred-next-grounded">
+                  <span class="material-symbols-outlined text-[#47e266] text-xs">verified</span>
+                  <span class="text-[8px] font-mono text-[#47e266] uppercase tracking-wider">Grounded with Google Search</span>
+                </div>
               </div>
             </div>
             <!-- Key factors -->
@@ -1703,6 +1764,7 @@ function refreshAll() {
   renderHomeFiiDii();
   fetchGlobalMarkets();
   loadMarketPrediction();
+  loadNextSession();
   setTimeout(()=>{
     toast('Data refreshed at ' + formatIST('short'));
   },800);
@@ -3349,19 +3411,16 @@ async function loadScreener(force = false) {
   try {
     const d = await fetch('/api/screener?' + params.toString()).then(r => r.json());
 
-    if (d.marketClosed && !d.stocks?.length) {
-      el.innerHTML = `<div class="bg-[#1c1c1e] rounded-xl p-6 text-center"><span class="material-symbols-outlined text-3xl text-[#636366] mb-2">schedule</span><p class="text-sm font-bold text-[#e5e2e1] mb-1">Market Closed</p><p class="text-xs text-[#636366]">Screener data available during market hours (9:15 AM – 3:30 PM IST)</p>${d.nextOpen ? `<p class="text-[10px] text-[#636366] mt-2 font-mono">Next open: ${new Date(d.nextOpen).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', weekday:'short', hour:'2-digit', minute:'2-digit'})}</p>` : ''}</div>`;
+    if (d.marketClosed) {
+      el.innerHTML = `<div class="bg-[#1c1c1e] rounded-xl p-6 text-center"><span class="material-symbols-outlined text-3xl text-[#636366] mb-2">schedule</span><p class="text-sm font-bold text-[#e5e2e1] mb-1">Market Closed</p><p class="text-xs text-[#636366]">Screener is available during market hours (9:15 AM – 3:30 PM IST)</p>${d.nextOpen ? `<p class="text-[10px] text-[#636366] mt-2 font-mono">Next open: ${new Date(d.nextOpen).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', weekday:'short', hour:'2-digit', minute:'2-digit'})}</p>` : ''}</div>`;
+      document.getElementById('screener-ts').textContent = '';
       return;
     }
 
-    // Update timestamp
+    // Update timestamp (always live during market hours)
     const tsEl = document.getElementById('screener-ts');
     if (tsEl) {
-      if (d.stale && d.lastUpdated) {
-        tsEl.textContent = new Date(d.lastUpdated).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short'}) + ' (cached)';
-      } else {
-        tsEl.textContent = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit'}) + ' (live)';
-      }
+      tsEl.textContent = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit'}) + ' (live)';
     }
 
     // Update count
@@ -4883,51 +4942,84 @@ async function fetchGlobalMarkets() {
 }
 
 // ══════════════════════════════════════════════════════════
-// MARKET PREDICTION — Fetch and render AI market analysis
+// TODAY'S BEHAVIOUR — Fetch and render from /api/market-prediction
+// Handles: live data, post-market cache, promoted pre-market, no-data states
 // ══════════════════════════════════════════════════════════
+const BEHAVIOR_MAP = {
+  'STRONG_UPTREND': {icon:'trending_up', color:'#47e266', bg:'rgba(71,226,102,0.1)'},
+  'UPTREND': {icon:'trending_up', color:'#47e266', bg:'rgba(71,226,102,0.1)'},
+  'SIDEWAYS': {icon:'trending_flat', color:'#ffd60a', bg:'rgba(255,214,10,0.1)'},
+  'VOLATILE': {icon:'bolt', color:'#ff9f0a', bg:'rgba(255,159,10,0.1)'},
+  'DOWNTREND': {icon:'trending_down', color:'#ffb4ab', bg:'rgba(255,180,171,0.1)'},
+  'STRONG_DOWNTREND': {icon:'trending_down', color:'#ffb4ab', bg:'rgba(255,180,171,0.1)'}
+};
+
+function setTodayEmpty(label, detail, icon) {
+  const labelEl = document.getElementById('pred-today-label');
+  const confEl = document.getElementById('pred-today-conf');
+  const iconEl = document.getElementById('pred-today-icon');
+  labelEl.textContent = label; labelEl.style.color = '#636366';
+  document.getElementById('pred-today-detail').textContent = detail;
+  confEl.textContent = '--%'; confEl.style.color = '#636366';
+  iconEl.style.background = 'rgba(99,99,102,0.1)';
+  iconEl.innerHTML = `<span class="material-symbols-outlined" style="font-size:24px;color:#636366">${icon}</span>`;
+  window._lastPrediction = null;
+}
+
 async function loadMarketPrediction() {
-  const card = document.getElementById('market-prediction-card');
-  if (!card) return;
+  if (!document.getElementById('market-prediction-card')) return;
   document.getElementById('pred-today-label').textContent = 'Analysing...';
-  document.getElementById('pred-next-label').textContent = 'Loading...';
+
   try {
     const d = await fetch('/api/market-prediction').then(r => r.json());
-    // Market closed with NO cached data — show closed state for both sections
-    if (d.error && !d.todayBehavior) {
-      document.getElementById('pred-today-label').textContent = 'Market Closed';
-      document.getElementById('pred-today-label').style.color = '#636366';
-      document.getElementById('pred-today-detail').textContent = d.error;
-      document.getElementById('pred-today-conf').textContent = '--%';
-      document.getElementById('pred-today-conf').style.color = '#636366';
-      const todayIcon = document.getElementById('pred-today-icon');
-      todayIcon.style.background = 'rgba(99,99,102,0.1)';
-      todayIcon.innerHTML = '<span class="material-symbols-outlined" style="font-size:24px;color:#636366">bedtime</span>';
-      // Next session also closed
-      document.getElementById('pred-next-label').textContent = 'Market Closed';
-      document.getElementById('pred-next-label').style.color = '#636366';
-      document.getElementById('pred-next-detail').textContent = d.nextOpen ? `Next session: ${new Date(d.nextOpen).toLocaleString('en-IN', {weekday:'short', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}` : 'Available during market hours';
-      document.getElementById('pred-next-conf').textContent = '--%';
-      document.getElementById('pred-next-conf').style.color = '#636366';
-      const nextIcon = document.getElementById('pred-next-icon');
-      nextIcon.style.background = 'rgba(99,99,102,0.1)';
-      nextIcon.innerHTML = '<span class="material-symbols-outlined" style="font-size:24px;color:#636366">schedule</span>';
+
+    // No data available (after midnight, no promoted data either)
+    if (d.noDataToday) { setTodayEmpty('Awaiting Market', d.error || "Market hasn't opened yet today", 'bedtime'); return; }
+
+    // Error with no behavior data
+    if (d.error && !d.todayBehavior) { setTodayEmpty('Market Closed', d.error, 'bedtime'); return; }
+
+    // ── PROMOTED state: next-session prediction showing as pre-market probable ──
+    if (d.promoted) {
+      document.getElementById('pred-today-title').textContent = 'Pre-Market Outlook';
+      const tb = BEHAVIOR_MAP[d.todayBehavior] || BEHAVIOR_MAP['SIDEWAYS'];
+      const iconEl = document.getElementById('pred-today-icon');
+      iconEl.style.background = tb.bg;
+      iconEl.innerHTML = `<span class="material-symbols-outlined" style="font-size:24px;color:${tb.color}">${tb.icon}</span>`;
+      document.getElementById('pred-today-label').textContent = (d.todayBehavior || 'SIDEWAYS').replace(/_/g, ' ');
+      document.getElementById('pred-today-label').style.color = tb.color;
+      document.getElementById('pred-today-detail').textContent = (d.todayExplanation || '') + ' [Pre-market outlook]';
+      document.getElementById('pred-today-conf').textContent = (d.todayConfidence || '--') + '%';
+      document.getElementById('pred-today-conf').style.color = tb.color;
+
+      // Show promoted-specific data
+      if (d.keyFactors?.length) {
+        document.getElementById('pred-factors').innerHTML = d.keyFactors.map(f =>
+          `<span class="px-2 py-0.5 rounded bg-[#353534] text-[9px] font-bold text-[#d0c6ab] font-mono">${f}</span>`
+        ).join('');
+      }
+      if (d.suggestedStrategy) {
+        document.getElementById('pred-strategy').classList.remove('hidden');
+        document.getElementById('pred-strategy-text').textContent = d.suggestedStrategy;
+      }
+      if (d.niftySupport || d.niftyResistance) {
+        document.getElementById('pred-levels').classList.remove('hidden');
+        if (d.niftySupport) document.getElementById('pred-support').textContent = Number(d.niftySupport).toLocaleString('en-IN');
+        if (d.niftyResistance) document.getElementById('pred-resistance').textContent = Number(d.niftyResistance).toLocaleString('en-IN');
+      }
+      if (d.grounded) { const gb = document.getElementById('pred-grounded-badge'); gb.classList.remove('hidden'); gb.style.display = 'flex'; }
+      window._lastPrediction = d;
       return;
     }
-    // If stale cached data with market closed, show a stale badge
+
+    // ── LIVE / POST-MARKET data ──
+    document.getElementById('pred-today-title').textContent = "Today's Behavior";
     if (d.marketClosed && d.stale && d.lastUpdated) {
       const staleTime = new Date(d.lastUpdated).toLocaleString('en-IN', {hour:'2-digit', minute:'2-digit', day:'numeric', month:'short'});
       document.getElementById('pred-today-detail').dataset.staleSuffix = ` [Last updated: ${staleTime}]`;
     }
-    // Today's behavior
-    const behaviorMap = {
-      'STRONG_UPTREND': {icon:'trending_up', color:'#47e266', bg:'rgba(71,226,102,0.1)'},
-      'UPTREND': {icon:'trending_up', color:'#47e266', bg:'rgba(71,226,102,0.1)'},
-      'SIDEWAYS': {icon:'trending_flat', color:'#ffd60a', bg:'rgba(255,214,10,0.1)'},
-      'VOLATILE': {icon:'bolt', color:'#ff9f0a', bg:'rgba(255,159,10,0.1)'},
-      'DOWNTREND': {icon:'trending_down', color:'#ffb4ab', bg:'rgba(255,180,171,0.1)'},
-      'STRONG_DOWNTREND': {icon:'trending_down', color:'#ffb4ab', bg:'rgba(255,180,171,0.1)'}
-    };
-    const tb = behaviorMap[d.todayBehavior] || behaviorMap['SIDEWAYS'];
+
+    const tb = BEHAVIOR_MAP[d.todayBehavior] || BEHAVIOR_MAP['SIDEWAYS'];
     const iconEl = document.getElementById('pred-today-icon');
     iconEl.style.background = tb.bg;
     iconEl.innerHTML = `<span class="material-symbols-outlined" style="font-size:24px;color:${tb.color}">${tb.icon}</span>`;
@@ -4938,91 +5030,182 @@ async function loadMarketPrediction() {
     document.getElementById('pred-today-conf').textContent = (d.todayConfidence || '--') + '%';
     document.getElementById('pred-today-conf').style.color = tb.color;
 
-    // Next session
-    const outlookMap = {
-      'BULLISH': {icon:'arrow_circle_up', color:'#47e266', bg:'rgba(71,226,102,0.1)'},
-      'CAUTIOUSLY_BULLISH': {icon:'trending_up', color:'#47e266', bg:'rgba(71,226,102,0.08)'},
-      'NEUTRAL': {icon:'remove_circle', color:'#ffd60a', bg:'rgba(255,214,10,0.1)'},
-      'CAUTIOUSLY_BEARISH': {icon:'trending_down', color:'#ffb4ab', bg:'rgba(255,180,171,0.08)'},
-      'BEARISH': {icon:'arrow_circle_down', color:'#ffb4ab', bg:'rgba(255,180,171,0.1)'}
-    };
-    const nb = outlookMap[d.nextSessionOutlook] || outlookMap['NEUTRAL'];
-    const nextIcon = document.getElementById('pred-next-icon');
-    nextIcon.style.background = nb.bg;
-    nextIcon.innerHTML = `<span class="material-symbols-outlined" style="font-size:24px;color:${nb.color}">${nb.icon}</span>`;
-    document.getElementById('pred-next-label').textContent = (d.nextSessionOutlook || 'UNKNOWN').replace(/_/g, ' ');
-    document.getElementById('pred-next-label').style.color = nb.color;
-    document.getElementById('pred-next-detail').textContent = d.nextSessionExplanation || '';
-    document.getElementById('pred-next-conf').textContent = (d.nextSessionConfidence || '--') + '%';
-    document.getElementById('pred-next-conf').style.color = nb.color;
-
-    // Key factors
-    const factorsEl = document.getElementById('pred-factors');
-    if (d.keyFactors && d.keyFactors.length) {
-      factorsEl.innerHTML = d.keyFactors.map(f => `<span class="px-2 py-0.5 rounded bg-[#353534] text-[9px] font-bold text-[#d0c6ab] font-mono">${f}</span>`).join('');
+    if (d.keyFactors?.length) {
+      document.getElementById('pred-factors').innerHTML = d.keyFactors.map(f =>
+        `<span class="px-2 py-0.5 rounded bg-[#353534] text-[9px] font-bold text-[#d0c6ab] font-mono">${f}</span>`
+      ).join('');
     }
-
-    // Strategy
     if (d.suggestedStrategy) {
-      const stratEl = document.getElementById('pred-strategy');
-      stratEl.classList.remove('hidden');
+      document.getElementById('pred-strategy').classList.remove('hidden');
       document.getElementById('pred-strategy-text').textContent = d.suggestedStrategy;
     }
-
-    // Grounded badge
-    if (d.grounded) {
-      const gb = document.getElementById('pred-grounded-badge');
-      gb.classList.remove('hidden');
-      gb.style.display = 'flex';
-    }
-
-    // Data source count
+    if (d.grounded) { const gb = document.getElementById('pred-grounded-badge'); gb.classList.remove('hidden'); gb.style.display = 'flex'; }
     if (d._dataSources) {
       const liveCount = Object.values(d._dataSources).filter(v => v !== 'Unavailable').length;
-      const totalCount = Object.keys(d._dataSources).length;
-      const srcEl = document.getElementById('pred-source-count');
-      srcEl.classList.remove('hidden');
-      document.getElementById('pred-source-text').textContent = `${liveCount}/${totalCount} data feeds live`;
+      document.getElementById('pred-source-count').classList.remove('hidden');
+      document.getElementById('pred-source-text').textContent = `${liveCount}/${Object.keys(d._dataSources).length} data feeds live`;
     }
 
-    // Nifty levels (support, resistance, PCR, max pain)
-    const levelsEl = document.getElementById('pred-levels');
+    // Nifty levels
     const snap = d._dataSnapshot || {};
     if (d.niftySupport || d.niftyResistance || snap.niftyPCR) {
-      levelsEl.classList.remove('hidden');
+      document.getElementById('pred-levels').classList.remove('hidden');
       if (d.niftySupport) document.getElementById('pred-support').textContent = Number(d.niftySupport).toLocaleString('en-IN');
       if (d.niftyResistance) document.getElementById('pred-resistance').textContent = Number(d.niftyResistance).toLocaleString('en-IN');
-      if (snap.niftyPCR) {
-        const pcrEl = document.getElementById('pred-pcr');
-        pcrEl.textContent = snap.niftyPCR;
-        pcrEl.style.color = snap.niftyPCR > 1.2 ? '#47e266' : snap.niftyPCR < 0.7 ? '#ffb4ab' : '#ffd60a';
-      }
+      if (snap.niftyPCR) { const p = document.getElementById('pred-pcr'); p.textContent = snap.niftyPCR; p.style.color = snap.niftyPCR > 1.2 ? '#47e266' : snap.niftyPCR < 0.7 ? '#ffb4ab' : '#ffd60a'; }
       if (snap.niftyMaxPain) document.getElementById('pred-maxpain').textContent = Number(snap.niftyMaxPain).toLocaleString('en-IN');
     }
-
-    // Active macro events
-    if (d._activeEvents && d._activeEvents.length) {
-      const evEl = document.getElementById('pred-events');
-      evEl.classList.remove('hidden');
+    if (d._activeEvents?.length) {
+      document.getElementById('pred-events').classList.remove('hidden');
       document.getElementById('pred-events-list').innerHTML = d._activeEvents.map(e =>
         `<span class="px-2 py-0.5 rounded bg-[#ff453a]/10 border border-[#ff453a]/20 text-[9px] font-bold text-[#ffb4ab] font-mono">${e.icon} ${e.title}</span>`
       ).join('');
     }
+    if (d._breadthConflict) document.getElementById('pred-conflict').classList.remove('hidden');
 
-    // Breadth conflict warning
-    if (d._breadthConflict) {
-      document.getElementById('pred-conflict').classList.remove('hidden');
-    }
-
-    // Store full prediction data for detail toggles
     window._lastPrediction = d;
-
   } catch(e) {
-    document.getElementById('pred-today-label').textContent = 'Error';
-    document.getElementById('pred-today-detail').textContent = 'Could not load market analysis';
+    setTodayEmpty('Error', 'Could not load market analysis', 'error');
     console.error('Market prediction error:', e);
   }
 }
+
+// ══════════════════════════════════════════════════════════
+// NEXT SESSION OUTLOOK — Independent fetch from /api/next-session
+// Shows prediction for next trading day with predictedDate label
+// ══════════════════════════════════════════════════════════
+const OUTLOOK_MAP = {
+  'BULLISH': {icon:'arrow_circle_up', color:'#47e266', bg:'rgba(71,226,102,0.1)'},
+  'CAUTIOUSLY_BULLISH': {icon:'trending_up', color:'#47e266', bg:'rgba(71,226,102,0.08)'},
+  'NEUTRAL': {icon:'remove_circle', color:'#ffd60a', bg:'rgba(255,214,10,0.1)'},
+  'CAUTIOUSLY_BEARISH': {icon:'trending_down', color:'#ffb4ab', bg:'rgba(255,180,171,0.08)'},
+  'BEARISH': {icon:'arrow_circle_down', color:'#ffb4ab', bg:'rgba(255,180,171,0.1)'}
+};
+
+function setNextEmpty(label, detail, icon) {
+  const el = (id) => document.getElementById(id);
+  el('pred-next-label').textContent = label; el('pred-next-label').style.color = '#636366';
+  el('pred-next-detail').textContent = detail;
+  el('pred-next-conf').textContent = '--%'; el('pred-next-conf').style.color = '#636366';
+  el('pred-next-icon').style.background = 'rgba(99,99,102,0.1)';
+  el('pred-next-icon').innerHTML = `<span class="material-symbols-outlined" style="font-size:24px;color:#636366">${icon}</span>`;
+  el('pred-next-opening').textContent = '';
+  el('pred-next-badges').style.display = 'none';
+  el('pred-next-ranges').classList.add('hidden');
+  window._lastNextSession = null;
+}
+
+async function loadNextSession(force) {
+  if (!document.getElementById('pred-next-label')) return;
+  document.getElementById('pred-next-label').textContent = 'Analysing...';
+  document.getElementById('pred-next-label').style.color = '#e5e2e1';
+  document.getElementById('pred-next-detail').textContent = 'Fetching next session outlook...';
+
+  try {
+    const d = await fetch(force ? '/api/next-session?force=true' : '/api/next-session').then(r => r.json());
+
+    if (d.unavailable) { setNextEmpty('Sleeping', d.reason || 'Refreshes after 6 AM IST', 'bedtime'); return; }
+    if (d.inactive) { setNextEmpty('Pending', d.reason || 'Will update after 3:30 PM IST', 'schedule'); return; }
+    if (d.error && !d.outlook) { setNextEmpty('Unavailable', d.error, 'error'); return; }
+
+    // ── Render outlook ──
+    const nb = OUTLOOK_MAP[d.outlook] || OUTLOOK_MAP['NEUTRAL'];
+    const el = (id) => document.getElementById(id);
+    el('pred-next-icon').style.background = nb.bg;
+    el('pred-next-icon').innerHTML = `<span class="material-symbols-outlined" style="font-size:24px;color:${nb.color}">${nb.icon}</span>`;
+    el('pred-next-label').textContent = (d.outlook || 'NEUTRAL').replace(/_/g, ' ');
+    el('pred-next-label').style.color = nb.color;
+    el('pred-next-detail').textContent = d.explanation || '';
+    el('pred-next-conf').textContent = (d.confidence || '--') + '%';
+    el('pred-next-conf').style.color = nb.color;
+
+    // Predicted date + opening expectation
+    const openMap = {'GAP_UP':'Gap Up','GAP_DOWN':'Gap Down','FLAT_OPEN':'Flat Open'};
+    const openColor = {'GAP_UP':'#47e266','GAP_DOWN':'#ffb4ab','FLAT_OPEN':'#ffd60a'};
+    const dateLabel = d.predictedDate ? new Date(d.predictedDate + 'T00:00:00').toLocaleDateString('en-IN', {weekday:'short', day:'numeric', month:'short'}) : '';
+    el('pred-next-opening').textContent = (dateLabel ? dateLabel + ' · ' : '') + (openMap[d.openingExpectation] || '');
+    el('pred-next-opening').style.color = openColor[d.openingExpectation] || '#e5e2e1';
+
+    // Badges: Gift Nifty + Risk + Sentiment
+    el('pred-next-badges').style.display = 'flex';
+    const giftBadge = el('pred-next-gift-badge');
+    if (d.giftNifty?.level) {
+      giftBadge.textContent = `Gift Nifty: ${Number(d.giftNifty.level).toLocaleString('en-IN')} (${d.giftNifty.change || '--'})`;
+      giftBadge.className = 'px-2 py-0.5 rounded text-[9px] font-bold font-mono bg-[#47e266]/10 text-[#47e266]';
+    } else {
+      giftBadge.textContent = 'Gift Nifty: --';
+      giftBadge.className = 'px-2 py-0.5 rounded text-[9px] font-bold font-mono bg-[#353534] text-[#636366]';
+    }
+
+    const riskColors = {'LOW':'#47e266','MODERATE':'#ffd60a','HIGH':'#ff9f0a','VERY_HIGH':'#ffb4ab'};
+    const rc = riskColors[d.riskLevel] || '#ffd60a';
+    el('pred-next-risk-badge').textContent = `Risk: ${(d.riskLevel || 'MODERATE').replace(/_/g, ' ')}`;
+    el('pred-next-risk-badge').className = 'px-2 py-0.5 rounded text-[9px] font-bold font-mono';
+    el('pred-next-risk-badge').style.cssText = `background:${rc}15;color:${rc}`;
+
+    const sentLabels = {'RISK_ON':'Risk On','RISK_OFF':'Risk Off','MIXED':'Mixed'};
+    const sentColors = {'RISK_ON':'#47e266','RISK_OFF':'#ffb4ab','MIXED':'#ffd60a'};
+    const sc = sentColors[d.globalSentiment] || '#ffd60a';
+    el('pred-next-sentiment-badge').textContent = sentLabels[d.globalSentiment] || 'Mixed';
+    el('pred-next-sentiment-badge').className = 'px-2 py-0.5 rounded text-[9px] font-bold font-mono';
+    el('pred-next-sentiment-badge').style.cssText = `background:${sc}15;color:${sc}`;
+
+    // Nifty / BankNifty range
+    const rangesEl = el('pred-next-ranges');
+    if (d.niftyRange && (d.niftyRange.low || d.niftyRange.high)) {
+      rangesEl.classList.remove('hidden');
+      el('pred-next-nifty-low').textContent = d.niftyRange.low ? Number(d.niftyRange.low).toLocaleString('en-IN') : '--';
+      el('pred-next-nifty-high').textContent = d.niftyRange.high ? Number(d.niftyRange.high).toLocaleString('en-IN') : '--';
+      el('pred-next-bn-low').textContent = d.bankNiftyRange?.low ? Number(d.bankNiftyRange.low).toLocaleString('en-IN') : '--';
+      el('pred-next-bn-high').textContent = d.bankNiftyRange?.high ? Number(d.bankNiftyRange.high).toLocaleString('en-IN') : '--';
+    } else { rangesEl.classList.add('hidden'); }
+
+    // Stale indicator
+    if (d.stale && d._generatedAt) {
+      const genTime = new Date(d._generatedAt).toLocaleString('en-IN', {hour:'2-digit', minute:'2-digit', day:'numeric', month:'short'});
+      el('pred-next-detail').textContent = (d.explanation || '') + ` [Updated: ${genTime}]`;
+    }
+
+    window._lastNextSession = d;
+
+    // Schedule next auto-refresh using backend-provided interval
+    // _refreshMs is null when next-session is inactive (12AM-3:30PM) — don't override existing timer
+    if (d._refreshMs) scheduleMarketIntelRefresh(d._refreshMs);
+
+  } catch(e) {
+    setNextEmpty('Error', 'Could not load next session outlook', 'error');
+    console.error('Next session error:', e);
+    // Retry in 5 min on error
+    scheduleMarketIntelRefresh(5 * 60 * 1000);
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// MARKET INTELLIGENCE AUTO-REFRESH — Adaptive intervals
+// 12AM-6AM: 60min | 6AM-8:45AM: 30min | 8:45-9:15AM: 10min | 9:15AM+: 15min
+// Backend sends _refreshMs — frontend uses it for next timer
+// ══════════════════════════════════════════════════════════
+let _miRefreshTimer = null;
+function scheduleMarketIntelRefresh(ms) {
+  if (_miRefreshTimer) clearTimeout(_miRefreshTimer);
+  if (!ms || ms < 60000) return; // safety: minimum 1 min
+  _miRefreshTimer = setTimeout(async () => {
+    // If market is open, loadMarketPrediction handles today's data
+    // loadNextSession always refreshes the next-session prediction
+    // Both calls also trigger the promoted flow when applicable
+    await Promise.all([loadMarketPrediction(), loadNextSession()]);
+  }, ms);
+}
+
+// Also schedule from loadMarketPrediction when promoted data has _refreshMs
+const _origLoadMarketPrediction = loadMarketPrediction;
+loadMarketPrediction = async function() {
+  await _origLoadMarketPrediction();
+  const d = window._lastPrediction;
+  if (d?.promoted && d?._refreshMs && !window._lastNextSession?._refreshMs) {
+    scheduleMarketIntelRefresh(d._refreshMs);
+  }
+};
 
 // ══════════════════════════════════════════════════════════
 // THEME TOGGLE (placeholder — light mode UI to be designed later)
@@ -5427,17 +5610,68 @@ function toggleNextDetail() {
   if (nextDetailOpen) {
     card.classList.remove('hidden');
     chevron.style.transform = 'rotate(180deg)';
-    // Populate catalysts from key factors
-    const catalystsEl = document.getElementById('pred-next-catalysts');
-    const factorsEl = document.getElementById('pred-factors');
-    if (factorsEl && factorsEl.innerHTML.trim()) {
-      catalystsEl.innerHTML = factorsEl.innerHTML;
-    } else {
-      catalystsEl.innerHTML = '<span class="text-[9px] text-[#636366] font-mono">No factors available yet</span>';
+    const d = window._lastNextSession;
+    if (!d) {
+      document.getElementById('pred-next-drivers').innerHTML = '<span class="text-[9px] text-[#636366] font-mono">No data available yet</span>';
+      return;
     }
-    // Populate reasoning from next session detail text
-    const reasoning = document.getElementById('pred-next-detail')?.textContent || 'No analysis available yet.';
-    document.getElementById('pred-next-reasoning').textContent = reasoning;
+
+    // Key Drivers
+    const driversEl = document.getElementById('pred-next-drivers');
+    if (d.keyDrivers && d.keyDrivers.length) {
+      driversEl.innerHTML = d.keyDrivers.map((dr, i) =>
+        `<div class="flex items-start gap-1.5"><span class="text-[9px] font-bold text-[#ffd60a] font-mono mt-0.5">${i+1}.</span><span class="text-[10px] text-[#d0c6ab] leading-tight">${dr}</span></div>`
+      ).join('');
+    } else {
+      driversEl.innerHTML = '<span class="text-[9px] text-[#636366] font-mono">No key drivers identified</span>';
+    }
+
+    // Overnight Developments
+    const overnightEl = document.getElementById('pred-next-overnight');
+    if (d.overnightDevelopments && d.overnightDevelopments.length) {
+      overnightEl.innerHTML = d.overnightDevelopments.map(dev =>
+        `<div class="flex items-start gap-1.5"><span class="text-[9px] text-[#0a84ff]">•</span><span class="text-[10px] text-[#d0c6ab] leading-tight">${dev}</span></div>`
+      ).join('');
+    } else {
+      overnightEl.innerHTML = '<span class="text-[9px] text-[#636366] font-mono">No overnight developments</span>';
+    }
+
+    // Sector Outlook
+    const sectorsEl = document.getElementById('pred-next-sectors');
+    const so = d.sectorOutlook || {};
+    let sectorHtml = '';
+    if (so.bullish && so.bullish.length) {
+      sectorHtml += so.bullish.map(s => `<span class="px-2 py-0.5 rounded bg-[#47e266]/10 text-[9px] font-bold text-[#47e266] font-mono">${s}</span>`).join('');
+    }
+    if (so.bearish && so.bearish.length) {
+      sectorHtml += so.bearish.map(s => `<span class="px-2 py-0.5 rounded bg-[#ffb4ab]/10 text-[9px] font-bold text-[#ffb4ab] font-mono">${s}</span>`).join('');
+    }
+    if (so.neutral && so.neutral.length) {
+      sectorHtml += so.neutral.map(s => `<span class="px-2 py-0.5 rounded bg-[#353534] text-[9px] font-bold text-[#d0c6ab] font-mono">${s}</span>`).join('');
+    }
+    sectorsEl.innerHTML = sectorHtml || '<span class="text-[9px] text-[#636366] font-mono">No sector data</span>';
+
+    // Trading Strategy
+    document.getElementById('pred-next-strategy').textContent = d.tradingStrategy || 'No strategy available';
+
+    // Global Markets Snapshot
+    const globalsEl = document.getElementById('pred-next-globals');
+    const gs = d._globalSnapshot || {};
+    const gEntries = Object.entries(gs);
+    if (gEntries.length) {
+      globalsEl.innerHTML = gEntries.map(([sym, v]) => {
+        const pct = v.changePct || 0;
+        const color = pct >= 0 ? '#47e266' : '#ffb4ab';
+        return `<div class="flex justify-between"><span class="text-[9px] text-[#636366] font-mono">${sym}</span><span class="text-[9px] font-mono font-bold" style="color:${color}">${v.price} (${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%)</span></div>`;
+      }).join('');
+    } else {
+      globalsEl.innerHTML = '<span class="text-[9px] text-[#636366] font-mono">No global data</span>';
+    }
+
+    // Grounded badge
+    if (d.grounded) {
+      document.getElementById('pred-next-grounded').classList.remove('hidden');
+    }
   } else {
     card.classList.add('hidden');
     chevron.style.transform = 'rotate(0deg)';
@@ -5475,9 +5709,10 @@ async function initApp() {
     // Update dashboard peek content & pulse chart
     updateNewsPeek(); updateFiiPeek(); updateEventsPeek();
     renderPulseChart('fii-dii');
-    // Fetch global markets and market prediction
+    // Fetch global markets, today's behavior, and next session outlook
     fetchGlobalMarkets();
     loadMarketPrediction();
+    loadNextSession();
     autoShowNextSession();
     // Apply saved desktop layout customizations
     if (window.innerWidth >= 768) applyStoredLayout();

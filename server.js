@@ -1131,229 +1131,399 @@ async function callAI(prompt, opts = {}) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MARKET PREDICTION — Grounded AI analysis of market behavior + next-day outlook
+// MARKET INTELLIGENCE — Two independent cards with seamless 24hr lifecycle
 // ══════════════════════════════════════════════════════════════════════════════
-let marketPredictionCache = { data: null, lastFetch: 0 };
-const PREDICTION_CACHE_MS = 15 * 60 * 1000; // 15 min cache
+//
+//   TODAY'S BEHAVIOUR (/api/market-prediction):
+//     Weekday 12:00 AM → 9:15 AM : Pre-market — web-search AI analysis (adaptive refresh)
+//     Weekday 9:15 AM → 3:30 PM  : LIVE — Upstox/NSE real-time data, 15 min refresh
+//     Weekday 3:30 PM → 11:59 PM : Post-market — cached today's analysis, no refresh
+//     Weekend (Sat/Sun)           : Serves Friday's cached analysis, no AI calls
+//
+//   NEXT SESSION OUTLOOK (/api/next-session):
+//     Weekday 3:30 PM → 11:59 PM : ACTIVE — generates using Twelve Data + web search, 30 min
+//     Weekend (Sat/Sun, all day)  : ACTIVE — keeps updating Monday prediction via web search
+//     Weekday 12:00 AM → 3:30 PM : INACTIVE — no data, no AI calls
+//
+//   MIDNIGHT HANDOFF: Next-session's prediction for D+1 seeds the pre-market card at 12 AM D+1
+//   WEEKEND: Friday cache persists in Today's Behaviour; Next Session stays active predicting Monday
+//
+// ══════════════════════════════════════════════════════════════════════════════
 
+// ── Shared state ──
+let todayCache   = { data: null, lastFetch: 0, dateIST: '' };  // Today's Behaviour
+let preMarketCache = { data: null, lastFetch: 0, dateIST: '' }; // Pre-market analysis
+let nextSessionCache = { data: null, lastFetch: 0, predictedDate: '' };  // Next Session
+
+// ── Shared constants ──
+const LIVE_CACHE_MS = 15 * 60 * 1000;          // 15 min during market hours
+const NEXT_SESSION_CACHE_MS = 30 * 60 * 1000;  // 30 min post-market
+
+// ── Shared helpers ──
+function getISTDateStr() {
+  const ist = getIST();
+  return ist.getUTCFullYear() + '-' + String(ist.getUTCMonth() + 1).padStart(2, '0') + '-' + String(ist.getUTCDate()).padStart(2, '0');
+}
+
+function getNextTradingDate(fromDateStr) {
+  const [y, m, d] = fromDateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  do { dt.setUTCDate(dt.getUTCDate() + 1); } while (dt.getUTCDay() === 0 || dt.getUTCDay() === 6);
+  return dt.getUTCFullYear() + '-' + String(dt.getUTCMonth() + 1).padStart(2, '0') + '-' + String(dt.getUTCDate()).padStart(2, '0');
+}
+
+// Weekend check: Saturday (6) or Sunday (0)
+function isWeekend() { const d = getISTDay(); return d === 0 || d === 6; }
+
+// Pre-market refresh rate: accelerates as market open approaches
+function getPreMarketCacheMs() {
+  const mins = getISTMins();
+  if (mins >= 525) return 10 * 60 * 1000;   // 8:45 AM+ → every 10 min (pre-open rush)
+  if (mins >= 360) return 30 * 60 * 1000;   // 6:00 AM+ → every 30 min (Asia waking)
+  return 60 * 60 * 1000;                     // 12-6 AM  → every 60 min (quiet)
+}
+
+// Shared: parse AI JSON response safely
+function parseAIJson(raw) {
+  const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  try { return JSON.parse(cleaned); } catch (_) {
+    const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
+    if (s >= 0 && e > s) { try { return JSON.parse(cleaned.slice(s, e + 1)); } catch (_) {} }
+  }
+  return {};
+}
+
+// Shared: collect whatever Twelve Data globals are available (works 24/5)
+function getGlobalDataStr() {
+  return Object.values(globalMarkets).map(g =>
+    `${g.name}: ${g.price} (${g.changePct >= 0 ? '+' : ''}${g.changePct}%)`
+  ).join(', ') || '';
+}
+
+// Shared: macro events string
+function getMacroEventsStr() {
+  return getMarketContext().filter(e => e.priority === 'HIGH' || e.priority === 'MEDIUM')
+    .map(e => `[${e.priority}] ${e.title}: ${e.impact}`).join('\n- ') || 'None flagged';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TODAY'S BEHAVIOUR — /api/market-prediction
+// ══════════════════════════════════════════════════════════════════════════════
 app.get('/api/market-prediction', async (req, res) => {
-  // ── Market hours gate ──
-  if (!isMarketOpen()) {
-    if (marketPredictionCache.data) {
-      return res.json(marketClosedResponse({ ...marketPredictionCache.data }, marketPredictionCache.lastFetch));
+  const todayIST = getISTDateStr();
+  const istMins = getISTMins();
+
+  // ── Date roll: invalidate caches from previous IST date ──
+  // Skip invalidation on weekends — Friday's cache must survive until Monday
+  if (!isWeekend() && todayCache.dateIST && todayCache.dateIST !== todayIST) {
+    log('INFO', `Today's behaviour date rolled: ${todayCache.dateIST} → ${todayIST}`);
+    todayCache = { data: null, lastFetch: 0, dateIST: '' };
+    preMarketCache = { data: null, lastFetch: 0, dateIST: '' };
+  }
+
+  // ═══ WEEKEND (Sat/Sun): serve Friday's cached analysis, no AI calls ═══
+  if (isWeekend()) {
+    if (todayCache.data) return res.json(marketClosedResponse({ ...todayCache.data }, todayCache.lastFetch));
+    return res.json({ noDataToday: true, error: 'Market closed for the weekend. Opens Monday 9:15 AM IST' });
+  }
+
+  // ═══ POST-MARKET (3:30 PM → midnight): serve today's cached analysis, no refresh ═══
+  if (istMins > 930 && todayCache.data && todayCache.dateIST === todayIST) {
+    return res.json(marketClosedResponse({ ...todayCache.data }, todayCache.lastFetch));
+  }
+
+  // ═══ MARKET HOURS (9:15 AM → 3:30 PM): live data from Upstox/NSE ═══
+  if (isMarketOpen()) {
+    // Cache check
+    if (todayCache.data && todayCache.dateIST === todayIST
+        && (Date.now() - todayCache.lastFetch) < LIVE_CACHE_MS) {
+      return res.json({ ...todayCache.data, cached: true });
     }
-    return res.json(marketClosedResponse(null));
+    if (!appConfig.geminiKey && !gcpServiceAccount) {
+      return res.json({ error: 'AI not configured', configured: false });
+    }
+
+    try {
+      const nifty = liveIndices['Nifty 50'] || liveIndices['NIFTY50'] || {};
+      const bank = liveIndices['NIFTYBANK'] || liveIndices['Nifty Bank'] || {};
+      const vix = vixData, fii = fiiDiiData;
+      const stocks = Object.values(liveStocks).filter(s => s.price);
+      const adv = stocks.filter(s => s.changePct >= 0).length;
+      const dec = stocks.filter(s => s.changePct < 0).length;
+      const signals = Object.values(signalCache);
+      const avgScore = signals.length ? Math.round(signals.reduce((a, s) => a + (s.score || 0), 0) / signals.length) : 50;
+
+      const dataSources = {
+        nifty: nifty.price ? 'Upstox (live)' : 'Unavailable',
+        bankNifty: bank.price ? 'Upstox (live)' : 'Unavailable',
+        vix: !vix.isDefault ? 'NSE API' : 'Unavailable',
+        fiiDii: !fii.isDefault ? 'NSE API' : 'Unavailable',
+        globals: Object.keys(globalMarkets).length > 0 ? 'Twelve Data' : 'Unavailable',
+        options: optionChainCache.nifty ? 'Upstox Options' : 'Unavailable',
+        signals: signals.length > 0 ? `FINR (${signals.length})` : 'Unavailable'
+      };
+
+      // Options sentiment
+      let optStr = '';
+      if (optionChainCache.nifty) {
+        const nc = optionChainCache.nifty;
+        optStr = `\nOPTIONS: Nifty PCR ${nc.pcr} | Max Pain ${nc.maxPain} | IV ${nc.avgIV}%`;
+        optStr += nc.pcr > 1.2 ? ' → Bullish' : nc.pcr < 0.7 ? ' → Bearish' : ' → Neutral';
+        if (optionChainCache.banknifty) { const bc = optionChainCache.banknifty; optStr += ` | BN PCR ${bc.pcr} Max Pain ${bc.maxPain}`; }
+      }
+
+      // Sector breakdown
+      const sectors = {};
+      for (const st of STOCK_UNIVERSE) { const sig = signalCache[st.symbol]; if (!sig) continue; const s = st.sector || 'Other'; if (!sectors[s]) sectors[s] = []; sectors[s].push(sig.score || 0); }
+      let secStr = '';
+      for (const [s, scores] of Object.entries(sectors)) { if (!scores.length) continue; const avg = Math.round(scores.reduce((a,b)=>a+b,0)/scores.length); secStr += `\n- ${s}: ${avg}/100`; }
+      if (secStr) secStr = '\nSECTOR SCORES:' + secStr;
+
+      const prompt = `You are an elite Indian stock market analyst. Classify TODAY's market behavior using ALL live data below.
+
+LIVE DATA:
+- Nifty: ${nifty.price || 'N/A'} (${nifty.price ? (nifty.changePct>=0?'+':'') + (nifty.changePct||0) + '%' : 'N/A'})
+- Bank Nifty: ${bank.price || 'N/A'} (${bank.price ? (bank.changePct>=0?'+':'') + (bank.changePct||0) + '%' : 'N/A'})
+- VIX: ${!vix.isDefault ? vix.value + ' (' + vix.trend + ')' : 'N/A'}
+- FII: ${!fii.isDefault ? '₹'+fii.fii+' Cr' : 'N/A'} | DII: ${!fii.isDefault ? '₹'+fii.dii+' Cr' : 'N/A'}
+- Breadth: ${adv} adv / ${dec} dec | Score: ${avgScore}/100
+- Globals: ${getGlobalDataStr() || 'N/A'}${optStr}${secStr}
+- Events: ${getMacroEventsStr()}
+
+Gainers: ${stocks.sort((a,b)=>b.changePct-a.changePct).slice(0,5).map(s=>`${s.symbol}(${s.changePct>=0?'+':''}${s.changePct?.toFixed(1)}%)`).join(', ')}
+Losers: ${stocks.sort((a,b)=>a.changePct-b.changePct).slice(0,5).map(s=>`${s.symbol}(${s.changePct?.toFixed(1)}%)`).join(', ')}
+
+Reply ONLY valid JSON:
+{"todayBehavior":"STRONG_UPTREND/UPTREND/SIDEWAYS/DOWNTREND/STRONG_DOWNTREND/VOLATILE","todayExplanation":"40-word explanation","todayConfidence":85,"keyFactors":["f1","f2","f3","f4","f5"],"riskLevel":"LOW/MODERATE/HIGH/VERY_HIGH","suggestedStrategy":"25-word strategy","globalSentiment":"RISK_ON/RISK_OFF/MIXED","sectorRotation":{"bullish":[],"bearish":[]},"niftySupport":0,"niftyResistance":0}`;
+
+      const g = await callAI(prompt, { preferGrounded: true, temperature: 0.2, maxOutputTokens: 2000, timeout: 60000 });
+      log('OK', `Today's behaviour (live) generated (${g.source}/${g.model}, grounded:${g.grounded}), ${(g.text||'').length} chars`);
+
+      const p = parseAIJson(g.text || '{}');
+
+      // Validate
+      const VB = ['STRONG_UPTREND','UPTREND','SIDEWAYS','DOWNTREND','STRONG_DOWNTREND','VOLATILE'];
+      if (!VB.includes(p.todayBehavior)) p.todayBehavior = 'SIDEWAYS';
+      if (!['LOW','MODERATE','HIGH','VERY_HIGH'].includes(p.riskLevel)) p.riskLevel = 'MODERATE';
+      if (!['RISK_ON','RISK_OFF','MIXED'].includes(p.globalSentiment)) p.globalSentiment = 'MIXED';
+      p.todayConfidence = Math.max(50, Math.min(95, Number(p.todayConfidence) || 60));
+      if (!Array.isArray(p.keyFactors)) p.keyFactors = [];
+      if (!p.sectorRotation || typeof p.sectorRotation !== 'object') p.sectorRotation = { bullish: [], bearish: [] };
+
+      // Breadth cross-check
+      const tot = adv + dec;
+      if (tot > 20 && dec/tot > 0.7 && (p.todayBehavior === 'UPTREND' || p.todayBehavior === 'STRONG_UPTREND')) { p._breadthConflict = true; p.todayConfidence = Math.min(p.todayConfidence, 60); }
+      if (tot > 20 && adv/tot > 0.7 && (p.todayBehavior === 'DOWNTREND' || p.todayBehavior === 'STRONG_DOWNTREND')) { p._breadthConflict = true; p.todayConfidence = Math.min(p.todayConfidence, 60); }
+      if (!vix.isDefault && vix.value > 25 && p.riskLevel === 'LOW') p.riskLevel = 'MODERATE';
+
+      // Metadata
+      p.grounded = g.grounded || false; p.model = g.model;
+      p._dataSources = dataSources;
+      p._dataSnapshot = { niftyPrice: nifty.price||null, niftyChg: nifty.changePct||null, bankNiftyPrice: bank.price||null, vixValue: !vix.isDefault?vix.value:null, fiiFlow: !fii.isDefault?fii.fii:null, diiFlow: !fii.isDefault?fii.dii:null, breadth:{adv,dec}, niftyPCR: optionChainCache.nifty?.pcr||null, niftyMaxPain: optionChainCache.nifty?.maxPain||null, niftyAvgIV: optionChainCache.nifty?.avgIV||null, avgSignalScore: avgScore, stocksTracked: signals.length };
+      p._activeEvents = getMarketContext().filter(e => e.priority === 'HIGH').map(e => ({ title: e.title, icon: e.icon }));
+      p._generatedAt = new Date().toISOString();
+
+      todayCache = { data: p, lastFetch: Date.now(), dateIST: todayIST };
+      return res.json({ ...p, cached: false });
+    } catch (e) {
+      log('ERR', 'Today\'s behaviour (live) failed: ' + e.message);
+      if (todayCache.data && todayCache.dateIST === todayIST) return res.json({ ...todayCache.data, cached: true, stale: true, error: e.message });
+      return res.status(500).json({ error: e.message });
+    }
   }
-  if (marketPredictionCache.data && (Date.now() - marketPredictionCache.lastFetch) < PREDICTION_CACHE_MS) {
-    return res.json({ ...marketPredictionCache.data, cached: true });
+
+  // ═══ PRE-MARKET (12 AM → 9:15 AM): web-search-based analysis ═══
+  // Upstox/NSE APIs are dead — rely on Google Search grounding + Twelve Data globals
+  const refreshMs = getPreMarketCacheMs();
+
+  // Cache check: fresh pre-market data for today
+  if (preMarketCache.data && preMarketCache.dateIST === todayIST
+      && (Date.now() - preMarketCache.lastFetch) < refreshMs) {
+    return res.json({ ...preMarketCache.data, cached: true, _refreshMs: refreshMs });
   }
+
   if (!appConfig.geminiKey && !gcpServiceAccount) {
-    return res.json({ error: 'Neither Gemini API key nor Vertex AI configured', configured: false });
+    // Fallback: serve last night's next-session prediction if available
+    if (nextSessionCache.data && nextSessionCache.predictedDate === todayIST) {
+      const ns = nextSessionCache.data;
+      return res.json({
+        promoted: true, todayBehavior: ns.outlook === 'BULLISH' || ns.outlook === 'CAUTIOUSLY_BULLISH' ? 'UPTREND' : ns.outlook === 'BEARISH' || ns.outlook === 'CAUTIOUSLY_BEARISH' ? 'DOWNTREND' : 'SIDEWAYS',
+        todayExplanation: ns.explanation || 'Based on overnight analysis', todayConfidence: Math.max(40, (ns.confidence||55) - 10),
+        keyFactors: ns.keyDrivers || [], riskLevel: ns.riskLevel || 'MODERATE', grounded: false, _refreshMs: refreshMs, _generatedAt: ns._generatedAt
+      });
+    }
+    return res.json({ noDataToday: true, error: 'AI not configured' });
   }
+
   try {
+    // Seed data: last night's next-session prediction (if it predicted today)
+    const seed = (nextSessionCache.data && nextSessionCache.predictedDate === todayIST) ? nextSessionCache.data : null;
+    const globalStr = getGlobalDataStr();
+    const globalCount = Object.keys(globalMarkets).length;
+
+    const prompt = `You are an elite Indian stock market pre-market analyst. It is currently ${getIST().getUTCHours()}:${String(getIST().getUTCMinutes()).padStart(2,'0')} IST, BEFORE market open (9:15 AM).
+
+CRITICAL: Indian market APIs (Upstox, NSE) are OFFLINE. You MUST use Google Search to find CURRENT real-time data:
+- Gift Nifty / SGX Nifty LIVE level and % change (this is the #1 indicator for today's opening)
+- US market final close (S&P 500, NASDAQ, Dow Jones) and any after-hours movement
+- Asian markets LIVE (Nikkei, Hang Seng, SGX, ASX) — they are open now
+- Crude oil (Brent, WTI) current price and overnight direction
+- Gold, USD/INR current levels
+- Any breaking overnight news: Fed/ECB/RBI, geopolitical, India-specific policy or earnings
+- US Dollar Index (DXY) movement
+
+${globalCount > 0 ? 'TWELVE DATA GLOBALS (may be stale overnight):\n- ' + globalStr : 'No Twelve Data available — rely entirely on Google Search'}
+
+${seed ? 'LAST NIGHT\'S PREDICTION (seed — update with fresh data):\n- Outlook: ' + seed.outlook + ' (' + seed.confidence + '% confidence)\n- Expected: ' + (seed.openingExpectation||'N/A') + '\n- Key drivers: ' + (seed.keyDrivers||[]).join(', ') : 'No prior prediction available — generate fresh from web search'}
+
+MACRO EVENTS: ${getMacroEventsStr()}
+
+Predict what will MOST LIKELY happen when Indian markets open today. Reply ONLY valid JSON:
+{"todayBehavior":"STRONG_UPTREND/UPTREND/SIDEWAYS/DOWNTREND/STRONG_DOWNTREND/VOLATILE","todayExplanation":"50-word pre-market analysis citing Gift Nifty level, US close, Asian markets, crude, key overnight news","todayConfidence":70,"keyFactors":["factor1","factor2","factor3","factor4","factor5"],"riskLevel":"LOW/MODERATE/HIGH/VERY_HIGH","suggestedStrategy":"25-word pre-market strategy","globalSentiment":"RISK_ON/RISK_OFF/MIXED","niftySupport":0,"niftyResistance":0,"giftNifty":{"level":0,"change":"","signal":""},"openingExpectation":"GAP_UP/GAP_DOWN/FLAT_OPEN","sectorRotation":{"bullish":[],"bearish":[]}}`;
+
+    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.2, maxOutputTokens: 2000, timeout: 60000 });
+    log('OK', `Pre-market analysis generated (${g.source}/${g.model}, grounded:${g.grounded}), ${(g.text||'').length} chars`);
+
+    const p = parseAIJson(g.text || '{}');
+
+    // Validate
+    const VB = ['STRONG_UPTREND','UPTREND','SIDEWAYS','DOWNTREND','STRONG_DOWNTREND','VOLATILE'];
+    if (!VB.includes(p.todayBehavior)) p.todayBehavior = 'SIDEWAYS';
+    if (!['LOW','MODERATE','HIGH','VERY_HIGH'].includes(p.riskLevel)) p.riskLevel = 'MODERATE';
+    if (!['RISK_ON','RISK_OFF','MIXED'].includes(p.globalSentiment)) p.globalSentiment = 'MIXED';
+    if (!['GAP_UP','GAP_DOWN','FLAT_OPEN'].includes(p.openingExpectation)) p.openingExpectation = 'FLAT_OPEN';
+    p.todayConfidence = Math.max(40, Math.min(85, Number(p.todayConfidence) || 55));
+    if (!Array.isArray(p.keyFactors)) p.keyFactors = [];
+    if (!p.sectorRotation || typeof p.sectorRotation !== 'object') p.sectorRotation = { bullish: [], bearish: [] };
+    if (!p.giftNifty || typeof p.giftNifty !== 'object') p.giftNifty = {};
+
+    p.promoted = true;
+    p.grounded = g.grounded || false; p.model = g.model;
+    p._dataSources = { source: 'Google Search grounding + Twelve Data globals', globalSymbols: globalCount };
+    p._generatedAt = new Date().toISOString();
+
+    preMarketCache = { data: p, lastFetch: Date.now(), dateIST: todayIST };
+    return res.json({ ...p, cached: false, _refreshMs: refreshMs });
+  } catch (e) {
+    log('ERR', 'Pre-market analysis failed: ' + e.message);
+    if (preMarketCache.data && preMarketCache.dateIST === todayIST) return res.json({ ...preMarketCache.data, cached: true, stale: true, _refreshMs: refreshMs });
+    // Last-resort fallback: static next-session data
+    if (nextSessionCache.data && nextSessionCache.predictedDate === todayIST) {
+      const ns = nextSessionCache.data;
+      return res.json({ promoted: true, todayBehavior: 'SIDEWAYS', todayExplanation: ns.explanation || 'Pre-market data', todayConfidence: 45, keyFactors: ns.keyDrivers || [], riskLevel: ns.riskLevel || 'MODERATE', grounded: false, _refreshMs: refreshMs, _generatedAt: ns._generatedAt });
+    }
+    return res.json({ noDataToday: true, error: 'Pre-market analysis unavailable', _refreshMs: refreshMs });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NEXT SESSION OUTLOOK — /api/next-session
+// ACTIVE during: post-market (3:30 PM → midnight) + entire weekend (Sat/Sun).
+// Uses Twelve Data globals (24/5) + Google Search grounding for overnight data.
+// Weekday 12 AM → 3:30 PM: returns inactive, no cache, no AI calls.
+// ══════════════════════════════════════════════════════════════════════════════
+app.get('/api/next-session', async (req, res) => {
+  const force = req.query.force === 'true';
+  const todayIST = getISTDateStr();
+  const istMins = getISTMins();
+  const nextTradingDay = getNextTradingDate(todayIST);
+  const isPostMarket = istMins > 930; // After 3:30 PM IST
+  const isActive = isPostMarket || isWeekend(); // Active post-market AND all weekend
+
+  // ── Outside active window (weekday 12 AM → 3:30 PM): inactive ──
+  if (!isActive) {
+    return res.json({ inactive: true, reason: 'Next session outlook will update after 3:30 PM IST', _refreshMs: null });
+  }
+
+  // ── Post-market (3:30 PM → midnight): cache check with 30 min refresh ──
+  if (!force && nextSessionCache.data && nextSessionCache.predictedDate === nextTradingDay
+      && (Date.now() - nextSessionCache.lastFetch) < NEXT_SESSION_CACHE_MS) {
+    return res.json({ ...nextSessionCache.data, cached: true, _refreshMs: NEXT_SESSION_CACHE_MS });
+  }
+
+  if (!appConfig.geminiKey && !gcpServiceAccount) {
+    if (nextSessionCache.data) return res.json({ ...nextSessionCache.data, cached: true, stale: true, _refreshMs: NEXT_SESSION_CACHE_MS });
+    return res.json({ error: 'AI not configured', configured: false });
+  }
+
+  try {
+    // Indian market data (cached from today's close — Upstox/NSE may be offline)
     const nifty = liveIndices['Nifty 50'] || liveIndices['NIFTY50'] || {};
     const bank = liveIndices['NIFTYBANK'] || liveIndices['Nifty Bank'] || {};
-    const vix = vixData;
-    const fii = fiiDiiData;
-    const stocks = Object.values(liveStocks).filter(s => s.price);
-    const advancers = stocks.filter(s => s.changePct >= 0).length;
-    const decliners = stocks.filter(s => s.changePct < 0).length;
+    const vix = vixData, fii = fiiDiiData;
     const signals = Object.values(signalCache);
-    const avgScore = signals.length ? Math.round(signals.reduce((a, s) => a + (s.score || 0), 0) / signals.length) : 50;
+    const avgScore = signals.length ? Math.round(signals.reduce((a, s) => a + (s.score || 0), 0) / signals.length) : 0;
+    const stocks = Object.values(liveStocks).filter(s => s.price);
+    const adv = stocks.filter(s => s.changePct >= 0).length, dec = stocks.filter(s => s.changePct < 0).length;
 
-    // ── Data source tracking ──
-    const dataSources = {};
-    dataSources.nifty = nifty.price ? 'Upstox WebSocket (live)' : 'Unavailable';
-    dataSources.bankNifty = bank.price ? 'Upstox WebSocket (live)' : 'Unavailable';
-    dataSources.vix = !vix.isDefault ? 'NSE API (live)' : 'Unavailable';
-    dataSources.fiiDii = !fii.isDefault ? 'NSE API (live)' : 'Unavailable';
-    dataSources.usdInr = fii.usdInr > 0 ? 'Twelve Data API' : 'Unavailable';
-    dataSources.crude = fii.crude > 0 ? 'Twelve Data API' : 'Unavailable';
-    dataSources.globalMarkets = Object.keys(globalMarkets).length > 0 ? 'Twelve Data API' : 'Unavailable';
-    dataSources.optionChain = optionChainCache.nifty ? 'Upstox Option Chain API' : 'Unavailable';
-    dataSources.signals = signals.length > 0 ? `FINR Engine (${signals.length} stocks)` : 'Unavailable';
-
-    // ── Global markets data ──
-    const globalStr = Object.values(globalMarkets).map(g => `${g.name}: ${g.price} (${g.changePct >= 0 ? '+' : ''}${g.changePct}%)`).join(', ');
-
-    // ── Options sentiment data (PCR, Max Pain, IV) ──
-    let optionsSentimentStr = '';
+    let optStr = '';
     if (optionChainCache.nifty) {
       const nc = optionChainCache.nifty;
-      optionsSentimentStr += `\nOPTIONS SENTIMENT (from live option chains):`;
-      optionsSentimentStr += `\n- Nifty PCR: ${nc.pcr} | Max Pain: ${nc.maxPain} | Avg IV: ${nc.avgIV}%`;
-      optionsSentimentStr += `\n- Nifty Total Call OI: ${nc.totalCallOI} | Total Put OI: ${nc.totalPutOI}`;
-      if (nc.pcr > 1.2) optionsSentimentStr += ' → HIGH PUT OI = Bullish support';
-      else if (nc.pcr < 0.7) optionsSentimentStr += ' → LOW PCR = Bearish/overbought';
-      else optionsSentimentStr += ' → Neutral PCR range';
-      if (optionChainCache.banknifty) {
-        const bc = optionChainCache.banknifty;
-        optionsSentimentStr += `\n- Bank Nifty PCR: ${bc.pcr} | Max Pain: ${bc.maxPain} | Avg IV: ${bc.avgIV}%`;
-      }
+      optStr = `Nifty PCR: ${nc.pcr} | Max Pain: ${nc.maxPain} | IV: ${nc.avgIV}%`;
+      if (optionChainCache.banknifty) { const bc = optionChainCache.banknifty; optStr += ` | BN PCR: ${bc.pcr} Max Pain: ${bc.maxPain}`; }
     }
 
-    // ── Sector-level signal breakdown ──
-    const sectorSignals = {};
-    for (const stock of STOCK_UNIVERSE) {
-      const sig = signalCache[stock.symbol];
-      if (!sig) continue;
-      const sec = stock.sector || 'Unknown';
-      if (!sectorSignals[sec]) sectorSignals[sec] = { scores: [], buys: 0, sells: 0 };
-      sectorSignals[sec].scores.push(sig.score || 0);
-      if (sig.score >= 65) sectorSignals[sec].buys++;
-      else if (sig.score < 35) sectorSignals[sec].sells++;
-    }
-    let sectorStr = '';
-    const sectorEntries = Object.entries(sectorSignals).filter(([, v]) => v.scores.length > 0);
-    if (sectorEntries.length > 0) {
-      sectorStr = '\nSECTOR SIGNAL BREAKDOWN (from FINR live signal engine):';
-      for (const [sec, data] of sectorEntries) {
-        const avg = Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length);
-        const bias = avg >= 65 ? 'BULLISH' : avg >= 50 ? 'NEUTRAL' : avg >= 35 ? 'WEAK' : 'BEARISH';
-        sectorStr += `\n- ${sec}: Avg Score ${avg}/100 (${bias}) [${data.buys} buys, ${data.sells} sells out of ${data.scores.length}]`;
-      }
-    }
+    const globalStr = Object.values(globalMarkets).map(g =>
+      `${g.name}: ${g.price} (${g.changePct >= 0 ? '+' : ''}${g.changePct}%) [${g.isLive ? 'LIVE' : 'cached'}]`
+    ).join('\n- ');
 
-    // ── Market context events (macro/geopolitical) ──
-    const mktCtx = getMarketContext();
-    let contextStr = '';
-    if (mktCtx.length > 0) {
-      contextStr = '\nACTIVE MACRO/GEOPOLITICAL EVENTS (factor these into your analysis):';
-      for (const evt of mktCtx.filter(e => e.priority === 'HIGH' || e.priority === 'MEDIUM')) {
-        contextStr += `\n- [${evt.priority}] ${evt.title}: ${evt.impact}`;
-        if (evt.vixImpact) contextStr += ` | VIX: ${evt.vixImpact}`;
-      }
-    }
+    const prompt = `You are India's most accurate stock market forecasting analyst. Predict what will happen on ${nextTradingDay} (next trading session) in Indian markets.
 
-    const prompt = `You are an elite Indian stock market analyst with deep expertise in NSE/BSE markets, derivatives, and macro analysis. Analyze ALL the data below and provide:
-1. TODAY'S MARKET BEHAVIOR — classify as: STRONG_UPTREND, UPTREND, SIDEWAYS, DOWNTREND, STRONG_DOWNTREND, or VOLATILE
-2. NEXT SESSION OUTLOOK — predict the most likely market direction for the next trading session
+CRITICAL: Use Google Search to find the LATEST real-time data:
+- Gift Nifty / SGX Nifty current level and trend
+- US market close/futures (S&P 500, NASDAQ, Dow) — current or latest
+- Asian markets if trading (Nikkei, Hang Seng, SGX)
+- Crude oil current price and direction, Gold, DXY
+- Any overnight global/India-specific news, Fed/ECB/RBI commentary
 
-CURRENT MARKET DATA (live from Upstox + NSE):
-- Nifty 50: ${nifty.price || 'N/A'} (${nifty.price ? (nifty.changePct >= 0 ? '+' : '') + (nifty.changePct || 0) + '%' : 'no data'})
-- Bank Nifty: ${bank.price || 'N/A'} (${bank.price ? (bank.changePct >= 0 ? '+' : '') + (bank.changePct || 0) + '%' : 'no data'})
-- India VIX: ${!vix.isDefault ? vix.value + ' (' + vix.trend + ')' : 'N/A'}
-- FII Flow: ${!fii.isDefault ? '₹' + fii.fii + ' Cr' : 'N/A'} | DII Flow: ${!fii.isDefault ? '₹' + fii.dii + ' Cr' : 'N/A'}
-- USD/INR: ${fii.usdInr > 0 ? fii.usdInr : 'N/A'} | Crude: ${fii.crude > 0 ? '$' + fii.crude : 'N/A'}
-- Market Breadth: ${advancers} advancing / ${decliners} declining (${advancers + decliners} stocks tracked)
-- FINR Signal Score (universe avg): ${avgScore}/100
-- Global Markets: ${globalStr || 'Data unavailable'}
-${optionsSentimentStr}
-${sectorStr}
-${contextStr}
+TODAY'S CLOSING DATA (from Indian market — may be cached):
+- Nifty: ${nifty.price || 'N/A'}${nifty.price ? ` (${nifty.changePct>=0?'+':''}${nifty.changePct||0}%)` : ''}
+- Bank Nifty: ${bank.price || 'N/A'}${bank.price ? ` (${bank.changePct>=0?'+':''}${bank.changePct||0}%)` : ''}
+- VIX: ${!vix.isDefault ? vix.value + ' (' + vix.trend + ')' : 'N/A'}
+- FII: ${!fii.isDefault ? '₹'+fii.fii+' Cr' : 'N/A'} | DII: ${!fii.isDefault ? '₹'+fii.dii+' Cr' : 'N/A'}
+- Breadth: ${adv} adv / ${dec} dec | Score: ${avgScore}/100 (${signals.length} stocks)
+${optStr ? '- Options: ' + optStr : ''}
 
-TOP GAINERS: ${stocks.sort((a, b) => b.changePct - a.changePct).slice(0, 5).map(s => `${s.symbol}(${s.changePct >= 0 ? '+' : ''}${s.changePct?.toFixed(1)}%)`).join(', ')}
-TOP LOSERS: ${stocks.sort((a, b) => a.changePct - b.changePct).slice(0, 5).map(s => `${s.symbol}(${s.changePct?.toFixed(1)}%)`).join(', ')}
+GLOBAL MARKETS (Twelve Data — may include live post-market data):
+- ${globalStr || 'Unavailable — rely on Google Search'}
 
-IMPORTANT: Search for the LATEST global market news, US futures, Asian market movements, and any overnight developments that could impact Indian markets tomorrow. Factor in Gift Nifty, SGX Nifty, US Fed commentary, crude oil movements, and geopolitical events. Cross-reference the data above with your grounded search results for maximum accuracy.
+MACRO: ${getMacroEventsStr()}
 
-Reply ONLY valid JSON (no markdown fences):
-{
-  "todayBehavior": "UPTREND/DOWNTREND/SIDEWAYS/VOLATILE/STRONG_UPTREND/STRONG_DOWNTREND",
-  "todayExplanation": "40-word explanation of today's market behavior with specific data points",
-  "todayConfidence": 85,
-  "nextSessionOutlook": "BULLISH/BEARISH/NEUTRAL/CAUTIOUSLY_BULLISH/CAUTIOUSLY_BEARISH",
-  "nextSessionExplanation": "60-word prediction with specific catalysts, expected Nifty range, and key levels to watch",
-  "nextSessionConfidence": 70,
-  "keyFactors": ["factor1", "factor2", "factor3", "factor4", "factor5"],
-  "riskLevel": "LOW/MODERATE/HIGH/VERY_HIGH",
-  "suggestedStrategy": "Brief 25-word trading strategy with specific action items",
-  "giftNifty": "Gift Nifty indication if available, or 'N/A'",
-  "globalSentiment": "RISK_ON/RISK_OFF/MIXED",
-  "sectorRotation": {"bullish": ["sector1"], "bearish": ["sector2"]},
-  "niftySupport": 0,
-  "niftyResistance": 0,
-  "updatedAt": "${new Date().toISOString()}"
-}`;
+Reply ONLY valid JSON:
+{"outlook":"BULLISH/BEARISH/NEUTRAL/CAUTIOUSLY_BULLISH/CAUTIOUSLY_BEARISH","confidence":72,"explanation":"80-word prediction citing Gift Nifty, US close, crude etc.","niftyRange":{"low":23800,"high":24200},"bankNiftyRange":{"low":51000,"high":52000},"keyDrivers":["d1","d2","d3","d4","d5"],"riskLevel":"LOW/MODERATE/HIGH/VERY_HIGH","giftNifty":{"level":24050,"change":"+0.3%","signal":"Positive opening"},"globalSentiment":"RISK_ON/RISK_OFF/MIXED","overnightDevelopments":["dev1","dev2","dev3"],"sectorOutlook":{"bullish":["IT"],"bearish":["Metals"],"neutral":["Banks"]},"tradingStrategy":"30-word actionable strategy","openingExpectation":"GAP_UP/GAP_DOWN/FLAT_OPEN","openingExpectationDetail":"Expected open around 24,050 on Gift Nifty +0.3%"}`;
 
-    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.2, maxOutputTokens: 3000, timeout: 60000 });
-    const raw = g.text || '{}';
-    log('OK', `Market prediction generated (${g.source}/${g.model}, grounded:${g.grounded || false}), ${raw.length} chars`);
+    const g = await callAI(prompt, { preferGrounded: true, temperature: 0.2, maxOutputTokens: 4000, timeout: 75000 });
+    log('OK', `Next session for ${nextTradingDay} generated (${g.source}/${g.model}, grounded:${g.grounded}), ${(g.text||'').length} chars`);
 
-    let prediction = {};
-    const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    try { prediction = JSON.parse(cleaned); } catch (_) {
-      const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
-      if (s >= 0 && e > s) { try { prediction = JSON.parse(cleaned.slice(s, e + 1)); } catch (_) {} }
-    }
+    const o = parseAIJson(g.text || '{}');
 
-    // ── Post-processing validation ──
-    const VALID_BEHAVIORS = ['STRONG_UPTREND','UPTREND','SIDEWAYS','DOWNTREND','STRONG_DOWNTREND','VOLATILE'];
-    const VALID_OUTLOOKS = ['BULLISH','BEARISH','NEUTRAL','CAUTIOUSLY_BULLISH','CAUTIOUSLY_BEARISH'];
-    const VALID_RISKS = ['LOW','MODERATE','HIGH','VERY_HIGH'];
-    const VALID_SENTIMENTS = ['RISK_ON','RISK_OFF','MIXED'];
+    // Validate
+    if (!['BULLISH','BEARISH','NEUTRAL','CAUTIOUSLY_BULLISH','CAUTIOUSLY_BEARISH'].includes(o.outlook)) o.outlook = 'NEUTRAL';
+    if (!['LOW','MODERATE','HIGH','VERY_HIGH'].includes(o.riskLevel)) o.riskLevel = 'MODERATE';
+    if (!['RISK_ON','RISK_OFF','MIXED'].includes(o.globalSentiment)) o.globalSentiment = 'MIXED';
+    if (!['GAP_UP','GAP_DOWN','FLAT_OPEN'].includes(o.openingExpectation)) o.openingExpectation = 'FLAT_OPEN';
+    o.confidence = Math.max(40, Math.min(90, Number(o.confidence) || 55));
+    if (!Array.isArray(o.keyDrivers)) o.keyDrivers = [];
+    if (!Array.isArray(o.overnightDevelopments)) o.overnightDevelopments = [];
+    if (!o.sectorOutlook || typeof o.sectorOutlook !== 'object') o.sectorOutlook = { bullish: [], bearish: [], neutral: [] };
+    if (!o.niftyRange || typeof o.niftyRange !== 'object') o.niftyRange = {};
+    if (!o.bankNiftyRange || typeof o.bankNiftyRange !== 'object') o.bankNiftyRange = {};
+    if (!o.giftNifty || typeof o.giftNifty !== 'object') o.giftNifty = {};
+    if (!vix.isDefault && vix.value > 25 && o.riskLevel === 'LOW') o.riskLevel = 'MODERATE';
 
-    if (!VALID_BEHAVIORS.includes(prediction.todayBehavior)) prediction.todayBehavior = 'SIDEWAYS';
-    if (!VALID_OUTLOOKS.includes(prediction.nextSessionOutlook)) prediction.nextSessionOutlook = 'NEUTRAL';
-    if (!VALID_RISKS.includes(prediction.riskLevel)) prediction.riskLevel = 'MODERATE';
-    if (!VALID_SENTIMENTS.includes(prediction.globalSentiment)) prediction.globalSentiment = 'MIXED';
+    // Metadata
+    o.predictedDate = nextTradingDay;
+    o.grounded = g.grounded || false; o.model = g.model;
+    o._globalSnapshot = Object.fromEntries(Object.entries(globalMarkets).map(([k, v]) => [k, { price: v.price, changePct: v.changePct }]));
+    o._indianSnapshot = { niftyPrice: nifty.price||null, niftyChg: nifty.changePct||null, bankNiftyPrice: bank.price||null, vix: !vix.isDefault?vix.value:null, fii: !fii.isDefault?fii.fii:null, pcr: optionChainCache.nifty?.pcr||null };
+    o._generatedAt = new Date().toISOString();
 
-    // Clamp confidence to realistic range (50-95)
-    prediction.todayConfidence = Math.max(50, Math.min(95, Number(prediction.todayConfidence) || 60));
-    prediction.nextSessionConfidence = Math.max(40, Math.min(85, Number(prediction.nextSessionConfidence) || 55));
-
-    // Cross-validate: if breadth is 70%+ declining but AI says UPTREND, flag it
-    const totalStocks = advancers + decliners;
-    if (totalStocks > 20) {
-      const declPct = decliners / totalStocks;
-      if (declPct > 0.7 && (prediction.todayBehavior === 'UPTREND' || prediction.todayBehavior === 'STRONG_UPTREND')) {
-        prediction._breadthConflict = true;
-        prediction.todayConfidence = Math.min(prediction.todayConfidence, 60);
-        log('WARN', `Market prediction breadth conflict: ${(declPct*100).toFixed(0)}% declining but AI says ${prediction.todayBehavior}`);
-      }
-      const advPct = advancers / totalStocks;
-      if (advPct > 0.7 && (prediction.todayBehavior === 'DOWNTREND' || prediction.todayBehavior === 'STRONG_DOWNTREND')) {
-        prediction._breadthConflict = true;
-        prediction.todayConfidence = Math.min(prediction.todayConfidence, 60);
-        log('WARN', `Market prediction breadth conflict: ${(advPct*100).toFixed(0)}% advancing but AI says ${prediction.todayBehavior}`);
-      }
-    }
-
-    // VIX cross-check: VIX > 25 should not pair with LOW risk
-    if (!vix.isDefault && vix.value > 25 && prediction.riskLevel === 'LOW') {
-      prediction.riskLevel = 'MODERATE';
-      log('WARN', `Market prediction VIX override: VIX ${vix.value} too high for LOW risk`);
-    }
-
-    // Ensure keyFactors is an array
-    if (!Array.isArray(prediction.keyFactors)) prediction.keyFactors = [];
-
-    // Ensure sectorRotation has proper structure
-    if (!prediction.sectorRotation || typeof prediction.sectorRotation !== 'object') {
-      prediction.sectorRotation = { bullish: [], bearish: [] };
-    }
-
-    prediction.grounded = g.grounded || false;
-    prediction.model = g.model;
-    prediction._dataSources = dataSources;
-    prediction._dataSnapshot = {
-      niftyPrice: nifty.price || null,
-      niftyChg: nifty.changePct || null,
-      bankNiftyPrice: bank.price || null,
-      vixValue: !vix.isDefault ? vix.value : null,
-      fiiFlow: !fii.isDefault ? fii.fii : null,
-      diiFlow: !fii.isDefault ? fii.dii : null,
-      usdInr: fii.usdInr > 0 ? fii.usdInr : null,
-      crude: fii.crude > 0 ? fii.crude : null,
-      breadth: { adv: advancers, dec: decliners },
-      niftyPCR: optionChainCache.nifty?.pcr || null,
-      niftyMaxPain: optionChainCache.nifty?.maxPain || null,
-      niftyAvgIV: optionChainCache.nifty?.avgIV || null,
-      avgSignalScore: avgScore,
-      stocksTracked: signals.length
-    };
-    prediction._activeEvents = mktCtx.filter(e => e.priority === 'HIGH').map(e => ({ title: e.title, icon: e.icon }));
-    prediction._generatedAt = new Date().toISOString();
-
-    marketPredictionCache = { data: prediction, lastFetch: Date.now() };
-    res.json({ ...prediction, cached: false });
+    nextSessionCache = { data: o, lastFetch: Date.now(), predictedDate: nextTradingDay };
+    return res.json({ ...o, cached: false, _refreshMs: NEXT_SESSION_CACHE_MS });
   } catch (e) {
-    log('ERR', 'Market prediction failed: ' + e.message);
-    // Stale fallback
-    if (marketPredictionCache.data) {
-      return res.json({ ...marketPredictionCache.data, cached: true, stale: true, error: e.message });
-    }
-    res.status(500).json({ error: 'Market prediction failed: ' + e.message });
+    log('ERR', 'Next session failed: ' + e.message);
+    if (nextSessionCache.data) return res.json({ ...nextSessionCache.data, cached: true, stale: true, error: e.message, _refreshMs: NEXT_SESSION_CACHE_MS });
+    return res.status(500).json({ error: e.message });
   }
 });
 
@@ -3029,9 +3199,8 @@ function buildChainSummary(oc) {
 // SMART SCREENER — Pure in-memory filtering, no AI calls, instant response
 // ══════════════════════════════════════════════════════════════════════════════
 app.get('/api/screener', (req, res) => {
-  // ── Market hours gate — allow cached data outside hours ──
-  const hasCache = Object.keys(signalCache).length > 0;
-  if (!isMarketOpen() && !hasCache) {
+  // ── Market hours gate — screener only works during market hours ──
+  if (!isMarketOpen()) {
     return res.json(marketClosedResponse(null));
   }
 
@@ -3264,15 +3433,8 @@ app.get('/api/screener', (req, res) => {
       near52Low: filters.near52Low,
       near52High: filters.near52High
     },
-    marketOpen: isMarketOpen(),
-    lastSignalUpdate: Object.values(signalCache).length > 0 ? Date.now() : null
+    marketOpen: true
   };
-
-  if (!isMarketOpen()) {
-    response.stale = true;
-    response.lastUpdated = Object.values(liveStocks).reduce((max, s) => Math.max(max, s.lastUpdate || 0), 0);
-    if (response.lastUpdated) response.lastUpdated = new Date(response.lastUpdated).toISOString();
-  }
 
   res.json(response);
 });
