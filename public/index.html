@@ -98,6 +98,7 @@ tailwind.config = {
   /* News filter buttons */
   .news-filter-btn{background:#242426;color:#d0c6ab;border:1px solid transparent;}
   .news-filter-btn.active{background:#ffd60a;color:#131313;border-color:#ffd60a;}
+  .news-filter-btn[data-filter="wars"].active{background:rgba(255,69,58,0.15);color:#ff453a;border-color:#ff453a;}
   .news-filter-btn:hover:not(.active){border-color:#4d4632;}
 
   /* Theme toggle */
@@ -736,9 +737,9 @@ tailwind.config = {
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">newspaper</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Live Market News</h3>
-                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Live Market News</div><div class="tip-desc">AI-curated news affecting Indian markets. 8 items covering national &amp; international events — FII flows, policy changes, global macro, geopolitics, and sector moves. Refreshes every 10 min.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Grounded web search</div></span>
                 </div>
                 <div class="flex items-center gap-2">
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="right:0"><div class="tip-title">Live Market News</div><div class="tip-desc">AI-curated news affecting Indian markets. 8 items covering national, international &amp; geopolitical/war events — FII flows, policy changes, global macro, conflicts, and sector moves. Refreshes every 10 min.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Grounded web search</div></span>
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="news-ts"></span>
                   <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="event.stopPropagation();fetchNews()" title="Refresh News">
                     <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
@@ -750,10 +751,11 @@ tailwind.config = {
                 <div class="text-[11px] text-[#d0c6ab] font-mono px-4 py-2">Loading news...</div>
               </div>
               <div class="dash-card-body collapsed">
-                <div class="flex gap-1 px-4 pt-3 pb-1">
-                  <button class="news-filter-btn active px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all" data-filter="all" onclick="filterNews('all',this)">All</button>
-                  <button class="news-filter-btn px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all" data-filter="national" onclick="filterNews('national',this)">National</button>
-                  <button class="news-filter-btn px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all" data-filter="international" onclick="filterNews('international',this)">International</button>
+                <div class="flex gap-1 px-4 pt-3 pb-1 overflow-x-auto no-scrollbar">
+                  <button class="news-filter-btn active px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all flex-shrink-0" data-filter="all" onclick="filterNews('all',this)">All</button>
+                  <button class="news-filter-btn px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all flex-shrink-0" data-filter="national" onclick="filterNews('national',this)">National</button>
+                  <button class="news-filter-btn px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all flex-shrink-0" data-filter="international" onclick="filterNews('international',this)">International</button>
+                  <button class="news-filter-btn px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all flex-shrink-0" data-filter="wars" onclick="filterNews('wars',this)" style="border:1px solid rgba(255,69,58,0.3)">Wars</button>
                 </div>
                 <div id="news-list" class="space-y-3 max-h-[200px] overflow-y-auto px-4 pb-4"></div>
                 <div id="news-loading" class="text-center py-5 text-[#636366] text-sm">Loading news...</div>
@@ -766,9 +768,9 @@ tailwind.config = {
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">equalizer</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Breadth</h3>
-                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Market Breadth</div><div class="tip-desc">Advance/decline ratio across your stock universe. Green = advancing, Red = declining. Helps gauge whether the market move is broad-based or narrow.</div><span class="tip-tag tip-live">LIVE</span> Upstox stock prices<br><span class="tip-tag tip-cached">CACHED</span> Last close after hours</div></span>
                 </div>
                 <div class="flex items-center gap-2">
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="right:0"><div class="tip-title">Market Breadth</div><div class="tip-desc">Advance/decline ratio across your stock universe. Green = advancing, Red = declining. Helps gauge whether the market move is broad-based or narrow.</div><span class="tip-tag tip-live">LIVE</span> Upstox stock prices<br><span class="tip-tag tip-cached">CACHED</span> Last close after hours</div></span>
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="breadth-ts"></span>
                   <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="renderBreadth();toast('Breadth refreshed')" title="Refresh Breadth">
                     <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
@@ -787,9 +789,9 @@ tailwind.config = {
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">swap_vert</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Flows & Macros</h3>
-                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Flows & Macros</div><div class="tip-desc">FII/DII cash flow data, USD/INR exchange rate, and crude oil price. FII selling = bearish pressure, DII buying = support. Key macro indicators for market direction.</div><span class="tip-tag tip-live">LIVE</span> NSE India (FII/DII)<br><span class="tip-tag tip-live">LIVE</span> Twelve Data (USD, Crude)</div></span>
                 </div>
                 <div class="flex items-center gap-2">
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="right:0"><div class="tip-title">Flows & Macros</div><div class="tip-desc">FII/DII cash flow data, USD/INR exchange rate, and crude oil price. FII selling = bearish pressure, DII buying = support. Key macro indicators for market direction.</div><span class="tip-tag tip-live">LIVE</span> NSE India (FII/DII)<br><span class="tip-tag tip-live">LIVE</span> Twelve Data (USD, Crude)</div></span>
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="fii-ts"></span>
                   <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="event.stopPropagation();refreshFiiDii()" title="Refresh Flows">
                     <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
@@ -814,9 +816,9 @@ tailwind.config = {
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">health_and_safety</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Health</h3>
-                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Market Health Score</div><div class="tip-desc">Composite 0-100 score based on: trend (Nifty direction), momentum, breadth (advance/decline), VIX level, FII flows, and volatility. Higher = healthier market conditions.</div><span class="tip-tag tip-live">LIVE</span> All data feeds combined<br><span class="tip-tag tip-cached">CACHED</span> Last known after hours</div></span>
                 </div>
                 <div class="flex items-center gap-2">
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="right:0"><div class="tip-title">Market Health Score</div><div class="tip-desc">Composite 0-100 score based on: trend (Nifty direction), momentum, breadth (advance/decline), VIX level, FII flows, and volatility. Higher = healthier market conditions.</div><span class="tip-tag tip-live">LIVE</span> All data feeds combined<br><span class="tip-tag tip-cached">CACHED</span> Last known after hours</div></span>
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="health-ts"></span>
                   <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="renderGauge();toast('Health refreshed')" title="Refresh Health">
                     <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
@@ -844,9 +846,9 @@ tailwind.config = {
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">event</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Economic Calendar</h3>
-                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Economic Calendar</div><div class="tip-desc">Upcoming and ongoing macro events — RBI policy, US Fed, earnings, tariff wars, elections. Shows event status (upcoming/ongoing/concluded) and expected market impact.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Grounded web search</div></span>
                 </div>
                 <div class="flex items-center gap-2">
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="right:0"><div class="tip-title">Economic Calendar</div><div class="tip-desc">Upcoming and ongoing macro events — RBI policy, US Fed, earnings, tariff wars, elections. Shows event status (upcoming/ongoing/concluded) and expected market impact.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Grounded web search</div></span>
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="events-ts"></span>
                   <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="event.stopPropagation();loadEventCalendar();toast('Calendar refreshing...')" title="Refresh Calendar">
                     <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
@@ -868,9 +870,9 @@ tailwind.config = {
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">monitoring</span>
                   <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Pulse</h3>
-                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Market Pulse Charts</div><div class="tip-desc">Visual charts for: FII vs DII flows (donut), Health Radar (multi-axis), VIX Meter (gauge), Sector Flow (heatmap). Switch views using the dropdown.</div><span class="tip-tag tip-live">LIVE</span> All data feeds<br><span class="tip-tag tip-cached">CACHED</span> Last known after hours</div></span>
                 </div>
                 <div class="flex items-center gap-2">
+                  <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="right:0"><div class="tip-title">Market Pulse Charts</div><div class="tip-desc">Visual charts for: FII vs DII flows (donut), Health Radar (multi-axis), VIX Meter (gauge), Sector Flow (heatmap). Switch views using the dropdown.</div><span class="tip-tag tip-live">LIVE</span> All data feeds<br><span class="tip-tag tip-cached">CACHED</span> Last known after hours</div></span>
                   <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="pulse-ts"></span>
                   <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="renderPulseChart(document.getElementById('pulse-select')?.value||'fii-dii');toast('Pulse refreshed')" title="Refresh Pulse">
                     <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
@@ -2307,7 +2309,7 @@ function renderNews() {
     const srcUp = (n.source||'').toUpperCase();
     const isConflict = srcUp === 'WAR_CONFLICT' || srcUp === 'GEOPOLITICAL';
     const conflictBorder = isConflict ? ' border-l-2 border-[#ff453a]' : '';
-    return `<div class="news-item flex gap-3 cursor-pointer hover:bg-[#353534]/30 rounded-lg p-2 -mx-2 transition-colors${conflictBorder}" data-scope="${(n.scope||'national').toLowerCase()}" onclick="openNewsModal(${i})">
+    return `<div class="news-item flex gap-3 cursor-pointer hover:bg-[#353534]/30 rounded-lg p-2 -mx-2 transition-colors${conflictBorder}" data-scope="${(n.scope||'national').toLowerCase()}" data-source="${srcUp}" onclick="openNewsModal(${i})">
       <div class="flex-shrink-0 w-10 h-10 ${isConflict ? 'bg-[#ff453a]/15' : 'bg-[#353534]'} rounded flex items-center justify-center text-lg">${n.icon||'📰'}</div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 mb-1">
@@ -4649,7 +4651,12 @@ function filterNews(mode, btn) {
   }
   document.querySelectorAll('.news-item').forEach(el => {
     const scope = (el.dataset.scope || 'national').toLowerCase();
-    el.style.display = (mode==='all' || scope===mode) ? '' : 'none';
+    const source = (el.dataset.source || '').toUpperCase();
+    if (mode === 'wars') {
+      el.style.display = (source === 'WAR_CONFLICT' || source === 'GEOPOLITICAL') ? '' : 'none';
+    } else {
+      el.style.display = (mode === 'all' || scope === mode) ? '' : 'none';
+    }
   });
 }
 
