@@ -694,36 +694,39 @@ function storePrediction(type, data) {
   return entry;
 }
 
-// Verify predictions against actual market data — runs during market hours
+// Verify predictions against actual market data — runs after market close
 function verifyPredictions() {
   const todayIST = getISTDateStr();
   const nifty = liveIndices['Nifty 50'] || liveIndices['NIFTY50'] || {};
   const bank = liveIndices['NIFTYBANK'] || liveIndices['Nifty Bank'] || {};
   if (!nifty.price) return; // No live data yet
 
+  // Only verify after market close (3:30 PM IST = 930 mins) for full-day accuracy
+  if (getISTMins() < 930) return;
+
+  // Require real high/low/open data — refuse to score with fallback values
+  if (!nifty.high || !nifty.low || !nifty.open) {
+    log('WARN', 'Skipping prediction verification — incomplete Nifty OHLC data');
+    return;
+  }
+
   let verified = 0;
   for (const pred of predictionHistory) {
     if (pred.status !== 'PENDING') continue;
-    if (pred.predictedDate !== todayIST) continue; // Only verify today's predictions
+    if (pred.predictedDate !== todayIST) continue;
 
-    // Only verify after market close (3:30 PM IST = 930 mins) for full-day accuracy
-    if (getISTMins() < 930) continue;
-
-    const niftyOpen = liveIndices._todayOpen?.nifty || nifty.price;
-    const niftyPrevClose = liveIndices._prevClose?.nifty || null;
-    const bankOpen = liveIndices._todayOpen?.bank || bank.price;
-
-    // Capture actual data
+    // Use actual OHLC from NSE data — no fallbacks to current price
     pred.actual = {
-      niftyOpen: niftyOpen,
+      niftyOpen: nifty.open,
       niftyClose: nifty.price,
-      niftyHigh: nifty.high || nifty.price,
-      niftyLow: nifty.low || nifty.price,
+      niftyHigh: nifty.high,
+      niftyLow: nifty.low,
       niftyChangePct: nifty.changePct || 0,
-      niftyPrevClose: niftyPrevClose,
+      niftyPrevClose: nifty.previousClose || null,
+      bankNiftyOpen: bank.open || null,
       bankNiftyClose: bank.price || null,
-      bankNiftyHigh: bank.high || bank.price,
-      bankNiftyLow: bank.low || bank.price,
+      bankNiftyHigh: bank.high || null,
+      bankNiftyLow: bank.low || null,
       bankNiftyChangePct: bank.changePct || 0,
       vix: !vixData.isDefault ? vixData.value : null,
       fii: !fiiDiiData.isDefault ? fiiDiiData.fii : null,
@@ -736,6 +739,7 @@ function verifyPredictions() {
     // Score the prediction
     pred.scores = scorePrediction(pred);
     pred.status = 'VERIFIED';
+    pred.verifiedAt = new Date().toISOString();
     verified++;
   }
   if (verified > 0) { savePredictions(); log('OK', `Verified ${verified} predictions against actual data`); }
@@ -757,13 +761,16 @@ function scorePrediction(pred) {
     } else { scores.breakdown.outlook = { score: 0, max: 25, predicted: p.outlook, actual: actualDir }; }
 
     // 2. Opening expectation (15 pts) — GAP_UP/GAP_DOWN/FLAT_OPEN vs actual gap
-    scores.max += 15;
-    const actualGap = a.niftyPrevClose ? ((a.niftyOpen - a.niftyPrevClose) / a.niftyPrevClose * 100) : a.niftyChangePct;
-    const actualOpen = actualGap > 0.25 ? 'GAP_UP' : actualGap < -0.25 ? 'GAP_DOWN' : 'FLAT_OPEN';
-    if (p.openingExpectation === actualOpen) { scores.total += 15; scores.breakdown.opening = { score: 15, max: 15, predicted: p.openingExpectation, actual: actualOpen, gap: +actualGap.toFixed(2) }; }
-    else if ((p.openingExpectation === 'FLAT_OPEN' && Math.abs(actualGap) < 0.5) || (p.openingExpectation !== 'FLAT_OPEN' && actualOpen === 'FLAT_OPEN')) {
-      scores.total += 7; scores.breakdown.opening = { score: 7, max: 15, predicted: p.openingExpectation, actual: actualOpen, gap: +actualGap.toFixed(2) };
-    } else { scores.breakdown.opening = { score: 0, max: 15, predicted: p.openingExpectation, actual: actualOpen, gap: +actualGap.toFixed(2) }; }
+    // Only score if we have real prevClose data — no guessing
+    if (a.niftyPrevClose && a.niftyOpen) {
+      scores.max += 15;
+      const actualGap = ((a.niftyOpen - a.niftyPrevClose) / a.niftyPrevClose * 100);
+      const actualOpen = actualGap > 0.25 ? 'GAP_UP' : actualGap < -0.25 ? 'GAP_DOWN' : 'FLAT_OPEN';
+      if (p.openingExpectation === actualOpen) { scores.total += 15; scores.breakdown.opening = { score: 15, max: 15, predicted: p.openingExpectation, actual: actualOpen, gap: +actualGap.toFixed(2) }; }
+      else if ((p.openingExpectation === 'FLAT_OPEN' && Math.abs(actualGap) < 0.5) || (p.openingExpectation !== 'FLAT_OPEN' && actualOpen === 'FLAT_OPEN')) {
+        scores.total += 7; scores.breakdown.opening = { score: 7, max: 15, predicted: p.openingExpectation, actual: actualOpen, gap: +actualGap.toFixed(2) };
+      } else { scores.breakdown.opening = { score: 0, max: 15, predicted: p.openingExpectation, actual: actualOpen, gap: +actualGap.toFixed(2) }; }
+    } else { scores.breakdown.opening = { score: 0, max: 0, note: 'No open/prevClose data' }; }
 
     // 3. Nifty range accuracy (25 pts) — did actual H/L fall within predicted range?
     scores.max += 25;
@@ -786,16 +793,16 @@ function scorePrediction(pred) {
       scores.breakdown.niftyRange = { score: rangeScore, max: 25, predicted: { low: pLow, high: pHigh }, actual: { low: aLow, high: aHigh }, error: +avgErr.toFixed(2) };
     } else { scores.breakdown.niftyRange = { score: 0, max: 25, note: 'Missing data' }; }
 
-    // 4. Bank Nifty range accuracy (15 pts)
-    scores.max += 15;
+    // 4. Bank Nifty range accuracy (15 pts) — only score with real OHLC data
     if (p.bankNiftyRange && p.bankNiftyRange.low && p.bankNiftyRange.high && a.bankNiftyLow && a.bankNiftyHigh) {
+      scores.max += 15;
       const pLow = Number(p.bankNiftyRange.low), pHigh = Number(p.bankNiftyRange.high);
       const aLow = Number(a.bankNiftyLow), aHigh = Number(a.bankNiftyHigh);
       const avgErr = (Math.abs(aLow - pLow) / aLow * 100 + Math.abs(aHigh - pHigh) / aHigh * 100) / 2;
       let bnScore = avgErr < 0.5 ? 15 : avgErr < 1.0 ? 12 : avgErr < 1.5 ? 9 : avgErr < 2.5 ? 5 : 0;
       scores.total += bnScore;
       scores.breakdown.bankNiftyRange = { score: bnScore, max: 15, error: +avgErr.toFixed(2) };
-    } else { scores.breakdown.bankNiftyRange = { score: 0, max: 15, note: 'Missing data' }; }
+    } else { scores.breakdown.bankNiftyRange = { score: 0, max: 0, note: 'Missing BankNifty OHLC' }; }
 
     // 5. Risk level assessment (10 pts) — HIGH/VERY_HIGH when VIX>20 or FII selling
     scores.max += 10;

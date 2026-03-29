@@ -6026,9 +6026,16 @@ function switchSettingsTab(tab) {
 // AI ACCURACY DASHBOARD
 // ══════════════════════════════════════════════════════════
 async function fetchAccuracyDashboard() {
+  const tableEl = document.getElementById('acc-recent-table');
+  if (tableEl) tableEl.innerHTML = '<div class="text-center py-6 text-[#636366] font-mono text-xs"><div class="inline-block w-5 h-5 border-2 border-[#ffd60a] border-t-transparent rounded-full animate-spin mb-2"></div><br>Fetching accuracy data...</div>';
   try {
     const r = await fetch('/api/accuracy?days=90');
+    if (!r.ok) throw new Error('Server returned ' + r.status);
     const data = await r.json();
+    if (data.total === 0 && data.verified === 0) {
+      showAccError('No predictions recorded yet. AI predictions will be tracked automatically as they are generated.');
+      return;
+    }
     renderAccGauge(data.avgScore || 0);
     renderAccStats(data);
     renderAccBreakdown(data);
@@ -6037,7 +6044,25 @@ async function fetchAccuracyDashboard() {
     renderAccPending(data);
   } catch(e) {
     console.error('Accuracy fetch error:', e);
+    showAccError('Failed to load accuracy data: ' + e.message);
   }
+}
+
+function showAccError(msg) {
+  const el = document.getElementById('acc-recent-table');
+  if (el) el.innerHTML = '<div class="text-center py-6"><span class="material-symbols-outlined text-2xl text-[#636366] mb-2 block">error_outline</span><p class="text-[11px] text-[#636366]">' + msg + '</p></div>';
+  ['acc-gauge-pct','acc-total','acc-verified','acc-pending','acc-ns-avg','acc-tb-avg','acc-best','acc-worst'].forEach(id => {
+    const e = document.getElementById(id); if (e) e.textContent = '—';
+  });
+  ['acc-ns-samples','acc-tb-samples'].forEach(id => {
+    const e = document.getElementById(id); if (e) e.textContent = '';
+  });
+  const gauge = document.getElementById('acc-gauge');
+  if (gauge) { const ctx = gauge.getContext('2d'); ctx.clearRect(0, 0, gauge.width, gauge.height); }
+  const pendingEl = document.getElementById('acc-pending-list');
+  if (pendingEl) pendingEl.innerHTML = '';
+  const badge = document.getElementById('acc-pending-badge');
+  if (badge) badge.textContent = '0';
 }
 
 function renderAccGauge(score) {
@@ -6140,7 +6165,18 @@ function renderAccBreakdown(data) {
 
 function renderAccTrendChart(weekly) {
   const canvas = document.getElementById('acc-trend-chart');
-  if (!canvas || !weekly.length) return;
+  if (!canvas) return;
+  const ctx0 = canvas.getContext('2d');
+  if (!weekly.length) {
+    const dpr0 = window.devicePixelRatio || 1;
+    const rect0 = canvas.getBoundingClientRect();
+    canvas.width = rect0.width * dpr0; canvas.height = 200 * dpr0;
+    ctx0.scale(dpr0, dpr0);
+    ctx0.clearRect(0, 0, rect0.width, 200);
+    ctx0.fillStyle = '#636366'; ctx0.textAlign = 'center'; ctx0.font = '11px sans-serif';
+    ctx0.fillText('No weekly trend data available yet', rect0.width / 2, 100);
+    return;
+  }
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
