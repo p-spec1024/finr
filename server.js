@@ -364,8 +364,12 @@ function startNsePolling() {
     fiiDiiInterval = setTimeout(async () => {
       await fetchNseIndices();
       await fetchNseFiiDii();
-      // Verify pending predictions against actual market data (after 10 AM IST)
-      if (isMarketOpen() && getISTMins() >= 600) { try { verifyPredictions(); } catch(e) { log('WARN', 'Prediction verification error: ' + e.message); } }
+      // Verify pending predictions against actual market data
+      // Runs during market hours (for next-day carryover) AND post-market (3:30-6 PM) for same-day scoring
+      const _mins = getISTMins();
+      const _day = getISTDay();
+      const isWeekday = _day >= 1 && _day <= 5;
+      if (isWeekday && (isMarketOpen() || (_mins >= 930 && _mins <= 1080))) { try { verifyPredictions(); } catch(e) { log('WARN', 'Prediction verification error: ' + e.message); } }
       scheduleNextPoll(); // re-evaluate market hours for next interval
     }, pollMs);
     log('INFO', `NSE next poll in ${pollMs / 60000} min (market ${isMarketOpen() ? 'open' : 'closed'})`);
@@ -2038,9 +2042,31 @@ app.get('/api/market-predictions', async (req, res) => {
   }
   phaseCache.dateIST = todayIST;
 
-  // Weekend: return whatever is cached
-  if (isWeekend()) {
-    return res.json({ weekend: true, phases: buildPhaseResponse(), livePulse: todayCache.data || null });
+  // Weekend or holiday: serve last trading day's predictions from history
+  const isNonTrading = isWeekend() || (!isMarketOpen() && istMins < 480 && !phaseCache.p1.locked);
+  if (isWeekend() || (isNonTrading && istMins > 960)) {
+    // Find most recent phase predictions from history
+    const recentPhases = {};
+    for (const p of predictionHistory) {
+      if (!PHASE_TYPES.includes(p.type)) continue;
+      if (!recentPhases[p.type] || p.generatedAt > recentPhases[p.type].generatedAt) recentPhases[p.type] = p;
+    }
+    const histPhases = [1,2,3,4].map(n => {
+      const key = PHASE_TYPES[n-1];
+      const hp = recentPhases[key];
+      return {
+        phase: n, name: ['','Pre-Market','Opening Verdict','Mid-Session','Power Hour'][n],
+        icon: ['','nights_stay','open_in_new','wb_sunny','bolt'][n],
+        status: hp ? (hp.status === 'VERIFIED' ? 'SCORED' : 'LOCKED') : 'NONE',
+        prediction: hp ? hp.prediction : null,
+        generatedAt: hp ? hp.generatedAt : null,
+        score: hp && hp.scores ? hp.scores : null,
+        predictedDate: hp ? hp.predictedDate : null
+      };
+    });
+    const histScores = {};
+    for (const [key, hp] of Object.entries(recentPhases)) { if (hp.scores) histScores[key] = hp.scores; }
+    return res.json({ holiday: true, phases: histPhases, scores: histScores, fromDate: histPhases[0]?.predictedDate || null });
   }
 
   // Determine which phase to generate based on time

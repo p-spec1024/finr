@@ -5344,6 +5344,7 @@ const DIR_MAP = {
 };
 const PHASE_ICONS = { 1: 'nights_stay', 2: 'open_in_new', 3: 'wb_sunny', 4: 'bolt' };
 const PHASE_NAMES = { 1: 'Pre-Market', 2: 'Opening Verdict', 3: 'Mid-Session', 4: 'Power Hour' };
+const PHASE_TYPES_MAP = { 1: 'phase_1_premarket', 2: 'phase_2_opening', 3: 'phase_3_midsession', 4: 'phase_4_powerhour' };
 let phaseData = null;
 let selectedPhase = null;
 
@@ -5367,14 +5368,21 @@ function showPhaseEmpty(msg) {
 function renderPhaseTimeline(d) {
   if (!d || !d.phases) return showPhaseEmpty('No phase data');
   const pills = document.querySelectorAll('.phase-pill');
-  const anyLocked = d.phases.some(p => p.status === 'LOCKED');
+  const anyLocked = d.phases.some(p => p.status === 'LOCKED' || p.status === 'SCORED');
   let latestLocked = null;
 
   d.phases.forEach((p, i) => {
     const pill = pills[i];
     if (!pill) return;
     const dot = pill.querySelector('.phase-status-dot');
-    if (p.status === 'LOCKED') {
+    if (p.status === 'SCORED') {
+      // Verified and scored — green
+      pill.style.borderColor = '#47e266'; pill.style.color = '#47e266'; pill.style.background = 'rgba(71,226,102,0.08)';
+      if (dot) { dot.style.background = '#47e266'; dot.style.animation = 'none'; }
+      latestLocked = p.phase;
+      // Put score into scores map for selectPhase
+      if (p.score && d.scores) { const key = PHASE_TYPES_MAP[p.phase]; if (key) d.scores[key] = p.score; }
+    } else if (p.status === 'LOCKED') {
       pill.style.borderColor = '#ffd60a'; pill.style.color = '#ffd60a'; pill.style.background = 'rgba(255,214,10,0.08)';
       if (dot) dot.style.background = '#ffd60a';
       latestLocked = p.phase;
@@ -5394,11 +5402,15 @@ function renderPhaseTimeline(d) {
     }
   });
 
-  // Date label
+  // Date label — show from prediction date or generatedAt
   const dateEl = document.getElementById('phase-date');
-  if (dateEl) dateEl.textContent = d.phases[0]?.prediction?._generatedAt ? new Date(d.phases[0].prediction._generatedAt).toLocaleDateString('en-IN', { day:'numeric', month:'short' }) : '';
+  if (dateEl) {
+    const srcDate = d.fromDate || d.phases[0]?.predictedDate || (d.phases[0]?.prediction?._generatedAt ? d.phases[0].prediction._generatedAt.slice(0,10) : '');
+    if (srcDate) { const dt = new Date(srcDate + 'T00:00:00'); dateEl.textContent = (d.holiday ? 'Last: ' : '') + dt.toLocaleDateString('en-IN', { day:'numeric', month:'short' }); }
+    else dateEl.textContent = '';
+  }
 
-  // Auto-select latest locked phase or first available
+  // Auto-select latest locked/scored phase or first available
   if (!selectedPhase || !d.phases.find(p => p.phase === selectedPhase && p.status === 'LOCKED')) {
     selectedPhase = latestLocked || d.phases.find(p => p.status === 'AVAILABLE')?.phase || null;
   }
@@ -5438,9 +5450,10 @@ function selectPhase(num) {
   document.getElementById('phase-card-icon').style.color = dir.color;
   document.getElementById('phase-card-name').textContent = PHASE_NAMES[num] || '';
   const statusEl = document.getElementById('phase-card-status');
-  statusEl.textContent = phase.status === 'LOCKED' ? 'LOCKED' : phase.status;
-  statusEl.style.background = phase.status === 'LOCKED' ? 'rgba(255,214,10,0.15)' : 'rgba(99,99,102,0.15)';
-  statusEl.style.color = phase.status === 'LOCKED' ? '#ffd60a' : '#636366';
+  const isScored = phase.status === 'SCORED' || (phaseData.scores && phaseData.scores[PHASE_TYPES_MAP[num]]);
+  statusEl.textContent = isScored ? 'SCORED' : phase.status === 'LOCKED' ? 'LOCKED' : phase.status;
+  statusEl.style.background = isScored ? 'rgba(71,226,102,0.15)' : phase.status === 'LOCKED' ? 'rgba(255,214,10,0.15)' : 'rgba(99,99,102,0.15)';
+  statusEl.style.color = isScored ? '#47e266' : phase.status === 'LOCKED' ? '#ffd60a' : '#636366';
   document.getElementById('phase-card-time').textContent = phase.generatedAt ? new Date(phase.generatedAt).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
 
   // Direction + confidence
@@ -5534,11 +5547,11 @@ function selectPhase(num) {
     fEl.appendChild(sp);
   });
 
-  // Score row
+  // Score row — check both live scores and history scores
   const scoreRow = document.getElementById('phase-score-row');
-  const typeKey = 'phase_' + num + '_' + ['','premarket','opening','midsession','powerhour'][num];
-  if (phaseData.scores && phaseData.scores[typeKey]) {
-    const sc = phaseData.scores[typeKey];
+  const typeKey = PHASE_TYPES_MAP[num];
+  const sc = (phaseData.scores && phaseData.scores[typeKey]) || phase.score || null;
+  if (sc && sc.pct != null) {
     scoreRow.classList.remove('hidden');
     const scoreEl = document.getElementById('phase-score');
     scoreEl.textContent = sc.pct + '%';
