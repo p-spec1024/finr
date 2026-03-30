@@ -4345,7 +4345,7 @@ app.get('/api/config-status', (req, res) => {
 app.get('/api/gemini-status', async (req, res) => {
   if (!appConfig.geminiKey) return res.json({ ok: false, reason: 'No API key configured' });
   try {
-    const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 25000 });
+    const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 45000 });
     res.json({ ok: true, response: g.text.trim(), model: g.model });
   } catch(e) {
     res.json({ ok: false, reason: e.response?.data?.error?.message || e.message });
@@ -4417,7 +4417,7 @@ app.post('/api/gemini-test', async (req, res) => {
     const wasDisabled = geminiDisabled;
     appConfig.geminiKey = key;
     geminiDisabled = false; // allow test call even if previously disconnected
-    const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 25000 });
+    const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 45000 });
     appConfig.geminiKey = origKey; // restore
     log('OK', 'Gemini test passed — model: ' + g.model);
     geminiConnectionOk = true;
@@ -6128,7 +6128,7 @@ server.listen(PORT, async () => {
   // Auto-connect Gemini & Vertex AI if keys are present from env vars
   if (appConfig.geminiKey && !geminiConnectionOk && !geminiDisabled) {
     try {
-      const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 25000 });
+      const g = await callGemini('Reply with just: OK', { maxOutputTokens: 10, timeout: 45000 });
       geminiConnectionOk = true;
       log('OK', `Gemini auto-connected on startup (model: ${g.model})`);
     } catch(e) {
