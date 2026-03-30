@@ -681,6 +681,26 @@ function storePrediction(type, data) {
       niftySupport: data.niftySupport,
       niftyResistance: data.niftyResistance
     };
+  } else if (PHASE_TYPES.includes(type) && data) {
+    entry.predictedDate = getISTDateStr();
+    entry.prediction = {
+      phase: data.phase,
+      direction: data.direction,
+      confidence: data.confidence,
+      reasoning: data.reasoning,
+      keyFactors: data.keyFactors || [],
+      riskLevel: data.riskLevel,
+      niftyRange: data.niftyRange || null,
+      bankNiftyRange: data.bankNiftyRange || null,
+      openingExpectation: data.openingExpectation || null,
+      keyLevels: data.keyLevels || null,
+      gapFill: data.gapFill != null ? data.gapFill : null,
+      trapAlert: data.trapAlert || null,
+      closingZone: data.closingZone || null,
+      expectedClose: data.expectedClose || null,
+      tomorrowBias: data.tomorrowBias || null,
+      _dataSnapshot: data._dataSnapshot || null
+    };
   }
 
   // Deduplicate: only keep latest prediction per type+predictedDate
@@ -844,6 +864,142 @@ function scorePrediction(pred) {
       scores.total += srScore;
       scores.breakdown.levels = { score: srScore, max: 50, error: +avgErr.toFixed(2) };
     } else { scores.breakdown.levels = { score: 0, max: 50, note: 'No levels predicted' }; }
+
+  } else if (pred.type === 'phase_1_premarket') {
+    // ── Phase 1: Pre-Market Prediction Scoring (100 pts) ──
+    const actualDir = a.niftyChangePct > 0.3 ? 'BULLISH' : a.niftyChangePct < -0.3 ? 'BEARISH' : 'SIDEWAYS';
+    // 1. Direction (35 pts)
+    scores.max += 35;
+    const pDir = (p.direction || '').replace('CAUTIOUSLY_', '');
+    if (pDir === actualDir) { scores.total += 35; scores.breakdown.direction = { score: 35, max: 35, predicted: p.direction, actual: actualDir }; }
+    else if ((pDir === 'BULLISH' && actualDir === 'SIDEWAYS') || (pDir === 'BEARISH' && actualDir === 'SIDEWAYS') || (pDir === 'SIDEWAYS')) { scores.total += 15; scores.breakdown.direction = { score: 15, max: 35, predicted: p.direction, actual: actualDir }; }
+    else { scores.breakdown.direction = { score: 0, max: 35, predicted: p.direction, actual: actualDir }; }
+    // 2. Range (25 pts)
+    scores.max += 25;
+    if (p.niftyRange && p.niftyRange.low && p.niftyRange.high && a.niftyLow && a.niftyHigh) {
+      const lowErr = Math.abs(a.niftyLow - Number(p.niftyRange.low)) / a.niftyLow * 100;
+      const highErr = Math.abs(a.niftyHigh - Number(p.niftyRange.high)) / a.niftyHigh * 100;
+      const avgErr = (lowErr + highErr) / 2;
+      const rs = avgErr < 0.5 ? 25 : avgErr < 1.0 ? 20 : avgErr < 1.5 ? 14 : avgErr < 2.5 ? 7 : 0;
+      scores.total += rs; scores.breakdown.range = { score: rs, max: 25, error: +avgErr.toFixed(2) };
+    } else { scores.breakdown.range = { score: 0, max: 25, note: 'No range data' }; }
+    // 3. Opening expectation (20 pts)
+    if (a.niftyPrevClose && a.niftyOpen) {
+      scores.max += 20;
+      const gap = ((a.niftyOpen - a.niftyPrevClose) / a.niftyPrevClose * 100);
+      const actualOpen = gap > 0.25 ? 'GAP_UP' : gap < -0.25 ? 'GAP_DOWN' : 'FLAT';
+      if (p.openingExpectation === actualOpen) { scores.total += 20; scores.breakdown.opening = { score: 20, max: 20, predicted: p.openingExpectation, actual: actualOpen }; }
+      else if ((p.openingExpectation === 'FLAT' && Math.abs(gap) < 0.5) || (p.openingExpectation !== 'FLAT' && actualOpen === 'FLAT')) { scores.total += 10; scores.breakdown.opening = { score: 10, max: 20, predicted: p.openingExpectation, actual: actualOpen }; }
+      else { scores.breakdown.opening = { score: 0, max: 20, predicted: p.openingExpectation, actual: actualOpen }; }
+    } else { scores.breakdown.opening = { score: 0, max: 0, note: 'No open data' }; }
+    // 4. Key levels (10 pts)
+    if (p.keyLevels && p.keyLevels.support && p.keyLevels.resistance && a.niftyLow && a.niftyHigh) {
+      scores.max += 10;
+      const sErr = Math.abs(a.niftyLow - Number(p.keyLevels.support)) / a.niftyLow * 100;
+      const rErr = Math.abs(a.niftyHigh - Number(p.keyLevels.resistance)) / a.niftyHigh * 100;
+      const avgE = (sErr + rErr) / 2;
+      const ls = avgE < 0.5 ? 10 : avgE < 1 ? 7 : avgE < 2 ? 4 : 0;
+      scores.total += ls; scores.breakdown.levels = { score: ls, max: 10, error: +avgE.toFixed(2) };
+    } else { scores.breakdown.levels = { score: 0, max: 0, note: 'No levels' }; }
+    // 5. Confidence calibration (10 pts)
+    scores.max += 10;
+    const p1Acc = scores.max > 10 ? ((scores.total) / (scores.max - 10)) * 100 : 50;
+    const p1Diff = Math.abs((p.confidence || 50) - p1Acc);
+    const p1Cal = p1Diff < 10 ? 10 : p1Diff < 20 ? 7 : p1Diff < 30 ? 4 : 0;
+    scores.total += p1Cal; scores.breakdown.calibration = { score: p1Cal, max: 10, confidence: p.confidence, actualAccuracy: +p1Acc.toFixed(0) };
+
+  } else if (pred.type === 'phase_2_opening') {
+    // ── Phase 2: Opening Verdict Scoring (100 pts) ──
+    const actualDir = a.niftyChangePct > 0.3 ? 'BULLISH' : a.niftyChangePct < -0.3 ? 'BEARISH' : 'SIDEWAYS';
+    // 1. Direction (35 pts)
+    scores.max += 35;
+    if (p.direction === actualDir) { scores.total += 35; } else if (p.direction === 'SIDEWAYS' || actualDir === 'SIDEWAYS') { scores.total += 15; }
+    scores.breakdown.direction = { score: scores.total, max: 35, predicted: p.direction, actual: actualDir };
+    // 2. Gap fill prediction (25 pts)
+    if (a.niftyPrevClose && a.niftyOpen && a.niftyLow && a.niftyHigh) {
+      scores.max += 25;
+      const gapUp = a.niftyOpen > a.niftyPrevClose * 1.0025;
+      const gapDown = a.niftyOpen < a.niftyPrevClose * 0.9975;
+      let actualFill = false;
+      if (gapUp) actualFill = a.niftyLow <= a.niftyPrevClose;
+      else if (gapDown) actualFill = a.niftyHigh >= a.niftyPrevClose;
+      const noGap = !gapUp && !gapDown;
+      if (noGap) { scores.total += 15; scores.breakdown.gapFill = { score: 15, max: 25, note: 'No significant gap' }; }
+      else if (p.gapFill === actualFill) { scores.total += 25; scores.breakdown.gapFill = { score: 25, max: 25, predicted: p.gapFill, actual: actualFill }; }
+      else { scores.breakdown.gapFill = { score: 0, max: 25, predicted: p.gapFill, actual: actualFill }; }
+    } else { scores.breakdown.gapFill = { score: 0, max: 0, note: 'Insufficient data' }; }
+    // 3. Trap alert (20 pts)
+    scores.max += 20;
+    const isBullTrap = a.niftyOpen > (a.niftyPrevClose || 0) && a.niftyChangePct < -0.3;
+    const isBearTrap = a.niftyOpen < (a.niftyPrevClose || 0) && a.niftyChangePct > 0.3;
+    const actualTrap = isBullTrap ? 'BULL_TRAP' : isBearTrap ? 'BEAR_TRAP' : 'NONE';
+    if (p.trapAlert === actualTrap) { scores.total += 20; } else if (p.trapAlert === 'NONE' && actualTrap === 'NONE') { scores.total += 20; } else if (p.trapAlert !== 'NONE' && actualTrap !== 'NONE') { scores.total += 10; }
+    scores.breakdown.trap = { score: scores.total - (scores.breakdown.direction?.score || 0) - (scores.breakdown.gapFill?.score || 0), max: 20, predicted: p.trapAlert, actual: actualTrap };
+    // 4. Confidence calibration (20 pts)
+    scores.max += 20;
+    const p2Acc = scores.max > 20 ? ((scores.total) / (scores.max - 20)) * 100 : 50;
+    const p2Diff = Math.abs((p.confidence || 50) - p2Acc);
+    const p2Cal = p2Diff < 10 ? 20 : p2Diff < 20 ? 14 : p2Diff < 30 ? 7 : 0;
+    scores.total += p2Cal; scores.breakdown.calibration = { score: p2Cal, max: 20, confidence: p.confidence, actualAccuracy: +p2Acc.toFixed(0) };
+
+  } else if (pred.type === 'phase_3_midsession') {
+    // ── Phase 3: Mid-Session Forecast Scoring (100 pts) ──
+    const actualDir = a.niftyChangePct > 0.3 ? 'BULLISH' : a.niftyChangePct < -0.3 ? 'BEARISH' : 'SIDEWAYS';
+    // 1. Direction (35 pts)
+    scores.max += 35;
+    if (p.direction === actualDir) { scores.total += 35; } else if (p.direction === 'SIDEWAYS' || actualDir === 'SIDEWAYS') { scores.total += 15; }
+    scores.breakdown.direction = { score: Math.min(scores.total, 35), max: 35, predicted: p.direction, actual: actualDir };
+    // 2. Closing zone prediction (30 pts)
+    if (a.niftyHigh && a.niftyLow && a.niftyClose) {
+      scores.max += 30;
+      const range = a.niftyHigh - a.niftyLow;
+      const closePos = range > 0 ? (a.niftyClose - a.niftyLow) / range : 0.5;
+      const actualZone = closePos > 0.7 ? 'NEAR_HIGH' : closePos < 0.3 ? 'NEAR_LOW' : 'MIDDLE';
+      if (p.closingZone === actualZone) { scores.total += 30; } else if ((p.closingZone === 'MIDDLE' && closePos > 0.25 && closePos < 0.75)) { scores.total += 18; } else if (Math.abs(['NEAR_LOW','MIDDLE','NEAR_HIGH'].indexOf(p.closingZone) - ['NEAR_LOW','MIDDLE','NEAR_HIGH'].indexOf(actualZone)) === 1) { scores.total += 12; }
+      scores.breakdown.closingZone = { score: scores.total - (scores.breakdown.direction?.score || 0), max: 30, predicted: p.closingZone, actual: actualZone, closePosition: +closePos.toFixed(2) };
+    } else { scores.breakdown.closingZone = { score: 0, max: 0, note: 'No data' }; }
+    // 3. Volatility (15 pts)
+    if (a.niftyHigh && a.niftyLow && a.niftyPrevClose) {
+      scores.max += 15;
+      const dayRange = ((a.niftyHigh - a.niftyLow) / a.niftyPrevClose) * 100;
+      const actualVol = dayRange > 2.0 ? 'HIGH' : dayRange > 1.0 ? 'MODERATE' : 'LOW';
+      const predVol = p.volatilityExpected || 'MODERATE';
+      if (predVol === actualVol) { scores.total += 15; } else if (Math.abs(['LOW','MODERATE','HIGH'].indexOf(predVol) - ['LOW','MODERATE','HIGH'].indexOf(actualVol)) === 1) { scores.total += 8; }
+      scores.breakdown.volatility = { score: scores.total - (scores.breakdown.direction?.score || 0) - (scores.breakdown.closingZone?.score || 0), max: 15, predicted: predVol, actual: actualVol };
+    } else { scores.breakdown.volatility = { score: 0, max: 0, note: 'No data' }; }
+    // 4. Calibration (20 pts)
+    scores.max += 20;
+    const p3Acc = scores.max > 20 ? (scores.total / (scores.max - 20)) * 100 : 50;
+    const p3Cal = Math.abs((p.confidence || 50) - p3Acc) < 10 ? 20 : Math.abs((p.confidence || 50) - p3Acc) < 20 ? 14 : Math.abs((p.confidence || 50) - p3Acc) < 30 ? 7 : 0;
+    scores.total += p3Cal; scores.breakdown.calibration = { score: p3Cal, max: 20, confidence: p.confidence, actualAccuracy: +p3Acc.toFixed(0) };
+
+  } else if (pred.type === 'phase_4_powerhour') {
+    // ── Phase 4: Power Hour Scoring (100 pts) ──
+    const actualDir = a.niftyChangePct > 0.3 ? 'BULLISH' : a.niftyChangePct < -0.3 ? 'BEARISH' : 'SIDEWAYS';
+    // 1. Direction (35 pts)
+    scores.max += 35;
+    if (p.direction === actualDir) { scores.total += 35; } else if (p.direction === 'SIDEWAYS' || actualDir === 'SIDEWAYS') { scores.total += 15; }
+    scores.breakdown.direction = { score: Math.min(scores.total, 35), max: 35, predicted: p.direction, actual: actualDir };
+    // 2. Close level (30 pts)
+    if (p.expectedClose && p.expectedClose.niftyLow && p.expectedClose.niftyHigh && a.niftyClose) {
+      scores.max += 30;
+      const pLow = Number(p.expectedClose.niftyLow), pHigh = Number(p.expectedClose.niftyHigh);
+      const inRange = a.niftyClose >= pLow * 0.998 && a.niftyClose <= pHigh * 1.002;
+      const closeErr = Math.min(Math.abs(a.niftyClose - pLow), Math.abs(a.niftyClose - pHigh)) / a.niftyClose * 100;
+      const cs = inRange ? 30 : closeErr < 0.3 ? 25 : closeErr < 0.5 ? 20 : closeErr < 1.0 ? 12 : closeErr < 2.0 ? 5 : 0;
+      scores.total += cs; scores.breakdown.closeLevel = { score: cs, max: 30, predicted: { low: pLow, high: pHigh }, actual: a.niftyClose, error: +closeErr.toFixed(2) };
+    } else { scores.breakdown.closeLevel = { score: 0, max: 0, note: 'No close prediction' }; }
+    // 3. Risk assessment (15 pts)
+    scores.max += 15;
+    const actRisk = (a.vix && a.vix > 25) || (a.fii && a.fii < -2000) ? 'HIGH' : (a.vix && a.vix > 18) || (a.fii && a.fii < -500) ? 'MODERATE' : 'LOW';
+    const pRisk = (p.riskLevel === 'VERY_HIGH' || p.riskLevel === 'HIGH') ? 'HIGH' : p.riskLevel === 'MODERATE' ? 'MODERATE' : 'LOW';
+    if (pRisk === actRisk) { scores.total += 15; } else if (Math.abs(['LOW','MODERATE','HIGH'].indexOf(pRisk) - ['LOW','MODERATE','HIGH'].indexOf(actRisk)) === 1) { scores.total += 8; }
+    scores.breakdown.risk = { score: scores.total - (scores.breakdown.direction?.score || 0) - (scores.breakdown.closeLevel?.score || 0), max: 15, predicted: p.riskLevel, actual: actRisk };
+    // 4. Calibration (20 pts)
+    scores.max += 20;
+    const p4Acc = scores.max > 20 ? (scores.total / (scores.max - 20)) * 100 : 50;
+    const p4Cal = Math.abs((p.confidence || 50) - p4Acc) < 10 ? 20 : Math.abs((p.confidence || 50) - p4Acc) < 20 ? 14 : Math.abs((p.confidence || 50) - p4Acc) < 30 ? 7 : 0;
+    scores.total += p4Cal; scores.breakdown.calibration = { score: p4Cal, max: 20, confidence: p.confidence, actualAccuracy: +p4Acc.toFixed(0) };
   }
 
   scores.pct = scores.max > 0 ? Math.round((scores.total / scores.max) * 100) : 0;
@@ -876,7 +1032,7 @@ app.get('/api/accuracy', (req, res) => {
 
   // Per-type breakdown
   stats.byType = {};
-  for (const t of ['next_session', 'today_behavior']) {
+  for (const t of ['next_session', 'today_behavior', ...PHASE_TYPES]) {
     const typeVer = verified.filter(p => p.type === t);
     if (typeVer.length === 0) { stats.byType[t] = { count: 0 }; continue; }
     const avg = Math.round(typeVer.reduce((s, p) => s + p.scores.pct, 0) / typeVer.length);
@@ -1447,13 +1603,26 @@ async function callAI(prompt, opts = {}) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── Shared state ──
-let todayCache   = { data: null, lastFetch: 0, dateIST: '' };  // Today's Behaviour
+let todayCache   = { data: null, lastFetch: 0, dateIST: '' };  // Today's Behaviour (Live Pulse)
 let preMarketCache = { data: null, lastFetch: 0, dateIST: '' }; // Pre-market analysis
 let nextSessionCache = { data: null, lastFetch: 0, predictedDate: '' };  // Next Session
+
+// ── Phase Prediction Cache (locked predictions per day) ──
+let phaseCache = {
+  dateIST: '',
+  p1: { data: null, locked: false, generatedAt: null },  // Pre-Market (8:00-9:14 AM)
+  p2: { data: null, locked: false, generatedAt: null },  // Opening Verdict (9:30 AM)
+  p3: { data: null, locked: false, generatedAt: null },  // Mid-Session (12:30 PM)
+  p4: { data: null, locked: false, generatedAt: null }   // Power Hour (2:00 PM)
+};
+function resetPhaseCache() {
+  phaseCache = { dateIST: '', p1: { data: null, locked: false, generatedAt: null }, p2: { data: null, locked: false, generatedAt: null }, p3: { data: null, locked: false, generatedAt: null }, p4: { data: null, locked: false, generatedAt: null } };
+}
 
 // ── Shared constants ──
 const LIVE_CACHE_MS = 15 * 60 * 1000;          // 15 min during market hours
 const NEXT_SESSION_CACHE_MS = 30 * 60 * 1000;  // 30 min post-market
+const PHASE_TYPES = ['phase_1_premarket', 'phase_2_opening', 'phase_3_midsession', 'phase_4_powerhour'];
 
 // ── Shared helpers ──
 function getISTDateStr() {
@@ -1515,6 +1684,7 @@ app.get('/api/market-prediction', async (req, res) => {
     log('INFO', `Today's behaviour date rolled: ${todayCache.dateIST} → ${todayIST}`);
     todayCache = { data: null, lastFetch: 0, dateIST: '' };
     preMarketCache = { data: null, lastFetch: 0, dateIST: '' };
+    resetPhaseCache();
   }
 
   // ═══ WEEKEND (Sat/Sun): serve Friday's cached analysis, no AI calls ═══
@@ -1712,6 +1882,318 @@ Predict what will MOST LIKELY happen when Indian markets open today. Reply ONLY 
     return res.json({ noDataToday: true, error: 'Pre-market analysis unavailable', _refreshMs: refreshMs });
   }
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PHASE PREDICTIONS — /api/market-predictions
+// 4 locked predictions per trading day, scored after market close.
+// Phase 1: Pre-Market (8:00-9:14 AM)  Phase 2: Opening (9:30 AM)
+// Phase 3: Mid-Session (12:30 PM)     Phase 4: Power Hour (2:00 PM)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Helper: collect quantitative market snapshot for phase prompts
+function getPhaseDataSnapshot() {
+  const nifty = liveIndices['Nifty 50'] || liveIndices['NIFTY50'] || {};
+  const bank = liveIndices['NIFTYBANK'] || liveIndices['Nifty Bank'] || {};
+  const vix = vixData, fii = fiiDiiData;
+  const stocks = Object.values(liveStocks).filter(s => s.price);
+  const adv = stocks.filter(s => s.changePct >= 0).length;
+  const dec = stocks.filter(s => s.changePct < 0).length;
+  const signals = Object.values(signalCache);
+  const avgScore = signals.length ? Math.round(signals.reduce((a, s) => a + (s.score || 0), 0) / signals.length) : null;
+  // Day range consumed
+  const dayRange = (nifty.high && nifty.low && nifty.high > nifty.low) ? +((nifty.price - nifty.low) / (nifty.high - nifty.low) * 100).toFixed(1) : null;
+  const rangeExpansion = (nifty.high && nifty.low && nifty.previousClose) ? +((nifty.high - nifty.low) / nifty.previousClose * 100).toFixed(2) : null;
+  // Opening gap
+  const openGap = (nifty.open && nifty.previousClose) ? +(((nifty.open - nifty.previousClose) / nifty.previousClose) * 100).toFixed(2) : null;
+  // Options
+  let optData = null;
+  if (optionChainCache.nifty) {
+    const nc = optionChainCache.nifty;
+    optData = { pcr: nc.pcr, maxPain: nc.maxPain, avgIV: nc.avgIV };
+    if (optionChainCache.banknifty) { const bc = optionChainCache.banknifty; optData.bnPcr = bc.pcr; optData.bnMaxPain = bc.maxPain; }
+  }
+  // Sector breakdown
+  const sectors = {};
+  for (const st of STOCK_UNIVERSE) { const sig = signalCache[st.symbol]; if (!sig) continue; const s = st.sector || 'Other'; if (!sectors[s]) sectors[s] = []; sectors[s].push(sig.score || 0); }
+  const sectorAvgs = {};
+  for (const [s, scores] of Object.entries(sectors)) { if (scores.length) sectorAvgs[s] = Math.round(scores.reduce((a,b)=>a+b,0)/scores.length); }
+
+  return {
+    nifty: { price: nifty.price, change: nifty.changePct, open: nifty.open, high: nifty.high, low: nifty.low, prevClose: nifty.previousClose },
+    bankNifty: { price: bank.price, change: bank.changePct, open: bank.open, high: bank.high, low: bank.low },
+    vix: !vix.isDefault ? { value: vix.value, trend: vix.trend } : null,
+    fiiDii: !fii.isDefault ? { fii: fii.fii, dii: fii.dii } : null,
+    breadth: { adv, dec, total: adv + dec },
+    avgSignalScore: avgScore,
+    dayRangePosition: dayRange,
+    rangeExpansionPct: rangeExpansion,
+    openGapPct: openGap,
+    options: optData,
+    sectors: sectorAvgs,
+    globals: getGlobalDataStr(),
+    topGainers: stocks.sort((a,b)=>b.changePct-a.changePct).slice(0,5).map(s => `${s.symbol}(${s.changePct>=0?'+':''}${s.changePct?.toFixed(1)}%)`).join(', '),
+    topLosers: stocks.sort((a,b)=>a.changePct-b.changePct).slice(0,5).map(s => `${s.symbol}(${s.changePct?.toFixed(1)}%)`).join(', ')
+  };
+}
+
+// Helper: build prompt for each phase
+function buildPhasePrompt(phase, snapshot, prevPhases) {
+  const dataBlock = `QUANTITATIVE DATA:
+- Nifty 50: ${snapshot.nifty.price || 'N/A'} (${snapshot.nifty.change != null ? (snapshot.nifty.change>=0?'+':'') + snapshot.nifty.change + '%' : 'N/A'}) | Open: ${snapshot.nifty.open||'N/A'} | High: ${snapshot.nifty.high||'N/A'} | Low: ${snapshot.nifty.low||'N/A'} | Prev Close: ${snapshot.nifty.prevClose||'N/A'}
+- Bank Nifty: ${snapshot.bankNifty.price || 'N/A'} (${snapshot.bankNifty.change != null ? (snapshot.bankNifty.change>=0?'+':'') + snapshot.bankNifty.change + '%' : 'N/A'})
+- VIX: ${snapshot.vix ? snapshot.vix.value + ' (' + snapshot.vix.trend + ')' : 'N/A'}
+- FII: ${snapshot.fiiDii ? '₹'+snapshot.fiiDii.fii+' Cr' : 'N/A'} | DII: ${snapshot.fiiDii ? '₹'+snapshot.fiiDii.dii+' Cr' : 'N/A'}
+- Breadth: ${snapshot.breadth.adv} advancing / ${snapshot.breadth.dec} declining
+- Opening Gap: ${snapshot.openGapPct != null ? snapshot.openGapPct + '%' : 'N/A'}
+- Day Range Position: ${snapshot.dayRangePosition != null ? snapshot.dayRangePosition + '% (0=at low, 100=at high)' : 'N/A'}
+- Range Expansion: ${snapshot.rangeExpansionPct != null ? snapshot.rangeExpansionPct + '% of prev close' : 'N/A'}
+- Avg Signal Score: ${snapshot.avgSignalScore || 'N/A'}/100
+- Options: ${snapshot.options ? 'PCR ' + snapshot.options.pcr + ' | Max Pain ' + snapshot.options.maxPain + ' | IV ' + snapshot.options.avgIV + '%' + (snapshot.options.bnPcr ? ' | BN PCR ' + snapshot.options.bnPcr : '') : 'N/A'}
+- Sectors: ${Object.entries(snapshot.sectors).map(([s,v]) => s+':'+v).join(', ') || 'N/A'}
+- Globals: ${snapshot.globals || 'N/A'}
+- Gainers: ${snapshot.topGainers || 'N/A'}
+- Losers: ${snapshot.topLosers || 'N/A'}
+- Events: ${getMacroEventsStr()}`;
+
+  const prevBlock = prevPhases.length > 0 ? '\nPREVIOUS PHASE PREDICTIONS (self-awareness — learn from earlier calls):\n' +
+    prevPhases.map(pp => `- Phase ${pp.phase}: Predicted ${pp.direction} (${pp.confidence}% conf) — ${pp.reasoning?.slice(0,80)||'N/A'}`).join('\n') : '';
+
+  if (phase === 1) {
+    return `You are an elite Indian stock market analyst making a PRE-MARKET PREDICTION before market opens (9:15 AM IST).
+Your prediction will be LOCKED and scored against actual market data after close. Be precise and data-driven.
+
+CRITICAL: Use Google Search to find CURRENT real-time data:
+- Gift Nifty / SGX Nifty LIVE level and % change
+- US market close (S&P 500, NASDAQ, Dow) + after-hours
+- Asian markets (Nikkei, Hang Seng) — live now
+- Crude oil, Gold, USD/INR current levels
+- Breaking overnight news (Fed, RBI, earnings, geopolitical)
+
+${snapshot.globals ? 'TWELVE DATA: ' + snapshot.globals : 'No Twelve Data — rely on Google Search'}
+
+MACRO: ${getMacroEventsStr()}
+
+Reply ONLY valid JSON:
+{"direction":"BULLISH/BEARISH/SIDEWAYS","confidence":75,"niftyRange":{"low":0,"high":0},"bankNiftyRange":{"low":0,"high":0},"openingExpectation":"GAP_UP/GAP_DOWN/FLAT","keyLevels":{"support":0,"resistance":0},"riskLevel":"LOW/MODERATE/HIGH/VERY_HIGH","reasoning":"50-word prediction citing specific data points","keyFactors":["f1","f2","f3","f4","f5"]}`;
+  }
+
+  if (phase === 2) {
+    return `You are an elite Indian stock market analyst. Market opened 15 minutes ago. Based on the FIRST 15-MINUTE CANDLE and ALL quantitative data, predict what happens NEXT (the rest of today). Your prediction is LOCKED and scored.
+
+${dataBlock}${prevBlock}
+
+ANALYSIS REQUIRED:
+1. Opening gap analysis: gap ${snapshot.openGapPct > 0.25 ? 'UP' : snapshot.openGapPct < -0.25 ? 'DOWN' : 'FLAT'} of ${snapshot.openGapPct||0}% — will it fill?
+2. First candle: range ${snapshot.nifty.high||0}-${snapshot.nifty.low||0}, breadth ${snapshot.breadth.adv}:${snapshot.breadth.dec}
+3. Volume/breadth: is participation broad or narrow?
+4. Bull/Bear trap risk: opening deceiving retail traders?
+
+Reply ONLY valid JSON:
+{"direction":"BULLISH/BEARISH/SIDEWAYS","confidence":75,"gapFill":true,"trapAlert":"BULL_TRAP/BEAR_TRAP/NONE","reasoning":"50-word prediction with specific data","keyFactors":["f1","f2","f3","f4","f5"],"riskLevel":"LOW/MODERATE/HIGH/VERY_HIGH"}`;
+  }
+
+  if (phase === 3) {
+    return `You are an elite Indian stock market analyst. It is now ~12:30 PM IST (mid-session). Predict the AFTERNOON SESSION (12:30-3:30 PM). Your prediction is LOCKED and scored.
+
+${dataBlock}${prevBlock}
+
+ANALYSIS REQUIRED:
+1. Morning trend: Nifty moved ${snapshot.nifty.change||0}% — will afternoon continue or reverse?
+2. Day range position: ${snapshot.dayRangePosition||'N/A'}% (high=near day high, exhaustion risk)
+3. Range expansion: ${snapshot.rangeExpansionPct||'N/A'}% — wide=volatile, narrow=breakout pending
+4. Breadth evolution: ${snapshot.breadth.adv}:${snapshot.breadth.dec} — broadening or narrowing?
+5. VIX trajectory: ${snapshot.vix ? snapshot.vix.value + ' (' + snapshot.vix.trend + ')' : 'N/A'}
+6. Sector rotation: any sectors flipping direction?
+
+Reply ONLY valid JSON:
+{"direction":"BULLISH/BEARISH/SIDEWAYS","confidence":72,"closingZone":"NEAR_HIGH/NEAR_LOW/MIDDLE","volatilityExpected":"LOW/MODERATE/HIGH","reasoning":"50-word afternoon prediction","keyFactors":["f1","f2","f3","f4","f5"],"riskLevel":"LOW/MODERATE/HIGH/VERY_HIGH"}`;
+  }
+
+  if (phase === 4) {
+    return `You are an elite Indian stock market analyst. It is 2:00 PM IST — 90 minutes to close. Predict the CLOSING BEHAVIOR. Your prediction is LOCKED and scored.
+
+${dataBlock}${prevBlock}
+
+ANALYSIS REQUIRED:
+1. Full-day context: Nifty ${snapshot.nifty.change||0}% | Range used: ${snapshot.dayRangePosition||'N/A'}%
+2. If range mostly consumed, expect mean reversion; if narrow, last-hour breakout possible
+3. Institutional money: FII ${snapshot.fiiDii?.fii||'N/A'} Cr, PCR ${snapshot.options?.pcr||'N/A'}
+4. Closing pattern: smart money accumulating or distributing?
+5. Previous phases accuracy — adjust confidence accordingly
+
+Reply ONLY valid JSON:
+{"direction":"BULLISH/BEARISH/SIDEWAYS","confidence":70,"expectedClose":{"niftyLow":0,"niftyHigh":0},"tomorrowBias":"BULLISH/BEARISH/NEUTRAL","reasoning":"50-word closing prediction","keyFactors":["f1","f2","f3","f4","f5"],"riskLevel":"LOW/MODERATE/HIGH/VERY_HIGH"}`;
+  }
+
+  return '';
+}
+
+app.get('/api/market-predictions', async (req, res) => {
+  const todayIST = getISTDateStr();
+  const istMins = getISTMins();
+
+  // Date roll
+  if (!isWeekend() && phaseCache.dateIST && phaseCache.dateIST !== todayIST) {
+    resetPhaseCache();
+  }
+  phaseCache.dateIST = todayIST;
+
+  // Weekend: return whatever is cached
+  if (isWeekend()) {
+    return res.json({ weekend: true, phases: buildPhaseResponse(), livePulse: todayCache.data || null });
+  }
+
+  // Determine which phase to generate based on time
+  // Phase 1: 8:00 AM (480) - 9:14 AM (554)
+  // Phase 2: 9:30 AM (570) onwards
+  // Phase 3: 12:30 PM (750) onwards
+  // Phase 4: 2:00 PM (840) onwards
+  const force = req.query.force === 'true';
+  let generated = null;
+
+  try {
+    if (!appConfig.geminiKey && !gcpServiceAccount) {
+      return res.json({ error: 'AI not configured', phases: buildPhaseResponse() });
+    }
+
+    // Phase 1: Pre-Market (available 8:00 AM - 9:14 AM, or re-use existing if market open)
+    if (istMins >= 480 && !phaseCache.p1.locked) {
+      if (istMins < 555 || force) { // Only generate before market open, unless forced
+        const snapshot = getPhaseDataSnapshot();
+        const prompt = buildPhasePrompt(1, snapshot, []);
+        const g = await callAI(prompt, { preferGrounded: true, temperature: 0.2, maxOutputTokens: 2000, timeout: 60000 });
+        const parsed = parseAIJson(g.text || '{}');
+        const DIRS = ['BULLISH','BEARISH','SIDEWAYS'];
+        if (!DIRS.includes(parsed.direction)) parsed.direction = 'SIDEWAYS';
+        parsed.confidence = Math.max(50, Math.min(95, Number(parsed.confidence) || 60));
+        if (!['GAP_UP','GAP_DOWN','FLAT'].includes(parsed.openingExpectation)) parsed.openingExpectation = 'FLAT';
+        if (!['LOW','MODERATE','HIGH','VERY_HIGH'].includes(parsed.riskLevel)) parsed.riskLevel = 'MODERATE';
+        if (!Array.isArray(parsed.keyFactors)) parsed.keyFactors = [];
+        parsed.phase = 1; parsed._dataSnapshot = snapshot; parsed._generatedAt = new Date().toISOString(); parsed._model = g.model; parsed._grounded = g.grounded;
+        phaseCache.p1 = { data: parsed, locked: true, generatedAt: new Date().toISOString() };
+        storePrediction('phase_1_premarket', parsed);
+        generated = 1;
+        log('OK', `Phase 1 (Pre-Market) prediction locked: ${parsed.direction} ${parsed.confidence}% (${g.source}/${g.model})`);
+      }
+    }
+
+    // Phase 2: Opening Verdict (after 9:30 AM, needs first 15-min candle)
+    if (istMins >= 570 && !phaseCache.p2.locked && (isMarketOpen() || force)) {
+      const snapshot = getPhaseDataSnapshot();
+      if (snapshot.nifty.price) { // Need live data
+        const prevPhases = phaseCache.p1.data ? [phaseCache.p1.data] : [];
+        const prompt = buildPhasePrompt(2, snapshot, prevPhases);
+        const g = await callAI(prompt, { preferGrounded: false, temperature: 0.2, maxOutputTokens: 2000, timeout: 60000 });
+        const parsed = parseAIJson(g.text || '{}');
+        const DIRS = ['BULLISH','BEARISH','SIDEWAYS'];
+        if (!DIRS.includes(parsed.direction)) parsed.direction = 'SIDEWAYS';
+        parsed.confidence = Math.max(50, Math.min(95, Number(parsed.confidence) || 60));
+        if (parsed.gapFill === undefined || parsed.gapFill === null) parsed.gapFill = false;
+        if (!['BULL_TRAP','BEAR_TRAP','NONE'].includes(parsed.trapAlert)) parsed.trapAlert = 'NONE';
+        if (!['LOW','MODERATE','HIGH','VERY_HIGH'].includes(parsed.riskLevel)) parsed.riskLevel = 'MODERATE';
+        if (!Array.isArray(parsed.keyFactors)) parsed.keyFactors = [];
+        parsed.phase = 2; parsed._dataSnapshot = snapshot; parsed._generatedAt = new Date().toISOString(); parsed._model = g.model;
+        phaseCache.p2 = { data: parsed, locked: true, generatedAt: new Date().toISOString() };
+        storePrediction('phase_2_opening', parsed);
+        generated = 2;
+        log('OK', `Phase 2 (Opening) prediction locked: ${parsed.direction} ${parsed.confidence}% gap_fill:${parsed.gapFill} trap:${parsed.trapAlert}`);
+      }
+    }
+
+    // Phase 3: Mid-Session (after 12:30 PM)
+    if (istMins >= 750 && !phaseCache.p3.locked && (isMarketOpen() || force)) {
+      const snapshot = getPhaseDataSnapshot();
+      if (snapshot.nifty.price) {
+        const prevPhases = [phaseCache.p1.data, phaseCache.p2.data].filter(Boolean);
+        const prompt = buildPhasePrompt(3, snapshot, prevPhases);
+        const g = await callAI(prompt, { preferGrounded: false, temperature: 0.2, maxOutputTokens: 2000, timeout: 60000 });
+        const parsed = parseAIJson(g.text || '{}');
+        const DIRS = ['BULLISH','BEARISH','SIDEWAYS'];
+        if (!DIRS.includes(parsed.direction)) parsed.direction = 'SIDEWAYS';
+        parsed.confidence = Math.max(50, Math.min(95, Number(parsed.confidence) || 60));
+        if (!['NEAR_HIGH','NEAR_LOW','MIDDLE'].includes(parsed.closingZone)) parsed.closingZone = 'MIDDLE';
+        if (!['LOW','MODERATE','HIGH'].includes(parsed.volatilityExpected)) parsed.volatilityExpected = 'MODERATE';
+        if (!['LOW','MODERATE','HIGH','VERY_HIGH'].includes(parsed.riskLevel)) parsed.riskLevel = 'MODERATE';
+        if (!Array.isArray(parsed.keyFactors)) parsed.keyFactors = [];
+        parsed.phase = 3; parsed._dataSnapshot = snapshot; parsed._generatedAt = new Date().toISOString(); parsed._model = g.model;
+        phaseCache.p3 = { data: parsed, locked: true, generatedAt: new Date().toISOString() };
+        storePrediction('phase_3_midsession', parsed);
+        generated = 3;
+        log('OK', `Phase 3 (Mid-Session) prediction locked: ${parsed.direction} ${parsed.confidence}% close:${parsed.closingZone}`);
+      }
+    }
+
+    // Phase 4: Power Hour (after 2:00 PM)
+    if (istMins >= 840 && !phaseCache.p4.locked && (isMarketOpen() || force)) {
+      const snapshot = getPhaseDataSnapshot();
+      if (snapshot.nifty.price) {
+        const prevPhases = [phaseCache.p1.data, phaseCache.p2.data, phaseCache.p3.data].filter(Boolean);
+        const prompt = buildPhasePrompt(4, snapshot, prevPhases);
+        const g = await callAI(prompt, { preferGrounded: false, temperature: 0.2, maxOutputTokens: 2000, timeout: 60000 });
+        const parsed = parseAIJson(g.text || '{}');
+        const DIRS = ['BULLISH','BEARISH','SIDEWAYS'];
+        if (!DIRS.includes(parsed.direction)) parsed.direction = 'SIDEWAYS';
+        parsed.confidence = Math.max(50, Math.min(95, Number(parsed.confidence) || 60));
+        if (!parsed.expectedClose || typeof parsed.expectedClose !== 'object') parsed.expectedClose = null;
+        if (!['BULLISH','BEARISH','NEUTRAL'].includes(parsed.tomorrowBias)) parsed.tomorrowBias = 'NEUTRAL';
+        if (!['LOW','MODERATE','HIGH','VERY_HIGH'].includes(parsed.riskLevel)) parsed.riskLevel = 'MODERATE';
+        if (!Array.isArray(parsed.keyFactors)) parsed.keyFactors = [];
+        parsed.phase = 4; parsed._dataSnapshot = snapshot; parsed._generatedAt = new Date().toISOString(); parsed._model = g.model;
+        phaseCache.p4 = { data: parsed, locked: true, generatedAt: new Date().toISOString() };
+        storePrediction('phase_4_powerhour', parsed);
+        generated = 4;
+        log('OK', `Phase 4 (Power Hour) prediction locked: ${parsed.direction} ${parsed.confidence}% close:${JSON.stringify(parsed.expectedClose)}`);
+      }
+    }
+  } catch (e) {
+    log('ERR', 'Phase prediction error: ' + e.message);
+  }
+
+  // Get scores for today's phases from predictionHistory
+  const todayScores = {};
+  for (const ph of predictionHistory) {
+    if (ph.predictedDate === todayIST && PHASE_TYPES.includes(ph.type) && ph.status === 'VERIFIED') {
+      todayScores[ph.type] = ph.scores;
+    }
+  }
+
+  res.json({
+    phases: buildPhaseResponse(),
+    scores: todayScores,
+    generated,
+    time: { istMins, marketOpen: isMarketOpen() }
+  });
+});
+
+function buildPhaseResponse() {
+  const istMins = getISTMins();
+  return [
+    {
+      phase: 1, name: 'Pre-Market', icon: 'nights_stay',
+      status: phaseCache.p1.locked ? 'LOCKED' : (istMins >= 480 && istMins < 555 ? 'AVAILABLE' : istMins < 480 ? 'UPCOMING' : 'MISSED'),
+      generatesAt: '8:00 AM', locksAt: '9:14 AM',
+      prediction: phaseCache.p1.data, generatedAt: phaseCache.p1.generatedAt
+    },
+    {
+      phase: 2, name: 'Opening Verdict', icon: 'open_in_new',
+      status: phaseCache.p2.locked ? 'LOCKED' : (istMins >= 570 ? 'AVAILABLE' : 'UPCOMING'),
+      generatesAt: '9:30 AM', locksAt: '9:30 AM',
+      prediction: phaseCache.p2.data, generatedAt: phaseCache.p2.generatedAt
+    },
+    {
+      phase: 3, name: 'Mid-Session', icon: 'wb_sunny',
+      status: phaseCache.p3.locked ? 'LOCKED' : (istMins >= 750 ? 'AVAILABLE' : 'UPCOMING'),
+      generatesAt: '12:30 PM', locksAt: '12:30 PM',
+      prediction: phaseCache.p3.data, generatedAt: phaseCache.p3.generatedAt
+    },
+    {
+      phase: 4, name: 'Power Hour', icon: 'bolt',
+      status: phaseCache.p4.locked ? 'LOCKED' : (istMins >= 840 ? 'AVAILABLE' : 'UPCOMING'),
+      generatesAt: '2:00 PM', locksAt: '2:00 PM',
+      prediction: phaseCache.p4.data, generatedAt: phaseCache.p4.generatedAt
+    }
+  ];
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // NEXT SESSION OUTLOOK — /api/next-session

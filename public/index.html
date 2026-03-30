@@ -135,6 +135,7 @@ tailwind.config = {
   .bottom-sheet-overlay.on{display:flex;}
   .bottom-sheet{width:100%;max-width:460px;max-height:80vh;background:#1c1c1e;border-radius:20px 20px 0 0;overflow:hidden;animation:sheetUp .3s ease;display:flex;flex-direction:column;}
   @keyframes sheetUp{from{transform:translateY(100%)}to{transform:none}}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
   .bottom-sheet .drag-handle{width:40px;height:4px;background:#3a3939;border-radius:2px;margin:12px auto;}
 
   /* Toast */
@@ -527,16 +528,116 @@ tailwind.config = {
               <div class="flex items-center gap-2">
                 <span class="material-symbols-outlined text-[#ffd60a]" style="font-size:16px">trending_up</span>
                 <h3 class="text-[10px] font-black uppercase tracking-widest text-[#e5e2e1]">Market Intelligence</h3>
-                <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="left:-8px;right:auto"><div class="tip-title">Market Intelligence</div><div class="tip-desc"><b style="color:#e5e2e1">Today's Behavior:</b> AI analysis of current market trend using live data. Pre-market (12AM-9:15AM) shows outlook from Google Search grounding. Live (9:15AM-3:30PM) uses full Upstox/NSE data + AI.<br><br><b style="color:#e5e2e1">Next Session Outlook:</b> Predicts next trading day. Active post-market (3:30PM+) and all weekend. Gift Nifty, Risk, Sentiment, and ranges are AI-predicted using web search + Twelve Data.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Twelve Data 24/5<br><span class="tip-tag tip-cached">CACHED</span> NSE close data<br><div style="margin-top:6px;font-size:8px;color:#636366"><b>Nifty/BN Ranges:</b> AI predicted (not live)<br><b>Gift Nifty:</b> Web search (real-time)<br><b>Risk/Sentiment:</b> AI assessed</div><div style="margin-top:6px;font-size:8px;color:#636366;border-top:1px solid #353534;padding-top:5px"><b style="color:#d0c6ab">Risk Levels:</b><br><span style="color:#47e266">LOW</span> — Calm market, low VIX, stable flows<br><span style="color:#ffd60a">MODERATE</span> — Normal volatility, mixed signals<br><span style="color:#ff9f0a">HIGH</span> — Elevated VIX, FII selling, uncertainty<br><span style="color:#ffb4ab">VERY HIGH</span> — Extreme fear, VIX &gt;25, heavy FII outflows</div><div style="margin-top:4px;font-size:8px;color:#636366"><b style="color:#d0c6ab">Sentiment:</b><br><span style="color:#47e266">Risk On</span> — Appetite for equities/EM, bullish<br><span style="color:#ffb4ab">Risk Off</span> — Flight to safe havens (gold/bonds/USD)<br><span style="color:#ffd60a">Mixed</span> — Conflicting global signals</div></div></span>
+                <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip" style="left:-8px;right:auto"><div class="tip-title">Market Intelligence</div><div class="tip-desc"><b style="color:#e5e2e1">Today's Predictions:</b> 4-phase LOCKED predictions at key market moments. Pre-Market (8AM), Opening (9:30AM), Mid-Session (12:30PM), Power Hour (2PM). Each prediction locks in and is scored after market close.<br><br><b style="color:#e5e2e1">Live Pulse:</b> Real-time market state (updates every 15 min). Shows what's happening NOW, not a prediction.<br><br><b style="color:#e5e2e1">Next Session Outlook:</b> Predicts next trading day. Active post-market (3:30PM+) and all weekend.</div><span class="tip-tag tip-ai">AI</span> Gemini + Google Search<br><span class="tip-tag tip-live">LIVE</span> Twelve Data 24/5<br><span class="tip-tag tip-cached">CACHED</span> NSE close data<br><div style="margin-top:6px;font-size:8px;color:#636366"><b>Nifty/BN Ranges:</b> AI predicted (not live)<br><b>Gift Nifty:</b> Web search (real-time)<br><b>Risk/Sentiment:</b> AI assessed</div><div style="margin-top:6px;font-size:8px;color:#636366;border-top:1px solid #353534;padding-top:5px"><b style="color:#d0c6ab">Risk Levels:</b><br><span style="color:#47e266">LOW</span> — Calm market, low VIX, stable flows<br><span style="color:#ffd60a">MODERATE</span> — Normal volatility, mixed signals<br><span style="color:#ff9f0a">HIGH</span> — Elevated VIX, FII selling, uncertainty<br><span style="color:#ffb4ab">VERY HIGH</span> — Extreme fear, VIX &gt;25, heavy FII outflows</div><div style="margin-top:4px;font-size:8px;color:#636366"><b style="color:#d0c6ab">Sentiment:</b><br><span style="color:#47e266">Risk On</span> — Appetite for equities/EM, bullish<br><span style="color:#ffb4ab">Risk Off</span> — Flight to safe havens (gold/bonds/USD)<br><span style="color:#ffd60a">Mixed</span> — Conflicting global signals</div></div></span>
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-[10px] font-bold text-[#ffd60a] uppercase font-mono" id="mi-ts"></span>
-                <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="loadMarketPrediction(); loadNextSession()" id="pred-refresh" title="Refresh Intelligence">
+                <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="loadMarketPrediction(); loadNextSession(); loadPhases()" id="pred-refresh" title="Refresh Intelligence">
                   <span class="material-symbols-outlined text-[#d0c6ab] hover:text-[#ffd60a]" style="font-size:14px">refresh</span>
                 </button>
               </div>
             </div>
-            <!-- Today's behavior (clickable to expand detail) -->
+
+            <!-- ═══ PREDICTION TIMELINE ═══ -->
+            <div id="phase-timeline" class="mb-3">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider">Today's Predictions</span>
+                <span class="text-[8px] text-[#636366] font-mono" id="phase-date"></span>
+              </div>
+              <!-- Phase pills -->
+              <div class="flex gap-1.5 overflow-x-auto no-scrollbar mb-3" id="phase-pills">
+                <button class="phase-pill flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-bold font-mono whitespace-nowrap transition-all border border-[#353534] bg-[#0e0e0e] text-[#636366]" data-phase="1" onclick="selectPhase(1)">
+                  <span class="material-symbols-outlined text-xs">nights_stay</span> Pre-Mkt
+                  <span class="phase-status-dot w-1.5 h-1.5 rounded-full bg-[#636366] ml-0.5"></span>
+                </button>
+                <button class="phase-pill flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-bold font-mono whitespace-nowrap transition-all border border-[#353534] bg-[#0e0e0e] text-[#636366]" data-phase="2" onclick="selectPhase(2)">
+                  <span class="material-symbols-outlined text-xs">open_in_new</span> Opening
+                  <span class="phase-status-dot w-1.5 h-1.5 rounded-full bg-[#636366] ml-0.5"></span>
+                </button>
+                <button class="phase-pill flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-bold font-mono whitespace-nowrap transition-all border border-[#353534] bg-[#0e0e0e] text-[#636366]" data-phase="3" onclick="selectPhase(3)">
+                  <span class="material-symbols-outlined text-xs">wb_sunny</span> Mid-Day
+                  <span class="phase-status-dot w-1.5 h-1.5 rounded-full bg-[#636366] ml-0.5"></span>
+                </button>
+                <button class="phase-pill flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-bold font-mono whitespace-nowrap transition-all border border-[#353534] bg-[#0e0e0e] text-[#636366]" data-phase="4" onclick="selectPhase(4)">
+                  <span class="material-symbols-outlined text-xs">bolt</span> Power Hr
+                  <span class="phase-status-dot w-1.5 h-1.5 rounded-full bg-[#636366] ml-0.5"></span>
+                </button>
+              </div>
+              <!-- Active phase card -->
+              <div id="phase-card" class="bg-[#0e0e0e] rounded-xl p-3 mb-3 hidden" style="animation:fu .2s ease">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm" id="phase-card-icon" style="color:#ffd60a">nights_stay</span>
+                    <span class="text-[10px] font-bold text-[#e5e2e1] uppercase font-mono" id="phase-card-name">Pre-Market</span>
+                    <span class="px-1.5 py-0.5 rounded text-[8px] font-bold font-mono" id="phase-card-status" style="background:rgba(255,214,10,0.15);color:#ffd60a">LOCKED</span>
+                  </div>
+                  <span class="text-[8px] text-[#636366] font-mono" id="phase-card-time"></span>
+                </div>
+                <!-- Direction + confidence -->
+                <div class="flex items-center gap-3 mb-2">
+                  <div class="w-11 h-11 rounded-xl flex items-center justify-center" id="phase-dir-icon" style="background:rgba(71,226,102,0.1)">
+                    <span class="material-symbols-outlined text-[#47e266]" style="font-size:22px">trending_up</span>
+                  </div>
+                  <div class="flex-1">
+                    <div class="text-sm font-bold text-[#e5e2e1] font-headline" id="phase-dir-label">BULLISH</div>
+                    <div class="text-[10px] text-[#d0c6ab] line-clamp-2 leading-tight mt-0.5" id="phase-reasoning">Loading...</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-lg font-bold font-headline tnum" id="phase-conf" style="color:#47e266">82%</div>
+                    <div class="text-[8px] text-[#d0c6ab] font-mono uppercase">Conf.</div>
+                  </div>
+                </div>
+                <!-- Phase-specific details -->
+                <div id="phase-details" class="space-y-1.5">
+                  <!-- Range row for Phase 1 -->
+                  <div id="phase-range-row" class="hidden flex justify-between bg-[#131313] rounded-lg p-2">
+                    <div class="text-center flex-1"><div class="text-[8px] text-[#636366] font-mono">Nifty Low</div><div class="text-xs font-bold font-mono text-[#47e266]" id="phase-n-low">--</div></div>
+                    <div class="text-[#636366] text-[8px] self-center">→</div>
+                    <div class="text-center flex-1"><div class="text-[8px] text-[#636366] font-mono">Nifty High</div><div class="text-xs font-bold font-mono text-[#ffb4ab]" id="phase-n-high">--</div></div>
+                    <div class="text-[#636366] text-[8px] self-center">|</div>
+                    <div class="text-center flex-1"><div class="text-[8px] text-[#636366] font-mono">BN Low</div><div class="text-xs font-bold font-mono text-[#47e266]" id="phase-bn-low">--</div></div>
+                    <div class="text-[#636366] text-[8px] self-center">→</div>
+                    <div class="text-center flex-1"><div class="text-[8px] text-[#636366] font-mono">BN High</div><div class="text-xs font-bold font-mono text-[#ffb4ab]" id="phase-bn-high">--</div></div>
+                  </div>
+                  <!-- Opening + gap for Phase 1/2 -->
+                  <div id="phase-opening-row" class="hidden flex gap-2">
+                    <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono" id="phase-open-badge">Opening: --</span>
+                    <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono" id="phase-gap-badge" style="display:none">Gap Fill: --</span>
+                    <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono" id="phase-trap-badge" style="display:none">Trap: --</span>
+                  </div>
+                  <!-- Closing zone for Phase 3 -->
+                  <div id="phase-close-row" class="hidden flex gap-2">
+                    <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono" id="phase-close-badge">Close: --</span>
+                    <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono" id="phase-vol-badge">Vol: --</span>
+                  </div>
+                  <!-- Expected close for Phase 4 -->
+                  <div id="phase-close-level-row" class="hidden flex gap-2 items-center">
+                    <span class="text-[9px] text-[#d0c6ab] font-mono">Expected Close:</span>
+                    <span class="text-xs font-bold font-mono text-[#47e266]" id="phase-exp-low">--</span>
+                    <span class="text-[8px] text-[#636366]">→</span>
+                    <span class="text-xs font-bold font-mono text-[#ffb4ab]" id="phase-exp-high">--</span>
+                    <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono ml-auto" id="phase-tmrw-badge" style="display:none">Tmrw: --</span>
+                  </div>
+                  <!-- Risk + key factors -->
+                  <div class="flex items-center gap-1.5 flex-wrap mt-1" id="phase-badges">
+                    <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono" id="phase-risk-badge">Risk: --</span>
+                  </div>
+                  <div class="flex flex-wrap gap-1 mt-1" id="phase-factors"></div>
+                </div>
+                <!-- Score (if verified) -->
+                <div id="phase-score-row" class="hidden mt-2 pt-2 border-t border-white/5 flex items-center justify-between">
+                  <span class="text-[9px] text-[#d0c6ab] font-mono uppercase">Accuracy Score</span>
+                  <span class="text-sm font-bold font-mono" id="phase-score">--</span>
+                </div>
+              </div>
+              <!-- Phase loading/empty state -->
+              <div id="phase-empty" class="bg-[#0e0e0e] rounded-xl p-4 text-center mb-3">
+                <span class="material-symbols-outlined text-[#636366] text-2xl mb-1">schedule</span>
+                <p class="text-[10px] text-[#636366] font-mono" id="phase-empty-msg">Predictions generate at market hours</p>
+              </div>
+            </div>
+
+            <!-- Live Pulse (renamed from Today's behavior) -->
             <div class="cursor-pointer rounded-lg hover:bg-[#353534]/20 transition-colors -mx-1 px-1" onclick="togglePredDetail()">
               <div class="flex items-center gap-3 mb-1" id="pred-today">
                 <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg" id="pred-today-icon" style="background:rgba(255,214,10,0.1)">
@@ -544,7 +645,7 @@ tailwind.config = {
                 </div>
                 <div class="flex-1">
                   <div class="flex items-center gap-1.5">
-                    <span class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider" id="pred-today-title">Today's Behavior</span>
+                    <span class="text-[9px] font-bold text-[#d0c6ab] uppercase font-mono tracking-wider" id="pred-today-title">Live Pulse</span>
                     <span class="text-[8px] text-[#636366] font-mono" id="pred-today-ts"></span>
                     <span class="material-symbols-outlined text-[#636366] transition-transform" style="font-size:12px" id="pred-detail-chevron">expand_more</span>
                   </div>
@@ -1774,6 +1875,59 @@ tailwind.config = {
             </div>
           </div>
 
+          <!-- Phase Predictions Accuracy -->
+          <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5 mb-4">
+            <div class="px-4 py-3 border-b border-white/5">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="material-symbols-outlined text-[#ffd60a] text-base">timeline</span>
+                <p class="text-[13px] font-extrabold text-[#e5e2e1]">Phase Predictions</p>
+              </div>
+              <p class="text-[10px] text-[#636366] font-mono">Pre-Market · Opening · Mid-Session · Power Hour</p>
+            </div>
+            <div class="px-4 py-3 grid grid-cols-2 gap-3" id="acc-phases-grid">
+              <div class="bg-[#0e0e0e] rounded-lg p-3">
+                <div class="flex items-center gap-1.5 mb-2"><span class="material-symbols-outlined text-xs text-[#ffd60a]">nights_stay</span><span class="text-[10px] font-bold text-[#e5e2e1]">Pre-Market</span></div>
+                <p id="acc-p1-samples" class="text-[9px] text-[#636366] mb-2 font-mono">0 samples</p>
+                <div class="space-y-1.5">
+                  <div class="flex items-center gap-1.5"><span class="text-[9px] text-[#d0c6ab] w-14 shrink-0">Direction</span><div class="flex-1 h-1.5 bg-[#242426] rounded-full overflow-hidden"><div id="bar-p1-direction" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-p1-direction" class="text-[9px] font-mono text-[#e5e2e1] w-8 text-right">—</span></div>
+                  <div class="flex items-center gap-1.5"><span class="text-[9px] text-[#d0c6ab] w-14 shrink-0">Range</span><div class="flex-1 h-1.5 bg-[#242426] rounded-full overflow-hidden"><div id="bar-p1-range" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-p1-range" class="text-[9px] font-mono text-[#e5e2e1] w-8 text-right">—</span></div>
+                  <div class="flex items-center gap-1.5"><span class="text-[9px] text-[#d0c6ab] w-14 shrink-0">Opening</span><div class="flex-1 h-1.5 bg-[#242426] rounded-full overflow-hidden"><div id="bar-p1-opening" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-p1-opening" class="text-[9px] font-mono text-[#e5e2e1] w-8 text-right">—</span></div>
+                </div>
+                <div class="mt-2 pt-2 border-t border-white/5 text-center"><span class="text-[9px] text-[#636366]">Avg: </span><span id="acc-p1-avg" class="text-sm font-bold font-mono text-[#e5e2e1]">—</span></div>
+              </div>
+              <div class="bg-[#0e0e0e] rounded-lg p-3">
+                <div class="flex items-center gap-1.5 mb-2"><span class="material-symbols-outlined text-xs text-[#ffd60a]">open_in_new</span><span class="text-[10px] font-bold text-[#e5e2e1]">Opening</span></div>
+                <p id="acc-p2-samples" class="text-[9px] text-[#636366] mb-2 font-mono">0 samples</p>
+                <div class="space-y-1.5">
+                  <div class="flex items-center gap-1.5"><span class="text-[9px] text-[#d0c6ab] w-14 shrink-0">Direction</span><div class="flex-1 h-1.5 bg-[#242426] rounded-full overflow-hidden"><div id="bar-p2-direction" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-p2-direction" class="text-[9px] font-mono text-[#e5e2e1] w-8 text-right">—</span></div>
+                  <div class="flex items-center gap-1.5"><span class="text-[9px] text-[#d0c6ab] w-14 shrink-0">Gap Fill</span><div class="flex-1 h-1.5 bg-[#242426] rounded-full overflow-hidden"><div id="bar-p2-gapFill" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-p2-gapFill" class="text-[9px] font-mono text-[#e5e2e1] w-8 text-right">—</span></div>
+                  <div class="flex items-center gap-1.5"><span class="text-[9px] text-[#d0c6ab] w-14 shrink-0">Trap</span><div class="flex-1 h-1.5 bg-[#242426] rounded-full overflow-hidden"><div id="bar-p2-trap" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-p2-trap" class="text-[9px] font-mono text-[#e5e2e1] w-8 text-right">—</span></div>
+                </div>
+                <div class="mt-2 pt-2 border-t border-white/5 text-center"><span class="text-[9px] text-[#636366]">Avg: </span><span id="acc-p2-avg" class="text-sm font-bold font-mono text-[#e5e2e1]">—</span></div>
+              </div>
+              <div class="bg-[#0e0e0e] rounded-lg p-3">
+                <div class="flex items-center gap-1.5 mb-2"><span class="material-symbols-outlined text-xs text-[#ffd60a]">wb_sunny</span><span class="text-[10px] font-bold text-[#e5e2e1]">Mid-Session</span></div>
+                <p id="acc-p3-samples" class="text-[9px] text-[#636366] mb-2 font-mono">0 samples</p>
+                <div class="space-y-1.5">
+                  <div class="flex items-center gap-1.5"><span class="text-[9px] text-[#d0c6ab] w-14 shrink-0">Direction</span><div class="flex-1 h-1.5 bg-[#242426] rounded-full overflow-hidden"><div id="bar-p3-direction" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-p3-direction" class="text-[9px] font-mono text-[#e5e2e1] w-8 text-right">—</span></div>
+                  <div class="flex items-center gap-1.5"><span class="text-[9px] text-[#d0c6ab] w-14 shrink-0">Close Zone</span><div class="flex-1 h-1.5 bg-[#242426] rounded-full overflow-hidden"><div id="bar-p3-closingZone" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-p3-closingZone" class="text-[9px] font-mono text-[#e5e2e1] w-8 text-right">—</span></div>
+                  <div class="flex items-center gap-1.5"><span class="text-[9px] text-[#d0c6ab] w-14 shrink-0">Volatility</span><div class="flex-1 h-1.5 bg-[#242426] rounded-full overflow-hidden"><div id="bar-p3-volatility" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-p3-volatility" class="text-[9px] font-mono text-[#e5e2e1] w-8 text-right">—</span></div>
+                </div>
+                <div class="mt-2 pt-2 border-t border-white/5 text-center"><span class="text-[9px] text-[#636366]">Avg: </span><span id="acc-p3-avg" class="text-sm font-bold font-mono text-[#e5e2e1]">—</span></div>
+              </div>
+              <div class="bg-[#0e0e0e] rounded-lg p-3">
+                <div class="flex items-center gap-1.5 mb-2"><span class="material-symbols-outlined text-xs text-[#ffd60a]">bolt</span><span class="text-[10px] font-bold text-[#e5e2e1]">Power Hour</span></div>
+                <p id="acc-p4-samples" class="text-[9px] text-[#636366] mb-2 font-mono">0 samples</p>
+                <div class="space-y-1.5">
+                  <div class="flex items-center gap-1.5"><span class="text-[9px] text-[#d0c6ab] w-14 shrink-0">Direction</span><div class="flex-1 h-1.5 bg-[#242426] rounded-full overflow-hidden"><div id="bar-p4-direction" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-p4-direction" class="text-[9px] font-mono text-[#e5e2e1] w-8 text-right">—</span></div>
+                  <div class="flex items-center gap-1.5"><span class="text-[9px] text-[#d0c6ab] w-14 shrink-0">Close Lvl</span><div class="flex-1 h-1.5 bg-[#242426] rounded-full overflow-hidden"><div id="bar-p4-closeLevel" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-p4-closeLevel" class="text-[9px] font-mono text-[#e5e2e1] w-8 text-right">—</span></div>
+                  <div class="flex items-center gap-1.5"><span class="text-[9px] text-[#d0c6ab] w-14 shrink-0">Risk</span><div class="flex-1 h-1.5 bg-[#242426] rounded-full overflow-hidden"><div id="bar-p4-risk" class="h-full rounded-full bg-[#ffd60a] transition-all duration-500" style="width:0%"></div></div><span id="pct-p4-risk" class="text-[9px] font-mono text-[#e5e2e1] w-8 text-right">—</span></div>
+                </div>
+                <div class="mt-2 pt-2 border-t border-white/5 text-center"><span class="text-[9px] text-[#636366]">Avg: </span><span id="acc-p4-avg" class="text-sm font-bold font-mono text-[#e5e2e1]">—</span></div>
+              </div>
+            </div>
+          </div>
+
           <!-- Weekly Trend Chart -->
           <div class="bg-[#1c1b1b] rounded-xl overflow-hidden border border-white/5 mb-4">
             <div class="px-4 py-3 flex items-center justify-between border-b border-white/5">
@@ -1935,6 +2089,7 @@ function refreshAll() {
   fetchGlobalMarkets();
   loadMarketPrediction();
   loadNextSession();
+  loadPhases();
   setTimeout(()=>{
     toast('Data refreshed at ' + formatIST('short'));
   },800);
@@ -5180,7 +5335,221 @@ async function fetchGlobalMarkets() {
 }
 
 // ══════════════════════════════════════════════════════════
-// TODAY'S BEHAVIOUR — Fetch and render from /api/market-prediction
+// PHASE PREDICTIONS — Prediction Timeline UI
+// ══════════════════════════════════════════════════════════
+const DIR_MAP = {
+  'BULLISH': { icon: 'trending_up', color: '#47e266', bg: 'rgba(71,226,102,0.1)' },
+  'BEARISH': { icon: 'trending_down', color: '#ffb4ab', bg: 'rgba(255,180,171,0.1)' },
+  'SIDEWAYS': { icon: 'trending_flat', color: '#ffd60a', bg: 'rgba(255,214,10,0.1)' }
+};
+const PHASE_ICONS = { 1: 'nights_stay', 2: 'open_in_new', 3: 'wb_sunny', 4: 'bolt' };
+const PHASE_NAMES = { 1: 'Pre-Market', 2: 'Opening Verdict', 3: 'Mid-Session', 4: 'Power Hour' };
+let phaseData = null;
+let selectedPhase = null;
+
+async function loadPhases(force) {
+  try {
+    const url = '/api/market-predictions' + (force ? '?force=true' : '');
+    const r = await fetch(url); const d = await r.json();
+    if (d.error && !d.phases) { showPhaseEmpty(d.error); return; }
+    phaseData = d;
+    renderPhaseTimeline(d);
+  } catch (e) { showPhaseEmpty('Failed to load predictions'); }
+}
+
+function showPhaseEmpty(msg) {
+  const card = document.getElementById('phase-card');
+  const empty = document.getElementById('phase-empty');
+  if (card) card.classList.add('hidden');
+  if (empty) { empty.classList.remove('hidden'); document.getElementById('phase-empty-msg').textContent = msg || 'No predictions yet'; }
+}
+
+function renderPhaseTimeline(d) {
+  if (!d || !d.phases) return showPhaseEmpty('No phase data');
+  const pills = document.querySelectorAll('.phase-pill');
+  const anyLocked = d.phases.some(p => p.status === 'LOCKED');
+  let latestLocked = null;
+
+  d.phases.forEach((p, i) => {
+    const pill = pills[i];
+    if (!pill) return;
+    const dot = pill.querySelector('.phase-status-dot');
+    if (p.status === 'LOCKED') {
+      pill.style.borderColor = '#ffd60a'; pill.style.color = '#ffd60a'; pill.style.background = 'rgba(255,214,10,0.08)';
+      if (dot) dot.style.background = '#ffd60a';
+      latestLocked = p.phase;
+      // Check if scored
+      if (d.scores && d.scores['phase_' + p.phase + '_' + ['','premarket','opening','midsession','powerhour'][p.phase]]) {
+        if (dot) dot.style.background = '#47e266';
+      }
+    } else if (p.status === 'AVAILABLE') {
+      pill.style.borderColor = '#ff9f0a'; pill.style.color = '#ff9f0a'; pill.style.background = 'rgba(255,159,10,0.08)';
+      if (dot) { dot.style.background = '#ff9f0a'; dot.style.animation = 'pulse 1.5s infinite'; }
+    } else if (p.status === 'UPCOMING') {
+      pill.style.borderColor = '#353534'; pill.style.color = '#636366'; pill.style.background = '#0e0e0e';
+      if (dot) { dot.style.background = '#636366'; dot.style.animation = 'none'; }
+    } else {
+      pill.style.borderColor = '#353534'; pill.style.color = '#4a4a4a'; pill.style.background = '#0e0e0e';
+      if (dot) { dot.style.background = '#4a4a4a'; dot.style.animation = 'none'; }
+    }
+  });
+
+  // Date label
+  const dateEl = document.getElementById('phase-date');
+  if (dateEl) dateEl.textContent = d.phases[0]?.prediction?._generatedAt ? new Date(d.phases[0].prediction._generatedAt).toLocaleDateString('en-IN', { day:'numeric', month:'short' }) : '';
+
+  // Auto-select latest locked phase or first available
+  if (!selectedPhase || !d.phases.find(p => p.phase === selectedPhase && p.status === 'LOCKED')) {
+    selectedPhase = latestLocked || d.phases.find(p => p.status === 'AVAILABLE')?.phase || null;
+  }
+  if (selectedPhase) { selectPhase(selectedPhase); }
+  else if (!anyLocked) {
+    // Show next upcoming phase time
+    const next = d.phases.find(p => p.status === 'UPCOMING' || p.status === 'AVAILABLE');
+    showPhaseEmpty(next ? `Next: ${PHASE_NAMES[next.phase]} at ${next.generatesAt}` : 'Predictions generate during market hours');
+  }
+}
+
+function selectPhase(num) {
+  selectedPhase = num;
+  // Highlight active pill
+  document.querySelectorAll('.phase-pill').forEach(p => {
+    const ph = parseInt(p.dataset.phase);
+    if (ph === num) { p.style.boxShadow = '0 0 0 1px #ffd60a'; } else { p.style.boxShadow = 'none'; }
+  });
+
+  if (!phaseData || !phaseData.phases) return;
+  const phase = phaseData.phases.find(p => p.phase === num);
+  if (!phase || !phase.prediction) {
+    showPhaseEmpty(phase ? (phase.status === 'UPCOMING' ? `Generates at ${phase.generatesAt}` : 'Generating...') : 'No data');
+    return;
+  }
+
+  const card = document.getElementById('phase-card');
+  const empty = document.getElementById('phase-empty');
+  if (card) card.classList.remove('hidden');
+  if (empty) empty.classList.add('hidden');
+
+  const pred = phase.prediction;
+  const dir = DIR_MAP[pred.direction] || DIR_MAP.SIDEWAYS;
+
+  // Header
+  document.getElementById('phase-card-icon').textContent = PHASE_ICONS[num] || 'schedule';
+  document.getElementById('phase-card-icon').style.color = dir.color;
+  document.getElementById('phase-card-name').textContent = PHASE_NAMES[num] || '';
+  const statusEl = document.getElementById('phase-card-status');
+  statusEl.textContent = phase.status === 'LOCKED' ? 'LOCKED' : phase.status;
+  statusEl.style.background = phase.status === 'LOCKED' ? 'rgba(255,214,10,0.15)' : 'rgba(99,99,102,0.15)';
+  statusEl.style.color = phase.status === 'LOCKED' ? '#ffd60a' : '#636366';
+  document.getElementById('phase-card-time').textContent = phase.generatedAt ? new Date(phase.generatedAt).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
+
+  // Direction + confidence
+  const iconWrap = document.getElementById('phase-dir-icon');
+  iconWrap.style.background = dir.bg;
+  iconWrap.querySelector('.material-symbols-outlined').textContent = dir.icon;
+  iconWrap.querySelector('.material-symbols-outlined').style.color = dir.color;
+  document.getElementById('phase-dir-label').textContent = pred.direction || '--';
+  document.getElementById('phase-reasoning').textContent = pred.reasoning || '';
+  const confEl = document.getElementById('phase-conf');
+  confEl.textContent = (pred.confidence || '--') + '%';
+  confEl.style.color = dir.color;
+
+  // Reset all detail rows
+  document.getElementById('phase-range-row').classList.add('hidden');
+  document.getElementById('phase-opening-row').classList.add('hidden');
+  document.getElementById('phase-close-row').classList.add('hidden');
+  document.getElementById('phase-close-level-row').classList.add('hidden');
+
+  // Phase-specific details
+  if (num === 1) {
+    // Range + opening
+    if (pred.niftyRange) {
+      document.getElementById('phase-range-row').classList.remove('hidden');
+      document.getElementById('phase-n-low').textContent = pred.niftyRange.low?.toLocaleString('en-IN') || '--';
+      document.getElementById('phase-n-high').textContent = pred.niftyRange.high?.toLocaleString('en-IN') || '--';
+      if (pred.bankNiftyRange) {
+        document.getElementById('phase-bn-low').textContent = pred.bankNiftyRange.low?.toLocaleString('en-IN') || '--';
+        document.getElementById('phase-bn-high').textContent = pred.bankNiftyRange.high?.toLocaleString('en-IN') || '--';
+      }
+    }
+    if (pred.openingExpectation) {
+      document.getElementById('phase-opening-row').classList.remove('hidden');
+      const ob = document.getElementById('phase-open-badge');
+      const oe = pred.openingExpectation;
+      ob.textContent = 'Opening: ' + oe.replace('_', ' ');
+      ob.style.background = oe === 'GAP_UP' ? 'rgba(71,226,102,0.15)' : oe === 'GAP_DOWN' ? 'rgba(255,180,171,0.15)' : 'rgba(255,214,10,0.15)';
+      ob.style.color = oe === 'GAP_UP' ? '#47e266' : oe === 'GAP_DOWN' ? '#ffb4ab' : '#ffd60a';
+    }
+  } else if (num === 2) {
+    document.getElementById('phase-opening-row').classList.remove('hidden');
+    const gb = document.getElementById('phase-gap-badge');
+    const tb = document.getElementById('phase-trap-badge');
+    gb.style.display = ''; gb.textContent = 'Gap Fill: ' + (pred.gapFill ? 'YES' : 'NO');
+    gb.style.background = pred.gapFill ? 'rgba(255,180,171,0.15)' : 'rgba(71,226,102,0.15)';
+    gb.style.color = pred.gapFill ? '#ffb4ab' : '#47e266';
+    if (pred.trapAlert && pred.trapAlert !== 'NONE') {
+      tb.style.display = ''; tb.textContent = pred.trapAlert.replace('_', ' ');
+      tb.style.background = 'rgba(255,69,58,0.15)'; tb.style.color = '#ff453a';
+    } else { tb.style.display = 'none'; }
+    document.getElementById('phase-open-badge').style.display = 'none';
+  } else if (num === 3) {
+    document.getElementById('phase-close-row').classList.remove('hidden');
+    const cb = document.getElementById('phase-close-badge');
+    cb.textContent = 'Close: ' + (pred.closingZone || '--').replace('_', ' ');
+    const cz = pred.closingZone;
+    cb.style.background = cz === 'NEAR_HIGH' ? 'rgba(71,226,102,0.15)' : cz === 'NEAR_LOW' ? 'rgba(255,180,171,0.15)' : 'rgba(255,214,10,0.15)';
+    cb.style.color = cz === 'NEAR_HIGH' ? '#47e266' : cz === 'NEAR_LOW' ? '#ffb4ab' : '#ffd60a';
+    const vb = document.getElementById('phase-vol-badge');
+    vb.textContent = 'Vol: ' + (pred.volatilityExpected || '--');
+    vb.style.background = pred.volatilityExpected === 'HIGH' ? 'rgba(255,159,10,0.15)' : 'rgba(99,99,102,0.15)';
+    vb.style.color = pred.volatilityExpected === 'HIGH' ? '#ff9f0a' : '#d0c6ab';
+  } else if (num === 4) {
+    if (pred.expectedClose) {
+      document.getElementById('phase-close-level-row').classList.remove('hidden');
+      document.getElementById('phase-exp-low').textContent = pred.expectedClose.niftyLow?.toLocaleString('en-IN') || '--';
+      document.getElementById('phase-exp-high').textContent = pred.expectedClose.niftyHigh?.toLocaleString('en-IN') || '--';
+    }
+    if (pred.tomorrowBias) {
+      const tmb = document.getElementById('phase-tmrw-badge');
+      tmb.style.display = ''; tmb.textContent = 'Tmrw: ' + pred.tomorrowBias;
+      tmb.style.background = pred.tomorrowBias === 'BULLISH' ? 'rgba(71,226,102,0.15)' : pred.tomorrowBias === 'BEARISH' ? 'rgba(255,180,171,0.15)' : 'rgba(255,214,10,0.15)';
+      tmb.style.color = pred.tomorrowBias === 'BULLISH' ? '#47e266' : pred.tomorrowBias === 'BEARISH' ? '#ffb4ab' : '#ffd60a';
+    }
+  }
+
+  // Risk badge
+  const rb = document.getElementById('phase-risk-badge');
+  const rl = pred.riskLevel || 'MODERATE';
+  rb.textContent = 'Risk: ' + rl.replace('_', ' ');
+  rb.style.background = rl === 'LOW' ? 'rgba(71,226,102,0.15)' : rl === 'HIGH' || rl === 'VERY_HIGH' ? 'rgba(255,180,171,0.15)' : 'rgba(255,214,10,0.15)';
+  rb.style.color = rl === 'LOW' ? '#47e266' : rl === 'HIGH' || rl === 'VERY_HIGH' ? '#ffb4ab' : '#ffd60a';
+
+  // Key factors
+  const fEl = document.getElementById('phase-factors');
+  fEl.innerHTML = '';
+  (pred.keyFactors || []).slice(0, 5).forEach(f => {
+    const sp = document.createElement('span');
+    sp.className = 'px-2 py-0.5 bg-[#1c1b1b] rounded text-[8px] text-[#d0c6ab] font-mono';
+    sp.textContent = f;
+    fEl.appendChild(sp);
+  });
+
+  // Score row
+  const scoreRow = document.getElementById('phase-score-row');
+  const typeKey = 'phase_' + num + '_' + ['','premarket','opening','midsession','powerhour'][num];
+  if (phaseData.scores && phaseData.scores[typeKey]) {
+    const sc = phaseData.scores[typeKey];
+    scoreRow.classList.remove('hidden');
+    const scoreEl = document.getElementById('phase-score');
+    scoreEl.textContent = sc.pct + '%';
+    scoreEl.style.color = sc.pct >= 70 ? '#47e266' : sc.pct >= 40 ? '#ffd60a' : '#ffb4ab';
+  } else {
+    scoreRow.classList.add('hidden');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// TODAY'S BEHAVIOUR (Live Pulse) — Fetch and render from /api/market-prediction
 // Handles: live data, post-market cache, promoted pre-market, no-data states
 // ══════════════════════════════════════════════════════════
 const BEHAVIOR_MAP = {
@@ -5982,6 +6351,7 @@ async function initApp() {
     fetchGlobalMarkets();
     loadMarketPrediction();
     loadNextSession();
+    loadPhases();
     autoShowNextSession();
     // Apply saved desktop layout customizations
     if (window.innerWidth >= 768) applyStoredLayout();
@@ -6166,6 +6536,30 @@ function renderAccBreakdown(data) {
     });
   }
   setTrendArrow(document.getElementById('acc-tb-trend'), data, 'today_behavior');
+
+  // Phase Predictions
+  const phaseConfigs = [
+    { key: 'phase_1_premarket', prefix: 'p1', cats: ['direction','range','opening'] },
+    { key: 'phase_2_opening', prefix: 'p2', cats: ['direction','gapFill','trap'] },
+    { key: 'phase_3_midsession', prefix: 'p3', cats: ['direction','closingZone','volatility'] },
+    { key: 'phase_4_powerhour', prefix: 'p4', cats: ['direction','closeLevel','risk'] }
+  ];
+  phaseConfigs.forEach(pc => {
+    const ph = bt[pc.key] || {};
+    const avgEl = document.getElementById('acc-' + pc.prefix + '-avg');
+    if (avgEl) avgEl.textContent = ph.avgScore != null ? ph.avgScore + '%' : '—';
+    const sampEl = document.getElementById('acc-' + pc.prefix + '-samples');
+    if (sampEl) sampEl.textContent = ph.count ? ph.count + ' scored' : '0 samples';
+    if (ph.categories) {
+      pc.cats.forEach(cat => {
+        const c = ph.categories[cat];
+        if (!c) return;
+        setBarColor(document.getElementById('bar-' + pc.prefix + '-' + cat), c.avgPct);
+        const pctEl = document.getElementById('pct-' + pc.prefix + '-' + cat);
+        if (pctEl) pctEl.textContent = (c.avgPct || 0) + '%';
+      });
+    }
+  });
 }
 
 function renderAccTrendChart(weekly) {
