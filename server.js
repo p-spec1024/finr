@@ -65,17 +65,17 @@ const PREDICTIONS_FILE = path.join(__dirname, '.finr_predictions.enc');
 
 // ── Twelve Data config — commodities, forex & global indices (runs 24/7) ─────
 // Free tier: 800 calls/day (8/min). Set TWELVE_DATA_API_KEY in Railway env vars.
-// Commodities (XAU/USD, CL) and forex (USD/INR) trade ~24/5 — always current.
-// Gift Nifty stays on Upstox/NSE (no free after-hours API for NSE IX futures).
+// Optimized: 5 essential symbols × adaptive polling ≈ 430 calls/day (46% headroom).
+// Dow dropped (redundant with S&P), Nikkei dropped (nice-to-have but not critical).
 const TWELVE_DATA_SYMBOLS = [
   { key: 'GOLD',        symbol: 'XAU/USD',    name: 'Gold $/oz',   type: 'Commodity' },
   { key: 'CRUDE',       symbol: 'CL',         name: 'Crude WTI',   type: 'Commodity' },
   { key: 'USDINR',      symbol: 'USD/INR',    name: 'USD/INR',     type: 'Currency' },
   { key: 'SP500',       symbol: 'SPX',        name: 'S&P 500',     type: 'Index' },
   { key: 'NASDAQ',      symbol: 'IXIC',       name: 'NASDAQ',      type: 'Index' },
-  { key: 'DOW',         symbol: 'DJI',        name: 'Dow Jones',   type: 'Index' },
-  { key: 'NIKKEI',      symbol: 'NI225',      name: 'Nikkei 225',  type: 'Index' },
 ];
+let twelveDataCreditsUsed = 0;
+let twelveDataCreditsDate = '';
 
 // Reliable IST time — works on UTC servers (Vercel/Railway) without toLocaleString parsing bugs
 function getIST() {
@@ -89,12 +89,32 @@ async function fetchTwelveData() {
   const apiKey = appConfig.twelveDataKey;
   if (!apiKey) { log('WARN', 'Twelve Data API key not set — add TWELVE_DATA_API_KEY in Railway env vars (free at twelvedata.com)'); return; }
 
+  // Daily credit tracking — reset at midnight IST
+  const today = getISTDateStr();
+  if (twelveDataCreditsDate !== today) { twelveDataCreditsUsed = 0; twelveDataCreditsDate = today; }
+
+  // Hard stop at 750 to leave buffer
+  if (twelveDataCreditsUsed >= 750) {
+    log('WARN', `Twelve Data daily limit approaching (${twelveDataCreditsUsed}/800) — pausing until tomorrow`);
+    return;
+  }
+
   let fetched = 0;
   for (const s of TWELVE_DATA_SYMBOLS) {
     try {
       const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(s.symbol)}&apikey=${apiKey}`;
       const { data } = await axios.get(url, { timeout: 8000 });
-      if (data.status === 'error') { log('WARN', `Twelve Data error for ${s.symbol}: ${data.message}`); continue; }
+      twelveDataCreditsUsed++;
+      if (data.status === 'error') {
+        // Check for rate limit / quota errors
+        if (data.message && (data.message.includes('limit') || data.message.includes('credit') || data.code === 429)) {
+          log('WARN', `Twelve Data quota hit: ${data.message} — pausing`);
+          twelveDataCreditsUsed = 800; // Force stop
+          break;
+        }
+        log('WARN', `Twelve Data error for ${s.symbol}: ${data.message}`);
+        continue;
+      }
       const price = parseFloat(data.close) || parseFloat(data.price) || 0;
       const prevClose = parseFloat(data.previous_close) || price;
       const change = price - prevClose;
@@ -110,27 +130,35 @@ async function fetchTwelveData() {
     }
   }
   if (fetched > 0) {
-    // Update fiiDiiData with live values
     if (globalMarkets.USDINR) fiiDiiData.usdInr = globalMarkets.USDINR.price;
     if (globalMarkets.CRUDE)  fiiDiiData.crude   = globalMarkets.CRUDE.price;
     broadcastLiveData();
-    log('OK', `Twelve Data: ${fetched}/${TWELVE_DATA_SYMBOLS.length} symbols updated`);
+    log('OK', `Twelve Data: ${fetched}/${TWELVE_DATA_SYMBOLS.length} updated (${twelveDataCreditsUsed}/800 credits today)`);
   }
 }
 
+// Adaptive Twelve Data polling — re-evaluates interval each cycle (like NSE polling)
+// Schedule: 15 min during waking hours (5 AM–midnight IST), 30 min overnight (midnight–5 AM)
+// Budget: 5 symbols × (76 + 10 polls) ≈ 430 credits/day
 function startTwelveDataPolling() {
   if (twelveDataInterval) return;
   fetchTwelveData(); // immediate first fetch
-  // Poll every 5 min during market hours (8 symbols × ~288 calls/day = well within 800 free limit)
-  // Poll every 10 min outside market hours to conserve API calls
-  twelveDataInterval = setInterval(() => {
-    fetchTwelveData();
-  }, isMarketOpen() ? 5 * 60 * 1000 : 10 * 60 * 1000);
-  log('OK', 'Twelve Data polling started (always-on — Gold, Crude, USD/INR update 24/7)');
+
+  function scheduleNextTwelveData() {
+    const istMins = getISTMins();
+    const isNight = istMins < 300; // Before 5 AM IST — minimal global activity
+    const pollMs = isNight ? 30 * 60 * 1000 : 15 * 60 * 1000;
+    twelveDataInterval = setTimeout(() => {
+      fetchTwelveData();
+      scheduleNextTwelveData();
+    }, pollMs);
+  }
+  scheduleNextTwelveData();
+  log('OK', 'Twelve Data adaptive polling started (5 symbols, 15/30 min adaptive)');
 }
 
 function stopTwelveDataPolling() {
-  if (twelveDataInterval) { clearInterval(twelveDataInterval); twelveDataInterval = null; }
+  if (twelveDataInterval) { clearTimeout(twelveDataInterval); twelveDataInterval = null; }
   log('INFO', 'Twelve Data polling stopped');
 }
 
@@ -4399,7 +4427,7 @@ app.get('/api/system-health', (req, res) => {
     zerodha:   { connected: !!zAccessToken, tokenValid: !!zAccessToken && appConfig.zTokenExpiry > now, holdingsCount: zerodhaHoldings.length, positionsCount: zerodhaPositions.length },
     gemini:    { configured: !!appConfig.geminiKey, connected: geminiConnectionOk && !!appConfig.geminiKey && !geminiDisabled, disabled: geminiDisabled, status: geminiDisabled ? 'disconnected' : (geminiConnectionOk ? 'connected' : (appConfig.geminiKey ? 'configured_not_tested' : 'not_configured')), keysCount: getGeminiKeys().length, activeKey: geminiKeyIndex + 1 },
     vertexAI:  { configured: !!gcpServiceAccount, connected: vertexConnectionOk && !!gcpServiceAccount && !vertexDisabled, disabled: vertexDisabled, projectId: gcpServiceAccount?.project_id || null, clientEmail: gcpServiceAccount?.client_email || null, models: GEMINI_MODELS },
-    twelveData: { configured: !!appConfig.twelveDataKey, connected: !!appConfig.twelveDataKey && !twelveDataDisabled && Object.keys(globalMarkets).length > 0, disabled: twelveDataDisabled || false, symbolsLoaded: Object.keys(globalMarkets).length, symbols: TWELVE_DATA_SYMBOLS.length, polling: !!twelveDataInterval, lastUpdate: Object.values(globalMarkets).reduce((max, g) => Math.max(max, g.lastUpdate || 0), 0) || null },
+    twelveData: { configured: !!appConfig.twelveDataKey, connected: !!appConfig.twelveDataKey && !twelveDataDisabled && Object.keys(globalMarkets).length > 0, disabled: twelveDataDisabled || false, symbolsLoaded: Object.keys(globalMarkets).length, symbols: TWELVE_DATA_SYMBOLS.length, polling: !!twelveDataInterval, creditsUsed: twelveDataCreditsUsed, creditsLimit: 800, lastUpdate: Object.values(globalMarkets).reduce((max, g) => Math.max(max, g.lastUpdate || 0), 0) || null },
     server:    { uptime: Math.round(process.uptime()), memMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024), stocksLoaded: stockUniverse.length, signalsCalc: Object.keys(signalCache).length },
     marketOpen: isMarketOpen(),
     lastUpdate: Object.values(liveStocks)[0]?.lastUpdate || null,
