@@ -3873,7 +3873,7 @@ app.get('/api/gemini-status', async (req, res) => {
 app.get('/api/system-health', (req, res) => {
   const now = Date.now();
   res.json({
-    upstox:    { connected: connectionStatus === 'live', status: connectionStatus, tokenValid: !!accessToken && appConfig.tokenExpiry > now, expiresIn: appConfig.tokenExpiry ? Math.round((appConfig.tokenExpiry - now) / 60000) : 0 },
+    upstox:    { connected: connectionStatus === 'live' || (!!accessToken && connectionStatus === 'authenticated'), status: connectionStatus, tokenValid: !!accessToken && appConfig.tokenExpiry > now, expiresIn: appConfig.tokenExpiry ? Math.round((appConfig.tokenExpiry - now) / 60000) : 0, hasToken: !!accessToken },
     zerodha:   { connected: !!zAccessToken, tokenValid: !!zAccessToken && appConfig.zTokenExpiry > now, holdingsCount: zerodhaHoldings.length, positionsCount: zerodhaPositions.length },
     gemini:    { configured: !!appConfig.geminiKey, connected: geminiConnectionOk && !!appConfig.geminiKey && !geminiDisabled, disabled: geminiDisabled, status: geminiDisabled ? 'disconnected' : (geminiConnectionOk ? 'connected' : (appConfig.geminiKey ? 'configured_not_tested' : 'not_configured')), keysCount: getGeminiKeys().length, activeKey: geminiKeyIndex + 1 },
     vertexAI:  { configured: !!gcpServiceAccount, connected: vertexConnectionOk && !!gcpServiceAccount && !vertexDisabled, disabled: vertexDisabled, projectId: gcpServiceAccount?.project_id || null, clientEmail: gcpServiceAccount?.client_email || null, models: GEMINI_MODELS },
@@ -5344,6 +5344,10 @@ async function pollUpstoxPrices() {
         if (processUpstoxQuote(key, val)) updated = true;
       }
       pollErrors = 0;
+      // Got valid response — mark as live even if no price changes (market may be closed)
+      if (connectionStatus !== 'live' && Object.keys(data).length > 0) {
+        connectionStatus = 'live'; broadcastStatus();
+      }
     } else {
       if (pollFirstLog) { log('WARN', `Upstox REST response has no data field: ${JSON.stringify(res.data).slice(0,200)}`); }
     }
@@ -5358,7 +5362,6 @@ async function pollUpstoxPrices() {
     }
   }
   if (updated) {
-    connectionStatus = 'live'; broadcastStatus();
     broadcastLiveData();
   }
 }
@@ -5417,8 +5420,10 @@ async function initLiveData() {
   initStockUniverse();
 
   if (accessToken) {
+    connectionStatus = 'authenticated';
     connectUpstoxWs();
-    log('OK', 'Upstox connection initiated — live data will flow shortly');
+    log('OK', 'Upstox token present — status: authenticated, starting data poller');
+    broadcastStatus();
   } else {
     connectionStatus = 'disconnected';
     log('WARN', 'No Upstox token — stock prices unavailable until connected');

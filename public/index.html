@@ -4574,7 +4574,7 @@ async function testUpstox() {
   toast('Checking Upstox...');
   try {
     const r = await fetch('/api/upstox-test').then(x=>x.json());
-    if (r.ok) { toast('Upstox connected ✅'); fetchStatus(); return; }
+    if (r.ok) { toast(r.status || 'Upstox connected ✅'); fetchStatus(); return; }
     // Not connected — try to start OAuth login flow
     toast('Opening Upstox login...');
     const auth = await fetch('/auth/login').then(x=>x.json());
@@ -4734,7 +4734,12 @@ async function loadHealth() {
     if (!el) return;
     el.classList.remove('hidden');
     const items = [];
-    if (d.upstox) items.push({name:'Upstox WebSocket',detail:d.upstox.connected?'Connected':'Disconnected',status:d.upstox.connected?'ok':'err'});
+    if (d.upstox) {
+      const upStatus = d.upstox.status;
+      const upDetail = upStatus === 'live' ? 'Live data flowing' : upStatus === 'authenticated' ? 'Authenticated · Awaiting market' : d.upstox.hasToken ? 'Token present · ' + upStatus : 'Disconnected';
+      const upBadge = upStatus === 'live' ? 'ok' : (upStatus === 'authenticated' || d.upstox.hasToken) ? 'warn' : 'err';
+      items.push({name:'Upstox Data Feed', detail: upDetail, status: upBadge});
+    }
     if (d.zerodha) items.push({name:'Zerodha Auth Flow',detail:d.zerodha.connected?`Holdings: ${d.zerodha.holdingsCount}`:'Not connected',status:d.zerodha.connected?'ok':'err'});
     if (d.gemini) items.push({name:'Gemini Engine',detail:d.gemini.connected?`Connected · ${d.gemini.keysCount||1} key${(d.gemini.keysCount||1)>1?'s':''} (using #${d.gemini.activeKey||1})`:d.gemini.status,status:d.gemini.connected?'ok':'err'});
     if (d.vertexAI) items.push({name:'Vertex AI',detail:d.vertexAI.connected?`Connected · ${(d.vertexAI.clientEmail||'').split('@')[0]}`:d.vertexAI.configured?'Configured, not verified':'Not configured',status:d.vertexAI.connected?'ok':'err'});
