@@ -5828,6 +5828,14 @@ function processUpstoxQuote(key, val) {
         high52: fundamentals[s.symbol]?.high52 || +(price * 1.35).toFixed(2),
         low52: fundamentals[s.symbol]?.low52 || +(price * 0.72).toFixed(2)
       };
+      // Accumulate price history for RSI/EMA/MACD calculations
+      if (!priceHistory[s.symbol]) priceHistory[s.symbol] = [];
+      const ph = priceHistory[s.symbol];
+      // Only add if price changed from last entry (avoid duplicates from rapid polling)
+      if (!ph.length || ph[ph.length - 1] !== price) {
+        ph.push(price);
+        if (ph.length > 30) ph.shift(); // Keep last 30 readings
+      }
       const sig = calcSignal(s.symbol, price);
       if (sig) signalCache[s.symbol] = { ...sig, symbol: s.symbol };
       return true;
@@ -5956,7 +5964,45 @@ async function initLiveData() {
   startNsePolling();
   // Start Twelve Data polling — runs 24/7 for Gold, Crude, USD/INR, Gift Nifty, S&P 500 etc.
   startTwelveDataPolling();
+  // Auto-generate AI Picks & Options Lab during market hours (so cache is ready even if user doesn't visit tabs)
+  startInsightsAutoGen();
   log('OK', `Live data initialized — ${stockUniverse.length} stocks, awaiting real prices`);
+}
+
+// ── Auto-generate Insights tabs during market hours ──
+function startInsightsAutoGen() {
+  // Delay first run by 5 min to let stock prices load
+  setTimeout(() => {
+    autoGenInsights();
+    // Re-check every 30 min
+    setInterval(autoGenInsights, 30 * 60 * 1000);
+  }, 5 * 60 * 1000);
+}
+
+async function autoGenInsights() {
+  if (!isMarketOpen()) return;
+  if (!appConfig.geminiKey && !gcpServiceAccount) return;
+  const stocks = Object.values(liveStocks).filter(s => s.price);
+  if (stocks.length < 10) { log('INFO', 'Auto-gen skipped: not enough live stock data yet'); return; }
+
+  // AI Picks: generate if cache is empty or expired (4 hr)
+  if (!aiPicksCache.picks.length || (Date.now() - aiPicksCache.lastFetch) > AI_PICKS_CACHE_MS) {
+    log('INFO', 'Auto-generating AI Picks...');
+    try {
+      const resp = await fetch(`http://localhost:${PORT}/api/ai-picks?force=true`);
+      const d = await resp.json();
+      log('OK', `Auto-gen AI Picks: ${d.picks?.length || 0} picks`);
+    } catch(e) { log('WARN', 'Auto-gen AI Picks failed: ' + e.message); }
+  }
+  // Options Lab: generate if cache is empty or expired (30 min)
+  if (!optionsLabCache.trades.length || (Date.now() - optionsLabCache.lastFetch) > OPTIONS_LAB_CACHE_MS) {
+    log('INFO', 'Auto-generating Options Lab...');
+    try {
+      const resp = await fetch(`http://localhost:${PORT}/api/options-lab?force=true`);
+      const d = await resp.json();
+      log('OK', `Auto-gen Options Lab: ${d.trades?.length || 0} trades`);
+    } catch(e) { log('WARN', 'Auto-gen Options Lab failed: ' + e.message); }
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
