@@ -1701,6 +1701,10 @@ app.get('/api/market-prediction', async (req, res) => {
   if (istMins > 930 && todayCache.data && todayCache.dateIST === todayIST) {
     return res.json(marketClosedResponse({ ...todayCache.data }, todayCache.lastFetch));
   }
+  // Post-market but no cache (server restarted) — return closed message, don't fall through to pre-market
+  if (istMins > 930 && !isWeekend()) {
+    return res.json({ noDataToday: false, marketClosed: true, todayBehavior: 'SIDEWAYS', todayExplanation: 'Market closed — server restarted after hours, today\'s analysis is unavailable', todayConfidence: 0, keyFactors: [], riskLevel: 'LOW', nextOpen: getNextMarketOpen() });
+  }
 
   // ═══ MARKET HOURS (9:15 AM → 3:30 PM): live data from Upstox/NSE ═══
   if (isMarketOpen()) {
@@ -2193,28 +2197,38 @@ app.get('/api/market-predictions', async (req, res) => {
 
 function buildPhaseResponse() {
   const istMins = getISTMins();
+  const postMarket = istMins > 930; // After 3:30 PM — no more phases should generate
+
+  function phaseStatus(locked, availStart, availEnd) {
+    if (locked) return 'LOCKED';
+    if (postMarket) return 'MISSED'; // Market closed, phase never generated
+    if (istMins >= availStart && istMins < availEnd) return 'AVAILABLE';
+    if (istMins < availStart) return 'UPCOMING';
+    return 'MISSED'; // Past the window
+  }
+
   return [
     {
       phase: 1, name: 'Pre-Market', icon: 'nights_stay',
-      status: phaseCache.p1.locked ? 'LOCKED' : (istMins >= 480 && istMins < 555 ? 'AVAILABLE' : istMins < 480 ? 'UPCOMING' : 'MISSED'),
+      status: phaseStatus(phaseCache.p1.locked, 480, 555),
       generatesAt: '8:00 AM', locksAt: '9:14 AM',
       prediction: phaseCache.p1.data, generatedAt: phaseCache.p1.generatedAt
     },
     {
       phase: 2, name: 'Opening Verdict', icon: 'open_in_new',
-      status: phaseCache.p2.locked ? 'LOCKED' : (istMins >= 570 ? 'AVAILABLE' : 'UPCOMING'),
+      status: phaseStatus(phaseCache.p2.locked, 570, 750),
       generatesAt: '9:30 AM', locksAt: '9:30 AM',
       prediction: phaseCache.p2.data, generatedAt: phaseCache.p2.generatedAt
     },
     {
       phase: 3, name: 'Mid-Session', icon: 'wb_sunny',
-      status: phaseCache.p3.locked ? 'LOCKED' : (istMins >= 750 ? 'AVAILABLE' : 'UPCOMING'),
+      status: phaseStatus(phaseCache.p3.locked, 750, 840),
       generatesAt: '12:30 PM', locksAt: '12:30 PM',
       prediction: phaseCache.p3.data, generatedAt: phaseCache.p3.generatedAt
     },
     {
       phase: 4, name: 'Power Hour', icon: 'bolt',
-      status: phaseCache.p4.locked ? 'LOCKED' : (istMins >= 840 ? 'AVAILABLE' : 'UPCOMING'),
+      status: phaseStatus(phaseCache.p4.locked, 840, 930),
       generatesAt: '2:00 PM', locksAt: '2:00 PM',
       prediction: phaseCache.p4.data, generatedAt: phaseCache.p4.generatedAt
     }

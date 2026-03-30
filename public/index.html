@@ -146,7 +146,7 @@ tailwind.config = {
   input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);}
 
   /* Card info tooltip */
-  .card-info-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid #4d4632;color:#636366;font-size:9px;font-family:'DM Mono',monospace;font-weight:700;cursor:pointer;transition:all 0.15s;flex-shrink:0;}
+  .card-info-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid #6b5c3e;color:#d0c6ab;font-size:9px;font-family:'DM Mono',monospace;font-weight:700;cursor:pointer;transition:all 0.15s;flex-shrink:0;background:rgba(77,70,50,0.3);}
   .card-info-btn:hover{color:#ffd60a;border-color:#ffd60a;background:rgba(255,214,10,0.08);}
   .card-info-tip{display:none;position:absolute;top:calc(100% + 8px);right:-8px;width:260px;background:#1c1b1b;border:1px solid #4d4632;border-radius:10px;padding:12px;z-index:100;box-shadow:0 8px 32px rgba(0,0,0,.6);font-family:'DM Mono',monospace;}
   .card-info-tip::before{content:'';position:absolute;top:-5px;right:12px;width:8px;height:8px;background:#1c1b1b;border-left:1px solid #4d4632;border-top:1px solid #4d4632;transform:rotate(45deg);}
@@ -494,9 +494,9 @@ tailwind.config = {
         </div>
 
         <!-- Two-column: Index (left) + Market Prediction (right) -->
-        <div class="md:grid md:grid-cols-2 md:gap-6 md:items-start">
+        <div class="md:grid md:grid-cols-2 md:gap-6 md:items-stretch">
           <!-- Left: Index Card -->
-          <section class="flex flex-col items-center md:items-start py-3 bg-[#1c1b1b] rounded-xl md:p-6 relative" style="align-self:start">
+          <section class="flex flex-col items-center md:items-start py-3 bg-[#1c1b1b] rounded-xl md:p-6 relative">
             <div class="absolute top-3 right-3 flex items-center gap-1.5">
               <span class="card-info-btn" onclick="event.stopPropagation();this.classList.toggle('active')" tabindex="0">i<div class="card-info-tip"><div class="tip-title">Index Price Card</div><div class="tip-desc">Shows the current or last-known price for the selected index/commodity. Switch between Nifty, Bank Nifty, VIX, Gold, Crude, S&P 500, etc. using chips above.</div><span class="tip-tag tip-live">LIVE</span> Upstox API (market hrs)<br><span class="tip-tag tip-live">LIVE</span> Twelve Data (24/5 globals)<br><span class="tip-tag tip-cached">CACHED</span> Last close when market off</div></span>
               <button class="p-1 rounded hover:bg-[#353534]/50 transition-colors active:scale-90" onclick="refreshIndices()" title="Refresh Index">
@@ -514,7 +514,7 @@ tailwind.config = {
               <span class="text-[#d0c6ab] font-mono text-[10px] font-medium uppercase tracking-wider" id="h-mkt"></span>
             </div>
             <!-- Intraday Trend Sparkline -->
-            <div class="w-full mt-4 relative" id="h-sparkline-wrap" style="height:80px">
+            <div class="w-full mt-4 relative overflow-hidden transition-all duration-300" id="h-sparkline-wrap" style="height:0px">
               <svg id="h-sparkline" width="100%" height="80" preserveAspectRatio="none" viewBox="0 0 400 80" class="rounded-lg overflow-hidden"></svg>
               <div class="absolute bottom-1 left-2 flex items-center gap-2" id="h-spark-meta">
                 <span class="text-[8px] font-mono text-[#636366]" id="h-spark-range"></span>
@@ -2374,20 +2374,28 @@ function collectSparkData(idx) {
 function renderSparkline(idx) {
   const svg = document.getElementById('h-sparkline');
   const metaEl = document.getElementById('h-spark-range');
+  const wrap = document.getElementById('h-sparkline-wrap');
   if (!svg) return;
 
   const pts = sparkHistory[idx] || [];
   if (pts.length < 2) {
-    // Not enough data — show a gradient placeholder with current price indicator
+    // Not enough data — check if we have at least a price to show placeholder
     const data = IDX[INDEX_LABEL_MAP[idx]] || IDX[idx];
     let price = data?.price;
     if (!price && idx === 'INDIA_VIX' && VIX && VIX.value) price = VIX.value;
     if (!price) { const gm = globalMarkets[idx]; if (gm) price = gm.price; }
+    if (!price) {
+      // No data at all — collapse the sparkline area
+      if (wrap) wrap.style.height = '0px';
+      svg.innerHTML = '';
+      if (metaEl) metaEl.textContent = '';
+      return;
+    }
+    // Have price but not enough history — show gentle placeholder
+    if (wrap) wrap.style.height = '80px';
     const pct = data?.changePct ?? data?.chgPct ?? (globalMarkets[idx]?.changePct) ?? 0;
     const isUp = pct >= 0;
     const col = isUp ? '#47e266' : '#ffb4ab';
-    const colFade = isUp ? 'rgba(71,226,102,0.08)' : 'rgba(255,180,171,0.08)';
-    // Simulated gentle curve based on change direction
     const mid = isUp ? 55 : 25;
     svg.innerHTML = `
       <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${col}" stop-opacity="0.15"/><stop offset="100%" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
@@ -2398,6 +2406,8 @@ function renderSparkline(idx) {
     if (metaEl) metaEl.textContent = '';
     return;
   }
+  // Have enough points — expand and render
+  if (wrap) wrap.style.height = '80px';
 
   // Build sparkline from collected data
   const prices = pts.map(p => p.p);
@@ -5396,6 +5406,10 @@ function renderPhaseTimeline(d) {
     } else if (p.status === 'UPCOMING') {
       pill.style.borderColor = '#353534'; pill.style.color = '#636366'; pill.style.background = '#0e0e0e';
       if (dot) { dot.style.background = '#636366'; dot.style.animation = 'none'; }
+    } else if (p.status === 'MISSED') {
+      // Phase window passed without generating — dim red-ish
+      pill.style.borderColor = '#4a3535'; pill.style.color = '#8b6666'; pill.style.background = 'rgba(139,102,102,0.06)';
+      if (dot) { dot.style.background = '#8b6666'; dot.style.animation = 'none'; }
     } else {
       pill.style.borderColor = '#353534'; pill.style.color = '#4a4a4a'; pill.style.background = '#0e0e0e';
       if (dot) { dot.style.background = '#4a4a4a'; dot.style.animation = 'none'; }
@@ -5416,9 +5430,11 @@ function renderPhaseTimeline(d) {
   }
   if (selectedPhase) { selectPhase(selectedPhase); }
   else if (!anyLocked) {
-    // Show next upcoming phase time
     const next = d.phases.find(p => p.status === 'UPCOMING' || p.status === 'AVAILABLE');
-    showPhaseEmpty(next ? `Next: ${PHASE_NAMES[next.phase]} at ${next.generatesAt}` : 'Predictions generate during market hours');
+    const allMissed = d.phases.every(p => p.status === 'MISSED');
+    if (allMissed) showPhaseEmpty('No predictions were generated today');
+    else if (next) showPhaseEmpty(`Next: ${PHASE_NAMES[next.phase]} at ${next.generatesAt}`);
+    else showPhaseEmpty('Predictions generate during market hours');
   }
 }
 
@@ -5433,7 +5449,14 @@ function selectPhase(num) {
   if (!phaseData || !phaseData.phases) return;
   const phase = phaseData.phases.find(p => p.phase === num);
   if (!phase || !phase.prediction) {
-    showPhaseEmpty(phase ? (phase.status === 'UPCOMING' ? `Generates at ${phase.generatesAt}` : 'Generating...') : 'No data');
+    let msg = 'No data';
+    if (phase) {
+      if (phase.status === 'UPCOMING') msg = `Generates at ${phase.generatesAt}`;
+      else if (phase.status === 'MISSED') msg = `Wasn't generated today`;
+      else if (phase.status === 'AVAILABLE') msg = 'Generating...';
+      else msg = 'Not available';
+    }
+    showPhaseEmpty(msg);
     return;
   }
 
