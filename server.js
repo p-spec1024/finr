@@ -392,9 +392,7 @@ function startNsePolling() {
       // Verify pending predictions against actual market data
       // Runs during market hours (for next-day carryover) AND post-market (3:30-6 PM) for same-day scoring
       const _mins = getISTMins();
-      const _day = getISTDay();
-      const isWeekday = _day >= 1 && _day <= 5;
-      if (isWeekday && (isMarketOpen() || (_mins >= 930 && _mins <= 1080))) { try { verifyPredictions(); } catch(e) { log('WARN', 'Prediction verification error: ' + e.message); } }
+      if (isTradingDay() && (isMarketOpen() || (_mins >= 930 && _mins <= 1080))) { try { verifyPredictions(); } catch(e) { log('WARN', 'Prediction verification error: ' + e.message); } }
       scheduleNextPoll(); // re-evaluate market hours for next interval
     }, pollMs);
     log('INFO', `NSE next poll in ${pollMs / 60000} min (market ${isMarketOpen() ? 'open' : 'closed'})`);
@@ -1177,28 +1175,71 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/', rateLimit({ windowMs: 60000, max: 300 }));
 
 // ── Market hours helper ───────────────────────────────────────────────────────
-function isMarketOpen() {
+// NSE holidays 2026 (source: NSE India circular)
+// Format: 'YYYY-MM-DD' for fast lookup
+const NSE_HOLIDAYS_2026 = new Set([
+  '2026-01-26', // Republic Day
+  '2026-02-17', // Mahashivratri (tentative)
+  '2026-03-10', // Holi
+  '2026-03-31', // Id-Ul-Fitr (Eid)
+  '2026-04-02', // Ram Navami
+  '2026-04-14', // Dr. Ambedkar Jayanti
+  '2026-04-17', // Good Friday (tentative)
+  '2026-05-01', // Maharashtra Day
+  '2026-05-25', // Buddha Purnima (tentative)
+  '2026-06-07', // Id-Ul-Adha (Bakri Id) (tentative)
+  '2026-07-07', // Muharram (tentative)
+  '2026-08-15', // Independence Day
+  '2026-08-16', // Parsi New Year (tentative)
+  '2026-09-05', // Milad-Un-Nabi (tentative)
+  '2026-10-02', // Mahatma Gandhi Jayanti
+  '2026-10-20', // Dussehra (tentative)
+  '2026-10-21', // Dussehra (tentative)
+  '2026-11-09', // Diwali (Laxmi Puja) (tentative)
+  '2026-11-10', // Diwali (Balipratipada) (tentative)
+  '2026-11-30', // Guru Nanak Jayanti (tentative)
+  '2026-12-25', // Christmas
+]);
+
+function isHoliday(dateStr) {
+  if (!dateStr) dateStr = getISTDateStr();
+  return NSE_HOLIDAYS_2026.has(dateStr);
+}
+
+function isTradingDay() {
   const day = getISTDay();
+  return day >= 1 && day <= 5 && !isHoliday();
+}
+
+function isMarketOpen() {
   const mins = getISTMins();
-  return day >= 1 && day <= 5 && mins >= 555 && mins <= 930;
+  return isTradingDay() && mins >= 555 && mins <= 930;
 }
 
 function getNextMarketOpen() {
   const ist = getIST();
   const todayMins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
-  const day = ist.getUTCDay();
-  // If today's market hasn't opened yet (before 9:15 AM IST on a weekday)
-  if (day >= 1 && day <= 5 && todayMins < 555) {
-    // 9:15 AM IST = 3:45 AM UTC
+  // If today is a trading day and market hasn't opened yet
+  if (isTradingDay() && todayMins < 555) {
     const utcOpen = new Date(ist.getTime() - 5.5 * 60 * 60 * 1000);
     utcOpen.setUTCHours(3, 45, 0, 0);
     return utcOpen.toISOString();
   }
-  // Otherwise find next weekday
+  // Find next trading day (skip weekends AND holidays)
   let d = new Date(ist);
-  do { d.setUTCDate(d.getUTCDate() + 1); } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
-  // Convert IST date back to UTC for the 9:15 AM IST open
-  const utcOpen = new Date(d.getTime() - 5.5 * 60 * 60 * 1000);
+  for (let i = 0; i < 15; i++) { // max 15 days lookahead
+    d.setUTCDate(d.getUTCDate() + 1);
+    const dayOfWeek = d.getUTCDay();
+    const dateStr = d.toISOString().slice(0, 10);
+    if (dayOfWeek >= 1 && dayOfWeek <= 5 && !NSE_HOLIDAYS_2026.has(dateStr)) {
+      const utcOpen = new Date(d.getTime() - 5.5 * 60 * 60 * 1000);
+      utcOpen.setUTCHours(3, 45, 0, 0);
+      return utcOpen.toISOString();
+    }
+  }
+  // Fallback
+  const fb = new Date(ist); fb.setUTCDate(fb.getUTCDate() + 1);
+  const utcOpen = new Date(fb.getTime() - 5.5 * 60 * 60 * 1000);
   utcOpen.setUTCHours(3, 45, 0, 0);
   return utcOpen.toISOString();
 }
@@ -1686,12 +1727,16 @@ function getISTDateStr() {
 function getNextTradingDate(fromDateStr) {
   const [y, m, d] = fromDateStr.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
-  do { dt.setUTCDate(dt.getUTCDate() + 1); } while (dt.getUTCDay() === 0 || dt.getUTCDay() === 6);
+  for (let i = 0; i < 15; i++) { // skip weekends AND holidays
+    dt.setUTCDate(dt.getUTCDate() + 1);
+    const dateStr = dt.toISOString().slice(0, 10);
+    if (dt.getUTCDay() >= 1 && dt.getUTCDay() <= 5 && !NSE_HOLIDAYS_2026.has(dateStr)) break;
+  }
   return dt.getUTCFullYear() + '-' + String(dt.getUTCMonth() + 1).padStart(2, '0') + '-' + String(dt.getUTCDate()).padStart(2, '0');
 }
 
-// Weekend check: Saturday (6) or Sunday (0)
-function isWeekend() { const d = getISTDay(); return d === 0 || d === 6; }
+// Non-trading day: weekend OR NSE holiday
+function isWeekend() { return !isTradingDay(); }
 
 // Pre-market refresh rate: accelerates as market open approaches
 function getPreMarketCacheMs() {
@@ -6160,11 +6205,12 @@ function errorPage(title, detail, host) {
 // ══════════════════════════════════════════════════════════════════════════════
 // SCHEDULED JOBS
 // ══════════════════════════════════════════════════════════════════════════════
-cron.schedule('15 9 * * 1-5', () => { initLiveData(); log('INFO', 'Market open — live data started'); });
-cron.schedule('20 9 * * 1-5', () => { evaluatePicksNextDay(); log('INFO', 'Evaluating yesterday\'s AI picks against today\'s open'); });
-cron.schedule('35 15 * * 1-5', () => { log('INFO', 'Market closed — freezing stock prices'); stopPricePoller(); captureZerodhaTrades(); });
+// Cron jobs: fire Mon-Fri but skip NSE holidays
+cron.schedule('15 9 * * 1-5', () => { if (!isHoliday()) { initLiveData(); log('INFO', 'Market open — live data started'); } else { log('INFO', 'NSE holiday — skipping market open init'); } });
+cron.schedule('20 9 * * 1-5', () => { if (!isHoliday()) { evaluatePicksNextDay(); log('INFO', 'Evaluating yesterday\'s AI picks against today\'s open'); } });
+cron.schedule('35 15 * * 1-5', () => { if (!isHoliday()) { log('INFO', 'Market closed — freezing stock prices'); stopPricePoller(); captureZerodhaTrades(); } });
 // Twelve Data runs 24/7 — no stop/start needed
-cron.schedule('0 10,14 * * 1-5', () => { if (zAccessToken) { fetchZerodhaData(); log('INFO', 'Zerodha data refresh'); } });
+cron.schedule('0 10,14 * * 1-5', () => { if (!isHoliday() && zAccessToken) { fetchZerodhaData(); log('INFO', 'Zerodha data refresh'); } });
 
 // Catch-all — serve frontend
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
