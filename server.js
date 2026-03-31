@@ -36,7 +36,6 @@ const ENC_KEY        = process.env.FINR_SECRET || 'finr-secure-key-2026';
 let appConfig        = {};
 let accessToken      = null;
 let zAccessToken     = null;
-let upstoxWs         = null;
 let liveStocks       = {};
 let liveIndices      = {};
 let signalCache      = {};
@@ -50,9 +49,7 @@ let zerodhaOrders    = [];
 let vixData          = { value: 0, change: 0, trend: 'stable', isDefault: true };
 let fiiDiiData       = { fii: 0, dii: 0, usdInr: 0, crude: 0, isDefault: true };
 let connectionStatus = 'disconnected';
-let priceHistory     = {}; // symbol → last 30 prices for RSI/EMA
-let wsReconnectMs    = 1000;
-// mockInterval removed — no mock data simulation
+let priceHistory     = {}; // symbol → last 200 prices for RSI/EMA/MACD
 let testResults      = [];
 let globalMarkets    = {}; // Twelve Data global market prices
 let twelveDataInterval = null;
@@ -945,8 +942,10 @@ function scorePrediction(pred) {
     const actualDir = a.niftyChangePct > 0.3 ? 'BULLISH' : a.niftyChangePct < -0.3 ? 'BEARISH' : 'SIDEWAYS';
     // 1. Direction (35 pts)
     scores.max += 35;
-    if (p.direction === actualDir) { scores.total += 35; } else if (p.direction === 'SIDEWAYS' || actualDir === 'SIDEWAYS') { scores.total += 15; }
-    scores.breakdown.direction = { score: scores.total, max: 35, predicted: p.direction, actual: actualDir };
+    let p2DirScore = 0;
+    if (p.direction === actualDir) { p2DirScore = 35; } else if (p.direction === 'SIDEWAYS' || actualDir === 'SIDEWAYS') { p2DirScore = 15; }
+    scores.total += p2DirScore;
+    scores.breakdown.direction = { score: p2DirScore, max: 35, predicted: p.direction, actual: actualDir };
     // 2. Gap fill prediction (25 pts)
     if (a.niftyPrevClose && a.niftyOpen && a.niftyLow && a.niftyHigh) {
       scores.max += 25;
@@ -965,8 +964,10 @@ function scorePrediction(pred) {
     const isBullTrap = a.niftyOpen > (a.niftyPrevClose || 0) && a.niftyChangePct < -0.3;
     const isBearTrap = a.niftyOpen < (a.niftyPrevClose || 0) && a.niftyChangePct > 0.3;
     const actualTrap = isBullTrap ? 'BULL_TRAP' : isBearTrap ? 'BEAR_TRAP' : 'NONE';
-    if (p.trapAlert === actualTrap) { scores.total += 20; } else if (p.trapAlert === 'NONE' && actualTrap === 'NONE') { scores.total += 20; } else if (p.trapAlert !== 'NONE' && actualTrap !== 'NONE') { scores.total += 10; }
-    scores.breakdown.trap = { score: scores.total - (scores.breakdown.direction?.score || 0) - (scores.breakdown.gapFill?.score || 0), max: 20, predicted: p.trapAlert, actual: actualTrap };
+    let p2TrapScore = 0;
+    if (p.trapAlert === actualTrap) { p2TrapScore = 20; } else if (p.trapAlert === 'NONE' && actualTrap === 'NONE') { p2TrapScore = 20; } else if (p.trapAlert !== 'NONE' && actualTrap !== 'NONE') { p2TrapScore = 10; }
+    scores.total += p2TrapScore;
+    scores.breakdown.trap = { score: p2TrapScore, max: 20, predicted: p.trapAlert, actual: actualTrap };
     // 4. Confidence calibration (20 pts)
     scores.max += 20;
     const p2Acc = scores.max > 20 ? ((scores.total) / (scores.max - 20)) * 100 : 50;
@@ -979,16 +980,20 @@ function scorePrediction(pred) {
     const actualDir = a.niftyChangePct > 0.3 ? 'BULLISH' : a.niftyChangePct < -0.3 ? 'BEARISH' : 'SIDEWAYS';
     // 1. Direction (35 pts)
     scores.max += 35;
-    if (p.direction === actualDir) { scores.total += 35; } else if (p.direction === 'SIDEWAYS' || actualDir === 'SIDEWAYS') { scores.total += 15; }
-    scores.breakdown.direction = { score: Math.min(scores.total, 35), max: 35, predicted: p.direction, actual: actualDir };
+    let p3DirScore = 0;
+    if (p.direction === actualDir) { p3DirScore = 35; } else if (p.direction === 'SIDEWAYS' || actualDir === 'SIDEWAYS') { p3DirScore = 15; }
+    scores.total += p3DirScore;
+    scores.breakdown.direction = { score: p3DirScore, max: 35, predicted: p.direction, actual: actualDir };
     // 2. Closing zone prediction (30 pts)
     if (a.niftyHigh && a.niftyLow && a.niftyClose) {
       scores.max += 30;
       const range = a.niftyHigh - a.niftyLow;
       const closePos = range > 0 ? (a.niftyClose - a.niftyLow) / range : 0.5;
       const actualZone = closePos > 0.7 ? 'NEAR_HIGH' : closePos < 0.3 ? 'NEAR_LOW' : 'MIDDLE';
-      if (p.closingZone === actualZone) { scores.total += 30; } else if ((p.closingZone === 'MIDDLE' && closePos > 0.25 && closePos < 0.75)) { scores.total += 18; } else if (Math.abs(['NEAR_LOW','MIDDLE','NEAR_HIGH'].indexOf(p.closingZone) - ['NEAR_LOW','MIDDLE','NEAR_HIGH'].indexOf(actualZone)) === 1) { scores.total += 12; }
-      scores.breakdown.closingZone = { score: scores.total - (scores.breakdown.direction?.score || 0), max: 30, predicted: p.closingZone, actual: actualZone, closePosition: +closePos.toFixed(2) };
+      let p3ZoneScore = 0;
+      if (p.closingZone === actualZone) { p3ZoneScore = 30; } else if ((p.closingZone === 'MIDDLE' && closePos > 0.25 && closePos < 0.75)) { p3ZoneScore = 18; } else if (Math.abs(['NEAR_LOW','MIDDLE','NEAR_HIGH'].indexOf(p.closingZone) - ['NEAR_LOW','MIDDLE','NEAR_HIGH'].indexOf(actualZone)) === 1) { p3ZoneScore = 12; }
+      scores.total += p3ZoneScore;
+      scores.breakdown.closingZone = { score: p3ZoneScore, max: 30, predicted: p.closingZone, actual: actualZone, closePosition: +closePos.toFixed(2) };
     } else { scores.breakdown.closingZone = { score: 0, max: 0, note: 'No data' }; }
     // 3. Volatility (15 pts)
     if (a.niftyHigh && a.niftyLow && a.niftyPrevClose) {
@@ -996,13 +1001,16 @@ function scorePrediction(pred) {
       const dayRange = ((a.niftyHigh - a.niftyLow) / a.niftyPrevClose) * 100;
       const actualVol = dayRange > 2.0 ? 'HIGH' : dayRange > 1.0 ? 'MODERATE' : 'LOW';
       const predVol = p.volatilityExpected || 'MODERATE';
-      if (predVol === actualVol) { scores.total += 15; } else if (Math.abs(['LOW','MODERATE','HIGH'].indexOf(predVol) - ['LOW','MODERATE','HIGH'].indexOf(actualVol)) === 1) { scores.total += 8; }
-      scores.breakdown.volatility = { score: scores.total - (scores.breakdown.direction?.score || 0) - (scores.breakdown.closingZone?.score || 0), max: 15, predicted: predVol, actual: actualVol };
+      let p3VolScore = 0;
+      if (predVol === actualVol) { p3VolScore = 15; } else if (Math.abs(['LOW','MODERATE','HIGH'].indexOf(predVol) - ['LOW','MODERATE','HIGH'].indexOf(actualVol)) === 1) { p3VolScore = 8; }
+      scores.total += p3VolScore;
+      scores.breakdown.volatility = { score: p3VolScore, max: 15, predicted: predVol, actual: actualVol };
     } else { scores.breakdown.volatility = { score: 0, max: 0, note: 'No data' }; }
     // 4. Calibration (20 pts)
     scores.max += 20;
     const p3Acc = scores.max > 20 ? (scores.total / (scores.max - 20)) * 100 : 50;
-    const p3Cal = Math.abs((p.confidence || 50) - p3Acc) < 10 ? 20 : Math.abs((p.confidence || 50) - p3Acc) < 20 ? 14 : Math.abs((p.confidence || 50) - p3Acc) < 30 ? 7 : 0;
+    const p3Diff = Math.abs((p.confidence || 50) - p3Acc);
+    const p3Cal = p3Diff < 10 ? 20 : p3Diff < 20 ? 14 : p3Diff < 30 ? 7 : 0;
     scores.total += p3Cal; scores.breakdown.calibration = { score: p3Cal, max: 20, confidence: p.confidence, actualAccuracy: +p3Acc.toFixed(0) };
 
   } else if (pred.type === 'phase_4_powerhour') {
@@ -1010,8 +1018,10 @@ function scorePrediction(pred) {
     const actualDir = a.niftyChangePct > 0.3 ? 'BULLISH' : a.niftyChangePct < -0.3 ? 'BEARISH' : 'SIDEWAYS';
     // 1. Direction (35 pts)
     scores.max += 35;
-    if (p.direction === actualDir) { scores.total += 35; } else if (p.direction === 'SIDEWAYS' || actualDir === 'SIDEWAYS') { scores.total += 15; }
-    scores.breakdown.direction = { score: Math.min(scores.total, 35), max: 35, predicted: p.direction, actual: actualDir };
+    let p4DirScore = 0;
+    if (p.direction === actualDir) { p4DirScore = 35; } else if (p.direction === 'SIDEWAYS' || actualDir === 'SIDEWAYS') { p4DirScore = 15; }
+    scores.total += p4DirScore;
+    scores.breakdown.direction = { score: p4DirScore, max: 35, predicted: p.direction, actual: actualDir };
     // 2. Close level (30 pts)
     if (p.expectedClose && p.expectedClose.niftyLow && p.expectedClose.niftyHigh && a.niftyClose) {
       scores.max += 30;
@@ -1025,8 +1035,10 @@ function scorePrediction(pred) {
     scores.max += 15;
     const actRisk = (a.vix && a.vix > 25) || (a.fii && a.fii < -2000) ? 'HIGH' : (a.vix && a.vix > 18) || (a.fii && a.fii < -500) ? 'MODERATE' : 'LOW';
     const pRisk = (p.riskLevel === 'VERY_HIGH' || p.riskLevel === 'HIGH') ? 'HIGH' : p.riskLevel === 'MODERATE' ? 'MODERATE' : 'LOW';
-    if (pRisk === actRisk) { scores.total += 15; } else if (Math.abs(['LOW','MODERATE','HIGH'].indexOf(pRisk) - ['LOW','MODERATE','HIGH'].indexOf(actRisk)) === 1) { scores.total += 8; }
-    scores.breakdown.risk = { score: scores.total - (scores.breakdown.direction?.score || 0) - (scores.breakdown.closeLevel?.score || 0), max: 15, predicted: p.riskLevel, actual: actRisk };
+    let p4RiskScore = 0;
+    if (pRisk === actRisk) { p4RiskScore = 15; } else if (Math.abs(['LOW','MODERATE','HIGH'].indexOf(pRisk) - ['LOW','MODERATE','HIGH'].indexOf(actRisk)) === 1) { p4RiskScore = 8; }
+    scores.total += p4RiskScore;
+    scores.breakdown.risk = { score: p4RiskScore, max: 15, predicted: p.riskLevel, actual: actRisk };
     // 4. Calibration (20 pts)
     scores.max += 20;
     const p4Acc = scores.max > 20 ? (scores.total / (scores.max - 20)) * 100 : 50;
@@ -1172,20 +1184,23 @@ function isMarketOpen() {
 }
 
 function getNextMarketOpen() {
-  const utc = new Date();
-  const ist = new Date(utc.getTime() + 5.5 * 60 * 60 * 1000);
-  let d = new Date(ist);
-  // If today's market hasn't opened yet
-  const todayMins = d.getUTCHours() * 60 + d.getUTCMinutes();
-  const day = d.getUTCDay();
+  const ist = getIST();
+  const todayMins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+  const day = ist.getUTCDay();
+  // If today's market hasn't opened yet (before 9:15 AM IST on a weekday)
   if (day >= 1 && day <= 5 && todayMins < 555) {
-    d.setUTCHours(9, 15, 0, 0);
-    return d.toISOString();
+    // 9:15 AM IST = 3:45 AM UTC
+    const utcOpen = new Date(ist.getTime() - 5.5 * 60 * 60 * 1000);
+    utcOpen.setUTCHours(3, 45, 0, 0);
+    return utcOpen.toISOString();
   }
-  // Otherwise next weekday
+  // Otherwise find next weekday
+  let d = new Date(ist);
   do { d.setUTCDate(d.getUTCDate() + 1); } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
-  d.setUTCHours(9, 15, 0, 0);
-  return d.toISOString();
+  // Convert IST date back to UTC for the 9:15 AM IST open
+  const utcOpen = new Date(d.getTime() - 5.5 * 60 * 60 * 1000);
+  utcOpen.setUTCHours(3, 45, 0, 0);
+  return utcOpen.toISOString();
 }
 
 function marketClosedResponse(cache, cacheTimestamp) {
@@ -1307,30 +1322,36 @@ async function fetchZerodhaData() {
   }
 }
 
-// Group trades into strategies
+// Group trades into strategies — groups by UNDERLYING so hedges (futures + options) are detected
 function groupTradesToStrategies(orders) {
   const strategies = [];
+  // Group by underlying symbol (e.g., NIFTY, BANKNIFTY, RELIANCE) so multi-leg hedges are combined
   const grouped = {};
   for (const o of orders) {
     if (o.status !== 'COMPLETE') continue;
-    const key = `${o.tradingsymbol}_${o.exchange}`;
+    const underlying = (o.tradingsymbol.match(/^([A-Z]+?)(?:\d{2}(?:[A-Z]{3}|\d))/) || [, o.tradingsymbol])[1];
+    const key = `${underlying}_${o.exchange}`;
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(o);
   }
   for (const [key, legs] of Object.entries(grouped)) {
     const buys  = legs.filter(l => l.transaction_type === 'BUY');
     const sells = legs.filter(l => l.transaction_type === 'SELL');
-    const sym   = legs[0].tradingsymbol;
-    const isOptions = sym.match(/\d{2}[A-Z]{3}\d{2}[CP]E/);
-    const isFutures = sym.includes('FUT');
+    const hasOptions = legs.some(l => l.tradingsymbol.match(/[CP]E$/));
+    const hasFutures = legs.some(l => l.tradingsymbol.includes('FUT'));
+    const ceLegs = legs.filter(l => l.tradingsymbol.match(/CE$/));
+    const peLegs = legs.filter(l => l.tradingsymbol.match(/PE$/));
     let type = 'Naked';
-    if (isOptions && buys.length > 0 && sells.length > 0) type = 'Vertical Spread';
-    else if (isFutures && isOptions) type = 'Hedge';
+    if (hasFutures && hasOptions) type = 'Hedge';
+    else if (ceLegs.length > 0 && peLegs.length > 0) type = 'Straddle/Strangle';
+    else if (hasOptions && buys.length > 0 && sells.length > 0) type = 'Vertical Spread';
     else if (legs.length > 2) type = 'Complex Strategy';
+    else if (hasFutures) type = 'Futures';
     const totalBuy  = buys.reduce((a,l)  => a + l.average_price * l.filled_quantity, 0);
     const totalSell = sells.reduce((a,l) => a + l.average_price * l.filled_quantity, 0);
     const pnl = totalSell - totalBuy;
-    strategies.push({ symbol: sym, type, legs: legs.length, pnl: +pnl.toFixed(2), status: sells.length > 0 && buys.length === sells.length ? 'CLOSED' : 'OPEN', orders: legs });
+    const underlying = key.split('_')[0];
+    strategies.push({ symbol: underlying, type, legs: legs.length, pnl: +pnl.toFixed(2), status: sells.length > 0 && buys.length === sells.length ? 'CLOSED' : 'OPEN', orders: legs });
   }
   return strategies.sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
 }
@@ -1681,13 +1702,34 @@ function getPreMarketCacheMs() {
 }
 
 // Shared: parse AI JSON response safely
-function parseAIJson(raw) {
+function parseAIJson(raw, expectArray = false) {
   const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-  try { return JSON.parse(cleaned); } catch (_) {
+  // Strategy 1: direct parse
+  try { return JSON.parse(cleaned); } catch (_) {}
+  if (expectArray) {
+    // Strategy 2: find array brackets
+    const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
+    if (s >= 0 && e > s) { try { return JSON.parse(cleaned.slice(s, e + 1)); } catch (_) {} }
+    // Strategy 3: extract individual JSON objects via regex
+    const objRegex = /\{[^{}]*"symbol"\s*:\s*"[^"]+"[^{}]*\}/g;
+    const matches = cleaned.match(objRegex);
+    if (matches) {
+      const items = [];
+      for (const m of matches) { try { items.push(JSON.parse(m)); } catch (_) {} }
+      if (items.length) return items;
+    }
+    // Strategy 4: fix truncated JSON — add missing ] and try
+    if (cleaned.includes('"symbol"')) {
+      try { let fixed = cleaned; if (!fixed.endsWith(']')) fixed = fixed.replace(/,?\s*$/, '') + ']'; if (!fixed.startsWith('[')) fixed = '[' + fixed; return JSON.parse(fixed); } catch (_) {}
+      try { return JSON.parse(cleaned.replace(/,?\s*$/, '') + '}]'); } catch (_) {}
+    }
+    return [];
+  } else {
+    // Strategy 2: find object brackets
     const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
     if (s >= 0 && e > s) { try { return JSON.parse(cleaned.slice(s, e + 1)); } catch (_) {} }
+    return {};
   }
-  return {};
 }
 
 // Shared: collect whatever Twelve Data globals are available (works 24/5)
@@ -2614,12 +2656,7 @@ Reply ONLY valid JSON (no markdown):
     const g = await callAI(prompt, { preferGrounded: true, temperature: 0.2, maxOutputTokens: 4000, timeout: 60000 });
     const raw = g.text || '{}';
 
-    let aiResult = {};
-    const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    try { aiResult = JSON.parse(cleaned); } catch (_) {
-      const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
-      if (s >= 0 && e > s) { try { aiResult = JSON.parse(cleaned.slice(s, e + 1)); } catch (_) {} }
-    }
+    let aiResult = parseAIJson(raw);
 
     // ── POST-PROCESSING VALIDATION ──
     const VALID_VERDICTS = ['ACCUMULATION', 'DISTRIBUTION', 'NEUTRAL', 'MIXED'];
@@ -2889,45 +2926,13 @@ Respond ONLY valid JSON (no markdown, no explanation outside JSON):
     const raw = g.text || '{}';
     log('OK', `Trade Plan analysis for ${sym} (${g.source}/${g.model}, grounded:${g.grounded || false}), ${raw.length} chars`);
 
-    let analysis = {};
-    const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    try { analysis = JSON.parse(cleaned); } catch (_) {
-      const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
-      if (s >= 0 && e > s) { try { analysis = JSON.parse(cleaned.slice(s, e + 1)); } catch (_) {} }
-    }
+    let analysis = parseAIJson(raw);
 
     // ══════════════════════════════════════════════════════════════════════
     // LAYER 3: Post-processing & validation
     // ══════════════════════════════════════════════════════════════════════
 
-    // Normalize price fields (strip ₹ and commas)
-    const priceFields = ['idealEntry', 'aggressiveEntry', 'conservativeEntry', 'level', 'maxLossPerLot', 'maxGainPerLot', 'strike', 'premium'];
-    const nestedPriceFields = [
-      ['entryStrategy', ['idealEntry', 'aggressiveEntry', 'conservativeEntry']],
-      ['exitStrategy.target1', ['price']],
-      ['exitStrategy.target2', ['price']],
-      ['exitStrategy.target3', ['price']],
-      ['stopLoss', ['level']],
-      ['riskAssessment', ['maxLossPerLot', 'maxGainPerLot']],
-      ['optionsAlternative', ['strike', 'premium']]
-    ];
-
-    // Helper to safely set nested values
-    function setNestedValue(obj, path, value) {
-      const keys = path.split('.');
-      let current = obj;
-      for (let i = 0; i < keys.length - 1; i++) {
-        if (!current[keys[i]]) current[keys[i]] = {};
-        current = current[keys[i]];
-      }
-      current[keys[keys.length - 1]] = value;
-    }
-
-    function getNestedValue(obj, path) {
-      return path.split('.').reduce((v, k) => v?.[k], obj);
-    }
-
-    // Normalize prices
+    // Normalize prices (strip ₹ and commas)
     const normalizePrice = (val) => {
       if (typeof val === 'string') return parseFloat(val.replace(/[₹,\s]/g, '')) || 0;
       return Number(val) || 0;
@@ -3209,38 +3214,7 @@ Include NIFTY or BANKNIFTY if favorable. Be thorough and accurate.`;
     const g = await callAI(prompt, { temperature: 0.4, maxOutputTokens: 4000, timeout: 45000 });
     const raw = g.text || '[]';
     log('OK', `Options recommendations generated (${g.source}/${g.model}), ${raw.length} chars`);
-    // Robust JSON parsing with multiple fallback strategies
-    let recs = [];
-    const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
-    // Strategy 1: direct parse
-    try { recs = JSON.parse(cleaned); } catch(_) {}
-    // Strategy 2: find the array in the text
-    if (!recs.length) {
-      const arrStart = cleaned.indexOf('['), arrEnd = cleaned.lastIndexOf(']');
-      if (arrStart >= 0 && arrEnd > arrStart) {
-        try { recs = JSON.parse(cleaned.slice(arrStart, arrEnd + 1)); } catch(_) {}
-      }
-    }
-    // Strategy 3: extract individual JSON objects via regex
-    if (!recs.length) {
-      const objRegex = /\{[^{}]*"symbol"\s*:\s*"[^"]+"[^{}]*\}/g;
-      const matches = cleaned.match(objRegex);
-      if (matches) {
-        for (const m of matches) { try { recs.push(JSON.parse(m)); } catch(_) {} }
-      }
-    }
-    // Strategy 4: fix truncated JSON — add missing ] and try
-    if (!recs.length && cleaned.includes('"symbol"')) {
-      try {
-        let fixed = cleaned;
-        if (!fixed.endsWith(']')) fixed = fixed.replace(/,?\s*$/, '') + ']';
-        if (!fixed.startsWith('[')) fixed = '[' + fixed;
-        recs = JSON.parse(fixed);
-      } catch(_) {
-        // Last resort: try adding closing brace+bracket
-        try { recs = JSON.parse(cleaned.replace(/,?\s*$/, '') + '}]'); } catch(_2) {}
-      }
-    }
+    const recs = parseAIJson(raw, true);
     res.json({ recommendations: recs, raw: recs.length ? undefined : raw, configured: true });
   } catch(e) {
     log('ERR', 'Gemini options recommend failed: ' + e.message);
@@ -3364,17 +3338,7 @@ IMPORTANT: "confidence" MUST be a NUMBER (0-100), "currentPrice"/"targetPrice"/"
     const raw = g.text || '[]';
     log('OK', `AI Long-Term Picks generated (${g.source}/${g.model}, grounded:${g.grounded||false}), ${raw.length} chars`);
 
-    let picks = [];
-    const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
-    try { picks = JSON.parse(cleaned); } catch(_) {}
-    if (!picks.length) {
-      const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
-      if (s >= 0 && e > s) { try { picks = JSON.parse(cleaned.slice(s, e+1)); } catch(_) {} }
-    }
-    if (!picks.length) {
-      const m = cleaned.match(/\{[^{}]*"symbol"\s*:\s*"[^"]+"[^{}]*\}/g);
-      if (m) { for (const x of m) { try { picks.push(JSON.parse(x)); } catch(_) {} } }
-    }
+    let picks = parseAIJson(raw, true);
 
     // ── Post-processing: validate & enrich with live data ──
     for (const pick of picks) {
@@ -3570,12 +3534,7 @@ Reply ONLY valid JSON, NO markdown fences:
     const raw = g.text || '{}';
     log('OK', `Verify Stock analysis for ${sym} (${g.source}/${g.model}, grounded:${g.grounded || false}), ${raw.length} chars`);
 
-    let analysis = {};
-    const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    try { analysis = JSON.parse(cleaned); } catch (_) {
-      const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
-      if (s >= 0 && e > s) { try { analysis = JSON.parse(cleaned.slice(s, e + 1)); } catch (_) {} }
-    }
+    let analysis = parseAIJson(raw);
 
     // ══════════════════════════════════════════════════════════════════════
     // LAYER 3: Post-processing & validation
@@ -3928,17 +3887,7 @@ IMPORTANT: "entry","target","stopLoss","strike","lotSize","maxLoss","spotPrice" 
     const raw = g.text || '[]';
     log('OK', `Options Lab generated (${g.source}/${g.model}, grounded:${g.grounded||false}), ${raw.length} chars, OC:${niftyOC?'live':'none'}, DTE:${dte}`);
 
-    let trades = [];
-    const cleaned = raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
-    try { trades = JSON.parse(cleaned); } catch(_) {}
-    if (!trades.length) {
-      const s = cleaned.indexOf('['), e = cleaned.lastIndexOf(']');
-      if (s >= 0 && e > s) { try { trades = JSON.parse(cleaned.slice(s, e+1)); } catch(_) {} }
-    }
-    if (!trades.length) {
-      const m = cleaned.match(/\{[^{}]*"symbol"\s*:\s*"[^"]+"[^{}]*\}/g);
-      if (m) { for (const x of m) { try { trades.push(JSON.parse(x)); } catch(_) {} } }
-    }
+    let trades = parseAIJson(raw, true);
 
     // ── Post-processing: validate against real chain data ──
     for (const t of trades) {
@@ -4869,7 +4818,8 @@ function parseNewsItems(raw) {
 
 function getNewsTodayStr() {
   const ist = getIST();
-  const day = ist.getUTCDate(), mon = ist.toLocaleString('en-IN', { month:'long', timeZone:'Asia/Kolkata' }), yr = ist.getUTCFullYear();
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const day = ist.getUTCDate(), mon = MONTHS[ist.getUTCMonth()], yr = ist.getUTCFullYear();
   const weekday = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][ist.getUTCDay()];
   return { full: `${weekday}, ${day} ${mon} ${yr}`, short: ist.toISOString().slice(0,10), dayMon: `${day} ${mon.slice(0,3)} ${yr}` };
 }
@@ -5382,14 +5332,6 @@ function countRolls(legs) {
   return Math.max(0, ceStrikes.size - 1) + Math.max(0, peStrikes.size - 1);
 }
 
-function classifySingleLeg(trade) {
-  const sym = trade.symbol;
-  if (sym.includes('FUT')) return 'NAKED FUTURES';
-  if (sym.match(/CE$/)) return 'NAKED LONG CE';
-  if (sym.match(/PE$/)) return 'NAKED LONG PE';
-  return 'EQUITY';
-}
-
 function formatLeg(trade) {
   const pnl = (trade.sellPrice - trade.buyPrice) * trade.qty;
   return {
@@ -5862,10 +5804,9 @@ function processUpstoxQuote(key, val) {
       // Only add if price changed from last entry (avoid duplicates from rapid polling)
       if (!ph.length || ph[ph.length - 1] !== price) {
         ph.push(price);
-        if (ph.length > 30) ph.shift(); // Keep last 30 readings
+        if (ph.length > 200) ph.shift(); // Keep last 200 readings for accurate RSI/EMA/MACD
       }
-      const sig = calcSignal(s.symbol, price);
-      if (sig) signalCache[s.symbol] = { ...sig, symbol: s.symbol };
+      // Signals are recalculated on a 5-min throttle (see signalRecalcInterval), not per tick
       return true;
     }
   }
@@ -5924,6 +5865,8 @@ async function pollUpstoxPrices() {
   }
 }
 
+let signalRecalcInterval = null;
+
 function startPricePoller() {
   if (pricePoller) return;
   const intervalMs = 2000; // Poll every 2 seconds
@@ -5931,17 +5874,21 @@ function startPricePoller() {
   pricePoller = setInterval(() => {
     if (isMarketOpen()) pollUpstoxPrices();
   }, intervalMs);
-  log('OK', `Upstox REST price poller started (every ${intervalMs/1000}s)`);
+  // Recalculate signals every 5 minutes (not per tick) for stable, accurate inputs to AI
+  if (!signalRecalcInterval) {
+    recalcSignals(); // immediate first calc
+    signalRecalcInterval = setInterval(() => {
+      if (isMarketOpen()) { recalcSignals(); checkPriceAlerts(); broadcastLiveData(); }
+    }, 5 * 60 * 1000);
+  }
+  log('OK', `Upstox REST price poller started (every ${intervalMs/1000}s, signals every 5 min)`);
 }
 
 function stopPricePoller() {
   if (pricePoller) { clearInterval(pricePoller); pricePoller = null; }
+  if (signalRecalcInterval) { clearInterval(signalRecalcInterval); signalRecalcInterval = null; }
 }
 
-// Keep old function name for compatibility with initLiveData
-function connectUpstoxWs() {
-  startPricePoller();
-}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // REFERENCE PRICES — Used ONLY by unit tests, never for display
@@ -5979,7 +5926,7 @@ async function initLiveData() {
 
   if (accessToken) {
     connectionStatus = 'authenticated';
-    connectUpstoxWs();
+    startPricePoller();
     log('OK', 'Upstox token present — status: authenticated, starting data poller');
     broadcastStatus();
   } else {
