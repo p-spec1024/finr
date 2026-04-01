@@ -1282,6 +1282,7 @@ app.get('/callback', async (req, res) => {
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
     );
     accessToken = r.data.access_token;
+    appConfig.accessToken = accessToken;
     appConfig.tokenExpiry = Date.now() + 86400000;
     saveConfig();
     connectionStatus = 'authenticated';
@@ -4533,7 +4534,9 @@ app.post('/api/disconnect', (req, res) => {
   switch (service) {
     case 'upstox':
       accessToken = null;
+      appConfig.accessToken = null;
       appConfig.tokenExpiry = 0;
+      saveConfig();
       connectionStatus = 'disconnected';
       stopPricePoller();
       broadcastStatus();
@@ -6222,6 +6225,16 @@ server.listen(PORT, async () => {
   log('INFO', `═══════════════════════════════════════`);
   log('INFO', `FINR v2.0 starting on port ${PORT}`);
   loadConfig();
+  // Restore persisted access tokens from config (survive server restarts)
+  if (appConfig.accessToken && appConfig.tokenExpiry && appConfig.tokenExpiry > Date.now()) {
+    accessToken = appConfig.accessToken;
+    log('OK', `Upstox token restored from config (expires in ${Math.round((appConfig.tokenExpiry - Date.now()) / 60000)} min)`);
+  } else if (appConfig.accessToken) {
+    appConfig.accessToken = null;
+    appConfig.tokenExpiry = 0;
+    saveConfig();
+    log('WARN', 'Upstox token expired — cleared');
+  }
   loadAlerts();
   loadTrades();
   loadPicks();
